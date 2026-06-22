@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
@@ -14,8 +14,29 @@ interface Debt {
   status: string;
 }
 
+interface BankAccount {
+  id: string;
+  name: string;
+  account_type: string;
+  balance: number;
+}
+
+interface PayForm {
+  debtId: string;
+  personName: string;
+  maxAmount: number;
+  amountInput: string;
+  date: string;
+  bankAccountId: string;
+  note: string;
+}
+
 function formatRp(n: number) {
   return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+}
+
+function jakartaToday() {
+  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 }
 
 function computePayoff(debts: Debt[], method: 'snowball' | 'avalanche', extraMonthly: number): number {
@@ -53,27 +74,87 @@ function computePayoff(debts: Debt[], method: 'snowball' | 'avalanche', extraMon
 export function DebtPlanner() {
   const { goBack } = useUIStore();
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [banks, setBanks] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [method, setMethod] = useState<'snowball' | 'avalanche'>('snowball');
   const [extraMonthly, setExtraMonthly] = useState(0);
   const [extraInput, setExtraInput] = useState('');
+  const [payForm, setPayForm] = useState<PayForm | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [successId, setSuccessId] = useState<string | null>(null);
 
-  useEffect(() => {
-    apiFetch<Debt[]>('/debts')
-      .then(res => setDebts(res))
+  const load = () => {
+    Promise.all([
+      apiFetch<Debt[]>('/debts'),
+      apiFetch<BankAccount[]>('/bank-accounts'),
+    ])
+      .then(([d, b]) => { setDebts(d); setBanks(b); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const unpaidDebts = debts.filter(d => d.status === 'unpaid' && d.type === 'debt');
   const totalDebt = unpaidDebts.reduce((s, d) => s + d.amount_idr, 0);
   const payoffMonth = computePayoff(debts, method, extraMonthly);
+
+  const openPayForm = (debt: Debt) => {
+    setPayForm({
+      debtId: debt.id,
+      personName: debt.person_name,
+      maxAmount: debt.amount_idr,
+      amountInput: String(debt.amount_idr),
+      date: jakartaToday(),
+      bankAccountId: banks[0]?.id ?? '',
+      note: '',
+    });
+  };
+
+  const handlePay = async () => {
+    if (!payForm) return;
+    const amount = parseInt(payForm.amountInput.replace(/\D/g, '')) || 0;
+    if (amount <= 0) return;
+    setSaving(true);
+    try {
+      await apiFetch(`/debts/${payForm.debtId}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount,
+          payment_date: payForm.date,
+          status: 'paid',
+          note: payForm.note || null,
+          bank_account_id: payForm.bankAccountId || null,
+        }),
+      });
+      // Mark debt as paid if full amount
+      if (amount >= payForm.maxAmount) {
+        await apiFetch(`/debts/${payForm.debtId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            status: 'paid',
+            person_name: payForm.personName,
+            amount: payForm.maxAmount,
+          }),
+        });
+      }
+      setSuccessId(payForm.debtId);
+      setPayForm(null);
+      load();
+      setTimeout(() => setSuccessId(null), 2000);
+    } catch (e: any) {
+      alert('Gagal mencatat pembayaran: ' + (e?.message ?? ''));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div
       className="min-h-screen px-5 pt-14 pb-28 animate-[fyScreen_420ms_cubic-bezier(0.25,0.46,0.45,0.94)_both]"
       style={{ background: 'var(--bg)' }}
     >
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center"
@@ -104,6 +185,7 @@ export function DebtPlanner() {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
+          {/* Total */}
           <motion.div
             className="rounded-[20px] p-5"
             style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
@@ -116,6 +198,7 @@ export function DebtPlanner() {
             <p className="text-xs mt-1" style={{ color: 'var(--text3)' }}>{unpaidDebts.length} utang belum lunas</p>
           </motion.div>
 
+          {/* Method selector */}
           <motion.div
             className="rounded-[20px] p-5"
             style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
@@ -152,6 +235,7 @@ export function DebtPlanner() {
             </p>
           </motion.div>
 
+          {/* Extra monthly */}
           <motion.div
             className="rounded-[20px] p-5"
             style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
@@ -177,6 +261,7 @@ export function DebtPlanner() {
             </div>
           </motion.div>
 
+          {/* Proyeksi */}
           {payoffMonth > 0 && (
             <motion.div
               className="rounded-[20px] p-5"
@@ -197,6 +282,7 @@ export function DebtPlanner() {
             </motion.div>
           )}
 
+          {/* Urutan pelunasan + Bayar button */}
           <motion.div
             className="rounded-[20px] p-5"
             style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
@@ -216,7 +302,7 @@ export function DebtPlanner() {
                     className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0"
                     style={{ background: 'var(--accentSoft)', color: 'var(--accent)' }}
                   >
-                    {i + 1}
+                    {successId === d.id ? '✓' : i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{d.person_name}</p>
@@ -224,12 +310,128 @@ export function DebtPlanner() {
                       <p className="text-[10px]" style={{ color: 'var(--text3)' }}>jatuh tempo {d.due_date}</p>
                     )}
                   </div>
-                  <p className="font-bold text-sm flex-shrink-0" style={{ color: '#FF453A' }}>{formatRp(d.amount_idr)}</p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <p className="font-bold text-sm" style={{ color: '#FF453A' }}>{formatRp(d.amount_idr)}</p>
+                    <motion.button
+                      className="px-3 py-1.5 rounded-xl text-[11px] font-bold"
+                      style={{ background: 'var(--accent)', color: 'white' }}
+                      whileTap={{ scale: 0.94 }}
+                      transition={springs.snappy}
+                      onClick={() => openPayForm(d)}
+                    >
+                      Bayar
+                    </motion.button>
+                  </div>
                 </div>
               ))}
           </motion.div>
         </div>
       )}
+
+      {/* Pay Modal */}
+      <AnimatePresence>
+        {payForm && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-40"
+              style={{ background: 'rgba(0,0,0,0.5)' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setPayForm(null)}
+            />
+            <motion.div
+              className="fixed left-0 right-0 bottom-0 z-50 max-w-[430px] mx-auto rounded-t-[28px] px-5 pt-5 pb-10"
+              style={{ background: 'var(--surface)' }}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={springs.smooth}
+            >
+              <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: 'var(--sep)' }} />
+              <p className="text-base font-extrabold mb-4" style={{ color: 'var(--text)' }}>
+                Bayar Hutang — {payForm.personName}
+              </p>
+
+              {/* Amount */}
+              <div className="mb-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>JUMLAH</p>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+                  <span className="text-sm font-bold" style={{ color: 'var(--text2)' }}>Rp</span>
+                  <input
+                    className="flex-1 bg-transparent outline-none text-sm font-semibold"
+                    style={{ color: 'var(--text)' }}
+                    inputMode="numeric"
+                    value={payForm.amountInput}
+                    onChange={e => setPayForm(f => f && ({ ...f, amountInput: e.target.value.replace(/\D/g, '') }))}
+                  />
+                </div>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text3)' }}>
+                  Total utang: {formatRp(payForm.maxAmount)}
+                </p>
+              </div>
+
+              {/* Date */}
+              <div className="mb-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>TANGGAL BAYAR</p>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none font-semibold"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  value={payForm.date}
+                  onChange={e => setPayForm(f => f && ({ ...f, date: e.target.value }))}
+                />
+              </div>
+
+              {/* Bank account */}
+              {banks.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>REKENING (KREDIT)</p>
+                  <select
+                    className="w-full px-3 py-2.5 rounded-xl text-sm outline-none font-semibold appearance-none"
+                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    value={payForm.bankAccountId}
+                    onChange={e => setPayForm(f => f && ({ ...f, bankAccountId: e.target.value }))}
+                  >
+                    <option value="">— Tidak pakai rekening —</option>
+                    {banks.map(b => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({formatRp(b.balance)})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text3)' }}>
+                    Saldo rekening akan otomatis berkurang & masuk ke tab Pengeluaran
+                  </p>
+                </div>
+              )}
+
+              {/* Note */}
+              <div className="mb-5">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>CATATAN (OPSIONAL)</p>
+                <input
+                  className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  placeholder="Cicilan ke-1, via transfer, dll"
+                  value={payForm.note}
+                  onChange={e => setPayForm(f => f && ({ ...f, note: e.target.value }))}
+                />
+              </div>
+
+              <motion.button
+                className="w-full py-3.5 rounded-2xl font-bold text-sm"
+                style={{ background: 'var(--accent)', color: 'white', opacity: saving ? 0.6 : 1 }}
+                whileTap={{ scale: 0.97 }}
+                transition={springs.snappy}
+                onClick={handlePay}
+                disabled={saving}
+              >
+                {saving ? 'Menyimpan...' : 'Catat Pembayaran'}
+              </motion.button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
