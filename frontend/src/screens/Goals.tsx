@@ -23,7 +23,7 @@ interface Goal {
 interface ScoreData {
   today: number;
   history: { date: string; score: number }[];
-  goals: { id: string; score: number }[];
+  goals: { id: string; identityStatement: string; color: string; habitCount: number; score: number }[];
 }
 
 const COLORS = ['#7C5CFF', '#34C759', '#0A84FF', '#FF9F0A', '#FF453A', '#FF2D55'];

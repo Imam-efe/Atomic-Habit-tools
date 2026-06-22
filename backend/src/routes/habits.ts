@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { HabitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate } from '../lib/validate';
+import { validate, jakartaToday } from '../lib/validate';
 
 const habits = new Hono<AuthContext>();
 
@@ -277,7 +277,7 @@ habits.get('/completions', async (c) => {
   const user = c.get('user');
   const weeks = Math.min(parseInt(c.req.query('weeks') ?? '52', 10), 104);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = jakartaToday();
   const startDate = (() => {
     const parts = today.split('-');
     const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));

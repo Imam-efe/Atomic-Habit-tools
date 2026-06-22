@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { GoalRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate } from '../lib/validate';
+import { validate, jakartaToday } from '../lib/validate';
 
 const goals = new Hono<AuthContext>();
 
@@ -208,7 +208,7 @@ goals.delete('/:id', async (c) => {
 // Returns overall identity score (today) + 7-day history + per-goal scores
 goals.get('/score', async (c) => {
   const user = c.get('user');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = jakartaToday();
 
   // Build list of last 7 days (oldest first)
   const days: string[] = [];

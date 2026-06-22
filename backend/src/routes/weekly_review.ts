@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
+import { jakartaToday } from '../lib/validate';
 
 const weeklyReview = new Hono<AuthContext>();
 weeklyReview.use('/*', requireAuth);
@@ -19,7 +20,7 @@ function getMondayOf(dateStr: string): string {
 weeklyReview.get('/', async (c) => {
   const user = c.get('user');
   const weekParam = c.req.query('week');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = jakartaToday();
   const weekStart = getMondayOf(weekParam || today);
   const weekEnd = (() => {
     const parts = weekStart.split('-');
