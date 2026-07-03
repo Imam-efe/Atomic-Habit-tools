@@ -1,0 +1,21 @@
+name = "fayolla-api"
+main = "src/index.ts"
+compatibility_date = "2024-07-25"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fayolla-db"
+database_id = "08b47e41-719e-472e-9eed-639cef0e65b6"
+
+[vars]
+FRONTEND_URL = "https://fayolla.pages.dev"
+VAPID_PUBLIC_KEY = "BPOZXYPVRv_DxSObMXImgYoCWH582IyoDQAqqVAbKaJgqEMa7go2RUgDRSwIYLhOKZuKSJgBsU7SFVWg72MMqnI"
+VAPID_SUBJECT = "mailto:imamefe4@gmail.com"
+
+[triggers]
+crons = ["* * * * *"]
+
+# Secrets set via: wrangler secret put GOOGLE_CLIENT_ID
+# wrangler secret put GOOGLE_CLIENT_SECRET
+# wrangler secret put JWT_SECRET

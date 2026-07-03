@@ -1,0 +1,7 @@
+{
+    "agent": {
+        "defaultModel": "gemini-3.5-flash",
+        "customInstructionsFile": "./CLAUDE-FABLE-5.md",
+        "sandboxPermissions": "restricted"
+    }
+}

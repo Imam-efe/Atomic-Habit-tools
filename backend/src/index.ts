@@ -26,6 +26,13 @@ import { nanoid } from './lib/nanoid';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Prevent any intermediate caching of API responses
+app.use('/api/*', async (c, next) => {
+  await next();
+  c.res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  c.res.headers.set('Pragma', 'no-cache');
+});
+
 app.use(
   '/api/*',
   cors({
@@ -119,6 +126,13 @@ async function triggerReminders(env: Env) {
 
     try {
       const payload = await buildPushPayload(message, subscription, vapid);
+      if (payload.headers) {
+        if (typeof (payload.headers as any).set === 'function') {
+          (payload.headers as any).set('Urgency', 'high');
+        } else {
+          (payload.headers as any)['Urgency'] = 'high';
+        }
+      }
       const res = await fetch(row.endpoint, payload);
       if (res.status === 410 || res.status === 404) {
         // Clean up expired subscriptions
@@ -252,6 +266,13 @@ async function triggerExpiryAlerts(env: Env) {
           expirationTime: null,
           keys: { p256dh: sub.p256dh, auth: sub.auth },
         }, vapid);
+        if (payload.headers) {
+          if (typeof (payload.headers as any).set === 'function') {
+            (payload.headers as any).set('Urgency', 'high');
+          } else {
+            (payload.headers as any)['Urgency'] = 'high';
+          }
+        }
         const res = await fetch(sub.endpoint, payload);
         if (res.status === 410 || res.status === 404) {
           await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1').bind(sub.endpoint).run();

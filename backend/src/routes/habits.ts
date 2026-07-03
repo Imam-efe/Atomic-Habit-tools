@@ -163,7 +163,7 @@ habits.post('/', async (c) => {
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
   ).bind(
     id, user.sub,
-    body.name.trim(),
+    (body.name || '').trim(),
     body.color ?? '#34C759',
     'check',
     body.triggerCue?.trim() ?? null,
@@ -175,7 +175,7 @@ habits.post('/', async (c) => {
 
   await syncGoalHabitRelations(c.env.DB, user.sub);
 
-  return c.json({ id, name: body.name.trim(), color: body.color ?? '#34C759', streak: 0, doneToday: false, isTwoMinToday: false, goalIds: body.goalIds ?? [], reminderTime: body.reminderTime?.trim() ?? null }, 201);
+  return c.json({ id, name: (body.name || '').trim(), color: body.color ?? '#34C759', streak: 0, doneToday: false, isTwoMinToday: false, goalIds: body.goalIds ?? [], reminderTime: body.reminderTime?.trim() ?? null }, 201);
 });
 
 
@@ -247,7 +247,7 @@ habits.put('/:id', async (c) => {
     `UPDATE habits SET name = ?1, color = ?2, trigger_cue = ?3, two_min = ?4, goal_ids = ?5, action_time = ?6
      WHERE id = ?7 AND user_id = ?8`
   ).bind(
-    body.name.trim(),
+    (body.name || '').trim(),
     body.color ?? '#34C759',
     body.triggerCue?.trim() ?? null,
     body.twoMin?.trim() ?? null,

@@ -54,7 +54,7 @@ debts.post('/', async (c) => {
 
   const id = nanoid();
   const type = body.type ?? 'debt'; // 'debt' or 'receivable'
-  const amount = Math.round(body.amount);
+  const amount = Math.round(body.amount!);
   const dueDate = body.due_date || null;
   const note = body.note || null;
   const status = body.status ?? 'unpaid';
@@ -88,7 +88,7 @@ debts.put('/:id', async (c) => {
   if (err) return c.json({ error: err }, 400);
 
   const type = body.type ?? 'debt';
-  const amount = Math.round(body.amount);
+  const amount = Math.round(body.amount!);
   const dueDate = body.due_date || null;
   const note = body.note || null;
   const status = body.status ?? 'unpaid';
@@ -109,16 +109,48 @@ debts.delete('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
 
-  const res = await c.env.DB.prepare(
-    `DELETE FROM debts WHERE id = ?1 AND user_id = ?2`
-  ).bind(id, user.sub).run();
+  // Check debt exists first
+  const debtExists = await c.env.DB.prepare(
+    `SELECT id FROM debts WHERE id = ?1 AND user_id = ?2`
+  ).bind(id, user.sub).first();
 
-  if (res.meta.changes === 0) return c.json({ error: 'debt not found' }, 404);
+  if (!debtExists) return c.json({ error: 'debt not found' }, 404);
 
-  // Cascade delete payments
-  await c.env.DB.prepare(
-    `DELETE FROM debt_payments WHERE debt_id = ?1 AND user_id = ?2`
-  ).bind(id, user.sub).run();
+  // Fetch paid payments that have linked budget entries to reverse
+  const paidRows = await c.env.DB.prepare(
+    `SELECT id, amount_idr, bank_account_id, budget_entry_id
+     FROM debt_payments
+     WHERE debt_id = ?1 AND user_id = ?2 AND status = 'paid' AND budget_entry_id IS NOT NULL`
+  ).bind(id, user.sub).all<{ id: string; amount_idr: number; bank_account_id: string | null; budget_entry_id: string | null }>();
+
+  const stmts: D1PreparedStatement[] = [];
+
+  // Reverse each paid payment: delete budget entry + restore bank balance
+  for (const p of paidRows.results ?? []) {
+    if (p.budget_entry_id) {
+      stmts.push(
+        c.env.DB.prepare(`DELETE FROM budget_entries WHERE id = ?1 AND user_id = ?2`)
+          .bind(p.budget_entry_id, user.sub)
+      );
+    }
+    if (p.bank_account_id) {
+      stmts.push(
+        c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
+          .bind(p.amount_idr, p.bank_account_id, user.sub)
+      );
+    }
+  }
+
+  stmts.push(
+    c.env.DB.prepare(`DELETE FROM debt_payments WHERE debt_id = ?1 AND user_id = ?2`)
+      .bind(id, user.sub)
+  );
+  stmts.push(
+    c.env.DB.prepare(`DELETE FROM debts WHERE id = ?1 AND user_id = ?2`)
+      .bind(id, user.sub)
+  );
+
+  await c.env.DB.batch(stmts);
 
   return c.json({ ok: true });
 });
@@ -151,7 +183,7 @@ debts.post('/:id/payments', async (c) => {
 
   const id = nanoid();
   const status = body.status ?? 'scheduled'; // 'scheduled' | 'paid'
-  const amount = Math.round(body.amount);
+  const amount = Math.round(body.amount!);
   const note = body.note || null;
   const bankAccountId = body.bank_account_id || null;
   const now = Math.floor(Date.now() / 1000);
@@ -159,23 +191,36 @@ debts.post('/:id/payments', async (c) => {
   // If paid + bank selected → auto-create budget entry (Dr Hutang / Cr Bank)
   let budgetEntryId: string | null = null;
   if (status === 'paid' && bankAccountId) {
+    // Guard: check bank exists and has sufficient balance
+    const bankRow = await c.env.DB.prepare(
+      `SELECT balance FROM bank_accounts WHERE id = ?1 AND user_id = ?2`
+    ).bind(bankAccountId, user.sub).first<{ balance: number }>();
+
+    if (!bankRow) return c.json({ error: 'bank account not found' }, 404);
+    if (bankRow.balance < amount) return c.json({ error: 'insufficient balance' }, 400);
+
     budgetEntryId = nanoid();
     const budgetNote = `Bayar hutang: ${debt.person_name}${note ? ` — ${note}` : ''}`;
-    await c.env.DB.prepare(
-      `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
-       VALUES (?1, ?2, 'expense', ?3, 'Cicilan & Utang', ?4, ?5, ?6, ?7)`
-    ).bind(budgetEntryId, user.sub, amount, budgetNote, body.payment_date, bankAccountId, now).run();
 
-    // Deduct bank balance
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
+         VALUES (?1, ?2, 'expense', ?3, 'Cicilan & Utang', ?4, ?5, ?6, ?7)`
+      ).bind(budgetEntryId, user.sub, amount, budgetNote, body.payment_date, bankAccountId, now),
+      c.env.DB.prepare(
+        `UPDATE bank_accounts SET balance = balance - ?1 WHERE id = ?2 AND user_id = ?3`
+      ).bind(amount, bankAccountId, user.sub),
+      c.env.DB.prepare(
+        `INSERT INTO debt_payments (id, debt_id, user_id, amount_idr, payment_date, status, note, bank_account_id, budget_entry_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+      ).bind(id, debtId, user.sub, amount, body.payment_date, status, note, bankAccountId, budgetEntryId),
+    ]);
+  } else {
     await c.env.DB.prepare(
-      `UPDATE bank_accounts SET balance = balance - ?1 WHERE id = ?2 AND user_id = ?3`
-    ).bind(amount, bankAccountId, user.sub).run();
+      `INSERT INTO debt_payments (id, debt_id, user_id, amount_idr, payment_date, status, note, bank_account_id, budget_entry_id)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+    ).bind(id, debtId, user.sub, amount, body.payment_date, status, note, bankAccountId, budgetEntryId).run();
   }
-
-  await c.env.DB.prepare(
-    `INSERT INTO debt_payments (id, debt_id, user_id, amount_idr, payment_date, status, note, bank_account_id, budget_entry_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
-  ).bind(id, debtId, user.sub, amount, body.payment_date, status, note, bankAccountId, budgetEntryId).run();
 
   return c.json({ id, debt_id: debtId, amount_idr: amount, payment_date: body.payment_date, status, note, bank_account_id: bankAccountId, budget_entry_id: budgetEntryId }, 201);
 });
@@ -210,42 +255,55 @@ debts.put('/:id/payments/:paymentId', async (c) => {
     `SELECT * FROM debts WHERE id = ?1 AND user_id = ?2`
   ).bind(debtId, user.sub).first<DebtRow>();
 
-  const amount = Math.round(body.amount);
+  if (!debt) return c.json({ error: 'debt not found' }, 404);
+
+  const amount = Math.round(body.amount!);
   const newStatus = body.status ?? 'scheduled';
   const note = body.note || null;
   const bankAccountId = body.bank_account_id || existing.bank_account_id || null;
   const now = Math.floor(Date.now() / 1000);
   let budgetEntryId = existing.budget_entry_id;
 
-  // Reverse old budget entry if exists (status changing or amount changing while paid)
+  const stmts: D1PreparedStatement[] = [];
+
+  // Reverse old budget entry if exists
   if (existing.budget_entry_id && existing.bank_account_id) {
-    await c.env.DB.prepare(
-      `DELETE FROM budget_entries WHERE id = ?1 AND user_id = ?2`
-    ).bind(existing.budget_entry_id, user.sub).run();
-    await c.env.DB.prepare(
-      `UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`
-    ).bind(existing.amount_idr, existing.bank_account_id, user.sub).run();
+    stmts.push(
+      c.env.DB.prepare(`DELETE FROM budget_entries WHERE id = ?1 AND user_id = ?2`)
+        .bind(existing.budget_entry_id, user.sub)
+    );
+    stmts.push(
+      c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
+        .bind(existing.amount_idr, existing.bank_account_id, user.sub)
+    );
     budgetEntryId = null;
   }
 
   // Create new budget entry if now paid + bank selected
-  if (newStatus === 'paid' && bankAccountId && debt) {
+  if (newStatus === 'paid' && bankAccountId) {
     budgetEntryId = nanoid();
     const budgetNote = `Bayar hutang: ${debt.person_name}${note ? ` — ${note}` : ''}`;
-    await c.env.DB.prepare(
-      `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
-       VALUES (?1, ?2, 'expense', ?3, 'Cicilan & Utang', ?4, ?5, ?6, ?7)`
-    ).bind(budgetEntryId, user.sub, amount, budgetNote, body.payment_date, bankAccountId, now).run();
-    await c.env.DB.prepare(
-      `UPDATE bank_accounts SET balance = balance - ?1 WHERE id = ?2 AND user_id = ?3`
-    ).bind(amount, bankAccountId, user.sub).run();
+    stmts.push(
+      c.env.DB.prepare(
+        `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
+         VALUES (?1, ?2, 'expense', ?3, 'Cicilan & Utang', ?4, ?5, ?6, ?7)`
+      ).bind(budgetEntryId, user.sub, amount, budgetNote, body.payment_date, bankAccountId, now)
+    );
+    stmts.push(
+      c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance - ?1 WHERE id = ?2 AND user_id = ?3`)
+        .bind(amount, bankAccountId, user.sub)
+    );
   }
 
-  await c.env.DB.prepare(
-    `UPDATE debt_payments
-     SET amount_idr = ?1, payment_date = ?2, status = ?3, note = ?4, bank_account_id = ?5, budget_entry_id = ?6
-     WHERE id = ?7 AND debt_id = ?8 AND user_id = ?9`
-  ).bind(amount, body.payment_date, newStatus, note, newStatus === 'paid' ? bankAccountId : null, budgetEntryId, paymentId, debtId, user.sub).run();
+  stmts.push(
+    c.env.DB.prepare(
+      `UPDATE debt_payments
+       SET amount_idr = ?1, payment_date = ?2, status = ?3, note = ?4, bank_account_id = ?5, budget_entry_id = ?6
+       WHERE id = ?7 AND debt_id = ?8 AND user_id = ?9`
+    ).bind(amount, body.payment_date, newStatus, note, newStatus === 'paid' ? bankAccountId : null, budgetEntryId, paymentId, debtId, user.sub)
+  );
+
+  await c.env.DB.batch(stmts);
 
   return c.json({ id: paymentId, debt_id: debtId, amount_idr: amount, payment_date: body.payment_date, status: newStatus, note, bank_account_id: bankAccountId, budget_entry_id: budgetEntryId });
 });
@@ -263,20 +321,26 @@ debts.delete('/:id/payments/:paymentId', async (c) => {
 
   if (!existing) return c.json({ error: 'payment schedule not found' }, 404);
 
+  const stmts: D1PreparedStatement[] = [];
+
   // Reverse budget entry if it was auto-created
   if (existing.budget_entry_id && existing.bank_account_id) {
-    await c.env.DB.prepare(
-      `DELETE FROM budget_entries WHERE id = ?1 AND user_id = ?2`
-    ).bind(existing.budget_entry_id, user.sub).run();
-    // Restore bank balance
-    await c.env.DB.prepare(
-      `UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`
-    ).bind(existing.amount_idr, existing.bank_account_id, user.sub).run();
+    stmts.push(
+      c.env.DB.prepare(`DELETE FROM budget_entries WHERE id = ?1 AND user_id = ?2`)
+        .bind(existing.budget_entry_id, user.sub)
+    );
+    stmts.push(
+      c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
+        .bind(existing.amount_idr, existing.bank_account_id, user.sub)
+    );
   }
 
-  await c.env.DB.prepare(
-    `DELETE FROM debt_payments WHERE id = ?1 AND debt_id = ?2 AND user_id = ?3`
-  ).bind(paymentId, debtId, user.sub).run();
+  stmts.push(
+    c.env.DB.prepare(`DELETE FROM debt_payments WHERE id = ?1 AND debt_id = ?2 AND user_id = ?3`)
+      .bind(paymentId, debtId, user.sub)
+  );
+
+  await c.env.DB.batch(stmts);
 
   return c.json({ ok: true });
 });

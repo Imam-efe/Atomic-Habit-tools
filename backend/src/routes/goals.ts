@@ -154,13 +154,13 @@ goals.post('/', async (c) => {
 
   await c.env.DB.prepare(
     'INSERT INTO goals (id, user_id, identity_statement, color, habit_ids, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
-  ).bind(id, user.sub, body.identityStatement.trim(), body.color ?? '#7C5CFF', JSON.stringify(targetHabitIds), now).run();
+  ).bind(id, user.sub, (body.identityStatement || '').trim(), body.color ?? '#7C5CFF', JSON.stringify(targetHabitIds), now).run();
 
   await syncHabitsForGoal(c.env.DB, user.sub, id, targetHabitIds);
 
   return c.json({
     id,
-    identityStatement: body.identityStatement.trim(),
+    identityStatement: (body.identityStatement || '').trim(),
     color: body.color ?? '#7C5CFF',
     habitIds: targetHabitIds,
     progress: 0
@@ -186,7 +186,7 @@ goals.put('/:id', async (c) => {
 
   await c.env.DB.prepare(
     'UPDATE goals SET identity_statement = ?1, color = ?2, habit_ids = ?3 WHERE id = ?4 AND user_id = ?5'
-  ).bind(body.identityStatement.trim(), body.color ?? '#7C5CFF', JSON.stringify(targetHabitIds), goalId, user.sub).run();
+  ).bind((body.identityStatement || '').trim(), body.color ?? '#7C5CFF', JSON.stringify(targetHabitIds), goalId, user.sub).run();
 
   await syncHabitsForGoal(c.env.DB, user.sub, goalId, targetHabitIds);
 
