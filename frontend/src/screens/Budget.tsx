@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
 
 interface BudgetEntry {
@@ -533,8 +534,8 @@ export function Budget() {
           Keuangan
         </h1>
         <motion.button
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => { setShowAdd(s => !s); if (!showAdd) setActiveSubTab('transaksi'); }}
@@ -546,7 +547,7 @@ export function Budget() {
       </div>
 
       {/* Main Tabs switcher */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         <button
           onClick={() => setActiveSubTab('transaksi')}
           className="py-2 rounded-lg text-xs font-bold text-center"
@@ -580,17 +581,17 @@ export function Budget() {
           >
             <motion.div
               className="w-full max-w-[380px] rounded-3xl p-5 flex flex-col gap-4 shadow-2xl relative overflow-hidden"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ scale: 0.9, y: 30 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 30 }}
             >
               <div>
-                <span className="text-[10px] font-black text-violet-400 block uppercase mb-1">🤖 AI RECEIPT SCANNER</span>
+                <span className="text-[10px] font-black text-[var(--accent)] block uppercase mb-1">🤖 AI RECEIPT SCANNER</span>
                 <h3 className="text-base font-bold text-white" style={{ color: 'var(--text)' }}>
                   Pindai Struk Belanja Anda
                 </h3>
-                <p className="text-xs text-neutral-400">Analisis cepat toko, jumlah, tanggal & kategori menggunakan AI.</p>
+                <p className="text-xs text-[var(--text2)]">Analisis cepat toko, jumlah, tanggal & kategori menggunakan AI.</p>
               </div>
 
               {/* Upload area or Scanner view */}
@@ -607,12 +608,12 @@ export function Budget() {
                       animate={{ top: '100%' }}
                       transition={{ duration: 1.2, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
                     />
-                    <p className="text-xs font-bold text-red-400 animate-pulse z-10">Menganalisis Struk...</p>
+                    <p className="text-xs font-bold text-[var(--neg)] animate-pulse z-10">Menganalisis Struk...</p>
                   </div>
                 )}
 
                 {ocrError && (
-                  <div className="p-3 w-full text-center text-red-400 text-xs flex flex-col gap-2">
+                  <div className="p-3 w-full text-center text-[var(--neg)] text-xs flex flex-col gap-2">
                     <p>⚠️ {ocrError}</p>
                     <button
                       onClick={() => setOcrError(null)}
@@ -628,8 +629,8 @@ export function Budget() {
                   <div className="flex flex-col items-center gap-2.5 py-4">
                     <button
                       onClick={() => ocrFileInputRef.current?.click()}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-md hover:opacity-90 active:scale-95 transition-all"
-                      style={{ background: 'var(--accent)' }}
+                      className="neu-cta px-4 py-2 rounded-xl text-xs font-bold text-white shadow-md hover:opacity-90 active:scale-95 transition-all"
+                      style={{ background: 'var(--accentFill)' }}
                     >
                       📁 Pilih Foto Struk
                     </button>
@@ -640,7 +641,7 @@ export function Budget() {
                       className="hidden"
                       onChange={handleOcrFileSelected}
                     />
-                    <span className="text-[10px] text-neutral-500">ATAU</span>
+                    <span className="text-[10px] text-[var(--text3)]">ATAU</span>
                     <button
                       onClick={() => triggerOcrScan('mock')}
                       className="text-xs font-bold underline hover:opacity-80 transition-opacity"
@@ -661,7 +662,7 @@ export function Budget() {
                     </div>
                     
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Nama Toko / Catatan</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Nama Toko / Catatan</label>
                       <input
                         type="text"
                         value={ocrResult.merchant}
@@ -671,7 +672,7 @@ export function Budget() {
                     </div>
                     
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Jumlah Pembayaran (Rp)</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Jumlah Pembayaran (Rp)</label>
                       <input
                         type="number"
                         value={ocrResult.amount || ''}
@@ -681,7 +682,7 @@ export function Budget() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Kategori</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Kategori</label>
                       <select
                         value={ocrResult.category}
                         onChange={(e) => setOcrResult({ ...ocrResult, category: e.target.value })}
@@ -695,7 +696,7 @@ export function Budget() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Tanggal</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Tanggal</label>
                       <input
                         type="date"
                         value={ocrResult.date}
@@ -712,8 +713,8 @@ export function Budget() {
                 {ocrResult && (
                   <button
                     onClick={applyOcrResult}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
-                    style={{ background: 'var(--accent)' }}
+                    className="neu-cta flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
+                    style={{ background: 'var(--accentFill)' }}
                   >
                     📥 Terapkan Ke Formulir
                   </button>
@@ -725,7 +726,7 @@ export function Budget() {
                     setOcrFileUploaded(false);
                   }}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold"
-                  style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                  style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 >
                   Tutup
                 </button>
@@ -740,7 +741,7 @@ export function Budget() {
         {showAdd && activeSubTab === 'transaksi' && (
           <motion.div
             className="rounded-[18px] p-4 mb-4"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -751,8 +752,8 @@ export function Budget() {
               <button
                 type="button"
                 onClick={() => setShowOcrModal(true)}
-                className="px-3 py-1 rounded-lg text-xs font-bold text-white"
-                style={{ background: 'var(--accent)' }}
+                className="neu-cta px-3 py-1 rounded-lg text-xs font-bold text-white"
+                style={{ background: 'var(--accentFill)' }}
               >
                 🤖 AI Scan Struk
               </button>
@@ -765,7 +766,7 @@ export function Budget() {
                   key={t}
                   className="flex-1 py-2 rounded-xl text-sm font-semibold"
                   style={{
-                    background: type === t ? (t === 'expense' ? '#FF453A' : '#34C759') : 'var(--track)',
+                    background: type === t ? (t === 'expense' ? 'var(--negFill)' : 'var(--posFill)') : 'var(--track)',
                     color: type === t ? 'white' : 'var(--text2)',
                   }}
                   whileTap={{ scale: 0.97 }}
@@ -780,7 +781,7 @@ export function Budget() {
             <div className="flex flex-col gap-2.5 mb-3">
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Jumlah (Rp)"
                 value={amount}
                 onChange={e => setAmount(e.target.value.replace(/\D/g, ''))}
@@ -790,7 +791,7 @@ export function Budget() {
               <div className="grid grid-cols-2 gap-2">
                 <select
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={category}
                   onChange={e => setCategory(e.target.value)}
                 >
@@ -800,7 +801,7 @@ export function Budget() {
                 <input
                   type="date"
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={date}
                   onChange={e => setDate(e.target.value)}
                 />
@@ -808,10 +809,10 @@ export function Budget() {
 
               {/* Bank accounts allocator */}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1">Sumber Uang / Bank</label>
+                <label className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider pl-1">Sumber Uang / Bank</label>
                 <select
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={bankAccountId}
                   onChange={e => setBankAccountId(e.target.value)}
                 >
@@ -825,10 +826,10 @@ export function Budget() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1">Pengulangan (Opsional)</label>
+                <label className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider pl-1">Pengulangan (Opsional)</label>
                 <select
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={recurrence}
                   onChange={e => setRecurrence(e.target.value as '' | 'daily' | 'weekly' | 'monthly')}
                 >
@@ -841,7 +842,7 @@ export function Budget() {
 
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Catatan / Keterangan (opsional)"
                 value={note}
                 onChange={e => setNote(e.target.value)}
@@ -849,13 +850,13 @@ export function Budget() {
 
               {/* Receipt photo upload */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1">Lampirkan Struk / Nota</label>
+                <label className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider pl-1">Lampirkan Struk / Nota</label>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="px-3.5 py-2 rounded-xl text-xs font-semibold"
-                    style={{ background: 'var(--track)', color: 'var(--text2)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                   >
                     📸 Pilih Struk
                   </button>
@@ -885,7 +886,7 @@ export function Budget() {
             <div className="flex gap-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: type === 'expense' ? '#FF453A' : '#34C759', opacity: saving ? 0.6 : 1 }}
+                style={{ background: type === 'expense' ? 'var(--negFill)' : 'var(--posFill)', opacity: saving ? 0.6 : 1 }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 onClick={addEntry}
@@ -895,7 +896,7 @@ export function Budget() {
               </motion.button>
               <motion.button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 onClick={() => { setShowAdd(false); setAmount(''); setNote(''); setReceiptImg(null); setRecurrence(''); }}
@@ -918,7 +919,7 @@ export function Budget() {
                   key={p}
                   className="flex-1 py-1.5 rounded-xl text-[11px] font-bold"
                   style={{
-                    background: rangePreset === p ? 'var(--accent)' : 'var(--track)',
+                    background: rangePreset === p ? 'var(--accentFill)' : 'var(--track)',
                     color: rangePreset === p ? 'white' : 'var(--text2)',
                   }}
                   whileTap={{ scale: 0.95 }}
@@ -940,7 +941,7 @@ export function Budget() {
                 <input
                   type="date"
                   className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={customFrom}
                   onChange={e => setCustomFrom(e.target.value)}
                 />
@@ -948,7 +949,7 @@ export function Budget() {
                 <input
                   type="date"
                   className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={customTo}
                   onChange={e => setCustomTo(e.target.value)}
                 />
@@ -959,7 +960,7 @@ export function Budget() {
           {data && (
             <motion.div
               className="rounded-[18px] p-4"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={springs.gentle}
             >
               <p className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text3)' }}>
@@ -967,19 +968,19 @@ export function Budget() {
               </p>
               <div className="flex gap-3">
                 <div className="flex-1 rounded-xl p-3" style={{ background: 'rgba(52,199,89,0.1)' }}>
-                  <p className="text-xs mb-1" style={{ color: '#34C759' }}>Pemasukan</p>
-                  <p className="text-base font-bold" style={{ color: '#34C759' }}>{formatRp(data.summary.income)}</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--pos)' }}>Pemasukan</p>
+                  <p className="text-base font-bold" style={{ color: 'var(--pos)' }}>{formatRp(data.summary.income)}</p>
                 </div>
                 <div className="flex-1 rounded-xl p-3" style={{ background: 'rgba(255,69,58,0.1)' }}>
-                  <p className="text-xs mb-1" style={{ color: '#FF453A' }}>Pengeluaran</p>
-                  <p className="text-base font-bold" style={{ color: '#FF453A' }}>{formatRp(data.summary.expense)}</p>
+                  <p className="text-xs mb-1" style={{ color: 'var(--neg)' }}>Pengeluaran</p>
+                  <p className="text-base font-bold" style={{ color: 'var(--neg)' }}>{formatRp(data.summary.expense)}</p>
                 </div>
               </div>
               <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sep)' }}>
                 <div className="flex justify-between items-end">
                   <div>
                     <p className="text-xs" style={{ color: 'var(--text3)' }}>Saldo Bulan Ini</p>
-                    <p className="text-xl font-bold" style={{ color: data.summary.balance >= 0 ? '#34C759' : '#FF453A' }}>
+                    <p className="text-xl font-bold" style={{ color: data.summary.balance >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
                       {formatRp(data.summary.balance)}
                     </p>
                   </div>
@@ -1000,7 +1001,7 @@ export function Budget() {
           {data && data.summary.expense > 0 && (
             <motion.div
               className="rounded-[18px] p-4"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             >
               <p className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text3)' }}>
@@ -1023,7 +1024,7 @@ export function Budget() {
                     }))
                     .sort((a, b) => b.amount - a.amount);
 
-                  const colors = ['#7C5CFF', '#FF9F0A', '#0A84FF', '#FF375F', '#34C759', '#5E5CE6', '#FF453A', '#8E8E93', '#5AC8FA', '#FF1493', '#32CD32'];
+                  const colors = CHART_PALETTE;
 
                   return (
                     <div className="w-full flex h-full">
@@ -1058,7 +1059,7 @@ export function Budget() {
                     }))
                     .sort((a, b) => b.amount - a.amount);
 
-                  const colors = ['#7C5CFF', '#FF9F0A', '#0A84FF', '#FF375F', '#34C759', '#5E5CE6', '#FF453A', '#8E8E93', '#5AC8FA', '#FF1493', '#32CD32'];
+                  const colors = CHART_PALETTE;
 
                   return expenseCategoriesList.map((cat, idx) => (
                     <div key={cat.name} className="flex items-center gap-1.5 text-[10px]">
@@ -1095,7 +1096,7 @@ export function Budget() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     className="rounded-[14px] px-4 py-3.5 flex items-center gap-3 relative overflow-hidden cursor-pointer"
-                    style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                     onClick={() => openSheet(entry)}
                   >
                     <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-base"
@@ -1114,7 +1115,7 @@ export function Budget() {
                       {entry.bank_account_id && (() => {
                         const matchedBank = bankAccounts.find(b => b.id === entry.bank_account_id);
                         return matchedBank ? (
-                          <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/5 mt-1 text-zinc-400">
+                          <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/5 mt-1 text-[var(--text2)]">
                             🏦 {matchedBank.name}
                           </span>
                         ) : null;
@@ -1129,7 +1130,7 @@ export function Budget() {
                     )}
 
                     <p className="text-sm font-bold flex-shrink-0"
-                      style={{ color: entry.type === 'income' ? '#34C759' : '#FF453A' }}>
+                      style={{ color: entry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
                       {entry.type === 'income' ? '+' : '-'}{formatRp(entry.amount)}
                     </p>
 
@@ -1145,14 +1146,14 @@ export function Budget() {
       {activeSubTab === 'budgeting' && (
         <div className="flex flex-col gap-4">
           {/* Add/Update Limit Panel */}
-          <div className="rounded-[18px] p-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+          <div className="rounded-[18px] p-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text2)' }}>
               Set Limit Bulanan Kategori
             </p>
             <div className="flex flex-col gap-2.5">
               <select
                 className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 value={selectedLimitCat}
                 onChange={e => setSelectedLimitCat(e.target.value)}
               >
@@ -1162,7 +1163,7 @@ export function Budget() {
               <div className="flex gap-2">
                 <input
                   className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Batas Limit (Rp)"
                   value={limitVal}
                   onChange={e => setLimitVal(e.target.value.replace(/\D/g, ''))}
@@ -1171,8 +1172,8 @@ export function Budget() {
                 <button
                   onClick={handleUpdateLimit}
                   disabled={savingLimit}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
-                  style={{ background: 'var(--accent)' }}
+                  className="neu-cta px-4 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
+                  style={{ background: 'var(--accentFill)' }}
                 >
                   {savingLimit ? 'Menyimpan...' : 'Simpan Batas'}
                 </button>
@@ -1184,13 +1185,13 @@ export function Budget() {
           <div className="flex flex-col gap-3">
             {categoryLimits.map(cat => {
               const spentPct = cat.limit > 0 ? (cat.spent / cat.limit) * 100 : 0;
-              const progressColor = spentPct >= 100 ? '#FF453A' : spentPct >= 80 ? '#FF9F0A' : 'var(--accent)';
+              const progressColor = spentPct >= 100 ? 'var(--neg)' : spentPct >= 80 ? 'var(--warn)' : 'var(--accent)';
               
               return (
                 <div
                   key={cat.category}
                   className="rounded-[16px] p-4 flex flex-col gap-2.5 cursor-pointer active:opacity-80"
-                  style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                   onClick={() => setDrillCategory(cat.category)}
                 >
                   <div className="flex justify-between items-center text-xs">
@@ -1236,11 +1237,11 @@ export function Budget() {
 
       {/* CALCULATOR WIDGET */}
       <div className="mt-8 pt-5" style={{ borderTop: '1px solid var(--sep)' }}>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 pl-1 mb-2.5">🧮 KALKULATOR BANTUAN</p>
-        <div className="rounded-[18px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text2)] pl-1 mb-2.5">🧮 KALKULATOR BANTUAN</p>
+        <div className="rounded-[18px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
           {/* Calc Display */}
           <div className="px-3.5 py-2.5 rounded-xl text-right text-base font-mono flex items-center justify-between"
-            style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+            style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
             <span className="text-xs" style={{ color: 'var(--text3)' }}>{calcFormula || 'Formula'}</span>
             <span className="font-bold text-lg" style={{ color: 'var(--text)' }}>{calcDisplay || '0'}</span>
           </div>
@@ -1258,7 +1259,7 @@ export function Budget() {
                   className="py-2.5 rounded-xl text-sm font-bold flex items-center justify-center transition-all"
                   style={{
                     background: isClear ? 'rgba(255,69,58,0.12)' : isOperator ? 'var(--track)' : 'var(--bg)',
-                    color: isClear ? '#FF453A' : 'var(--text)',
+                    color: isClear ? 'var(--neg)' : 'var(--text)',
                     border: '1px solid var(--sep)'
                   }}
                 >
@@ -1272,8 +1273,8 @@ export function Budget() {
           {calcDisplay && !isNaN(parseFloat(calcDisplay)) && (
             <button
               onClick={applyCalculatorValue}
-              className="w-full py-2 rounded-xl text-xs font-bold text-white transition-all"
-              style={{ background: 'var(--accent)' }}
+              className="neu-cta w-full py-2 rounded-xl text-xs font-bold text-white transition-all"
+              style={{ background: 'var(--accentFill)' }}
             >
               📥 Gunakan Hasil ({formatRp(parseFloat(calcDisplay))}) Ke Jumlah Form
             </button>
@@ -1318,19 +1319,19 @@ export function Budget() {
                 {totalSpent > 0 && (
                   <div className="flex-1 rounded-xl p-3" style={{ background: 'rgba(255,69,58,0.08)' }}>
                     <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--text3)' }}>Total Keluar</p>
-                    <p className="text-base font-extrabold text-red-400">{formatRp(totalSpent)}</p>
+                    <p className="text-base font-extrabold text-[var(--neg)]">{formatRp(totalSpent)}</p>
                   </div>
                 )}
                 {totalIncome > 0 && (
                   <div className="flex-1 rounded-xl p-3" style={{ background: 'rgba(52,199,89,0.08)' }}>
                     <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--text3)' }}>Total Masuk</p>
-                    <p className="text-base font-extrabold text-green-400">{formatRp(totalIncome)}</p>
+                    <p className="text-base font-extrabold text-[var(--pos)]">{formatRp(totalIncome)}</p>
                   </div>
                 )}
                 {catLimit && catLimit.limit > 0 && (
-                  <div className="flex-1 rounded-xl p-3" style={{ background: 'var(--surface)' }}>
+                  <div className="flex-1 rounded-xl p-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-inset)' }}>
                     <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'var(--text3)' }}>Sisa Limit</p>
-                    <p className="text-base font-extrabold" style={{ color: catLimit.remaining <= 0 ? '#FF453A' : '#34C759' }}>
+                    <p className="text-base font-extrabold" style={{ color: catLimit.remaining <= 0 ? 'var(--neg)' : 'var(--pos)' }}>
                       {formatRp(catLimit.remaining)}
                     </p>
                   </div>
@@ -1354,7 +1355,7 @@ export function Budget() {
                           {grouped[date].map(entry => (
                             <div key={entry.id}
                               className="rounded-[14px] px-4 py-3 flex items-center gap-3 cursor-pointer"
-                              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                               onClick={() => { setDrillCategory(null); setTimeout(() => openSheet(entry), 300); }}>
                               <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-sm"
                                 style={{ background: entry.type === 'income' ? 'rgba(52,199,89,0.15)' : 'rgba(255,69,58,0.12)' }}>
@@ -1364,7 +1365,7 @@ export function Budget() {
                                 {entry.note && <p className="text-xs truncate" style={{ color: 'var(--text3)' }}>{entry.note}</p>}
                               </div>
                               <p className="text-sm font-bold flex-shrink-0"
-                                style={{ color: entry.type === 'income' ? '#34C759' : '#FF453A' }}>
+                                style={{ color: entry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
                                 {entry.type === 'income' ? '+' : '-'}{formatRp(entry.amount)}
                               </p>
                             </div>
@@ -1394,7 +1395,7 @@ export function Budget() {
             />
             <motion.div
               className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto rounded-t-[24px] p-5 pb-10"
-              style={{ background: 'var(--surface)', maxHeight: '88vh', overflowY: 'auto' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)', maxHeight: '88vh', overflowY: 'auto' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -1405,12 +1406,12 @@ export function Budget() {
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full"
                   style={{
                     background: editMode ? 'rgba(10,132,255,0.15)' : viewEntry.type === 'expense' ? 'rgba(255,69,58,0.15)' : 'rgba(52,199,89,0.15)',
-                    color: editMode ? '#0A84FF' : viewEntry.type === 'expense' ? '#FF453A' : '#34C759'
+                    color: editMode ? '#0A84FF' : viewEntry.type === 'expense' ? 'var(--neg)' : 'var(--pos)'
                   }}>
                   {editMode ? '✏️ Edit' : viewEntry.type === 'expense' ? 'Pengeluaran' : 'Pemasukan'}
                 </span>
                 <div className="flex gap-2 items-center">
-                  <button onClick={() => setEditMode(!editMode)} className="text-xs px-3 py-1.5 rounded-xl font-semibold" style={{ background: 'var(--track)', color: 'var(--text2)' }}>
+                  <button onClick={() => setEditMode(!editMode)} className="text-xs px-3 py-1.5 rounded-xl font-semibold" style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}>
                     {editMode ? 'Batal' : '✏️ Edit'}
                   </button>
                   <button onClick={() => { setViewEntry(null); setEditMode(false); }}>
@@ -1422,7 +1423,7 @@ export function Budget() {
               </div>
               {!editMode ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-3xl font-extrabold" style={{ color: viewEntry.type === 'income' ? '#34C759' : '#FF453A' }}>
+                  <p className="text-3xl font-extrabold" style={{ color: viewEntry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
                     {viewEntry.type === 'income' ? '+' : '-'}{formatRp(viewEntry.amount)}
                   </p>
                   <div className="flex flex-col gap-0 text-sm">
@@ -1451,7 +1452,7 @@ export function Budget() {
                   <div className="flex gap-2 mb-1">
                     {(['expense', 'income'] as const).map(t => (
                       <motion.button key={t} className="flex-1 py-2 rounded-xl text-sm font-semibold"
-                        style={{ background: editType === t ? (t === 'expense' ? '#FF453A' : '#34C759') : 'var(--track)', color: editType === t ? 'white' : 'var(--text2)' }}
+                        style={{ background: editType === t ? (t === 'expense' ? 'var(--negFill)' : 'var(--posFill)') : 'var(--track)', color: editType === t ? 'white' : 'var(--text2)' }}
                         whileTap={{ scale: 0.97 }} transition={springs.snappy}
                         onClick={() => { setEditType(t); setEditCategory(t === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]); }}>
                         {t === 'expense' ? 'Pengeluaran' : 'Pemasukan'}
@@ -1459,41 +1460,41 @@ export function Budget() {
                     ))}
                   </div>
                   <input className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     placeholder="Jumlah (Rp)" value={editAmount} inputMode="numeric"
                     onChange={e => setEditAmount(e.target.value.replace(/\D/g, ''))} />
                   <div className="grid grid-cols-2 gap-2">
                     <select className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={editCategory} onChange={e => setEditCategory(e.target.value)}>
                       {(editType === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <input type="date" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={editDate} onChange={e => setEditDate(e.target.value)} />
                   </div>
                   <select className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     value={editBankAccountId} onChange={e => setEditBankAccountId(e.target.value)}>
                     <option value="">Cash/Tunai (Tanpa Bank)</option>
                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name} ({b.account_type})</option>)}
                   </select>
                   <input className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     placeholder="Catatan (opsional)" value={editNote} onChange={e => setEditNote(e.target.value)} />
                 </div>
               )}
               <div className="flex gap-2 mt-5">
                 {editMode && (
                   <motion.button className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                    style={{ background: 'var(--accent)', opacity: savingEdit ? 0.6 : 1 }}
+                    style={{ background: 'var(--accentFill)', opacity: savingEdit ? 0.6 : 1 }}
                     whileTap={{ scale: 0.97 }} transition={springs.snappy}
                     onClick={saveEdit} disabled={savingEdit}>
                     {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
                   </motion.button>
                 )}
                 <motion.button className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
-                  style={{ background: 'rgba(255,69,58,0.12)', color: '#FF453A' }}
+                  style={{ background: 'rgba(255,69,58,0.12)', color: 'var(--neg)' }}
                   whileTap={{ scale: 0.97 }} transition={springs.snappy}
                   onClick={() => { deleteEntry(viewEntry!.id); setViewEntry(null); setEditMode(false); }}>
                   🗑️ Hapus

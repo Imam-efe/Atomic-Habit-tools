@@ -174,7 +174,7 @@ export function KidsSchedule() {
         <button
           onClick={() => setSubScreen(null)}
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <span style={{ color: 'var(--accent)' }} className="text-xl">‹</span>
         </button>
@@ -187,8 +187,8 @@ export function KidsSchedule() {
           </p>
         </div>
         <motion.button
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
@@ -204,7 +204,7 @@ export function KidsSchedule() {
         {showForm && (
           <motion.div
             className="rounded-[20px] p-4 mb-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -217,7 +217,7 @@ export function KidsSchedule() {
             <div className="flex flex-col gap-2.5">
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Nama Anak (contoh: Arya, Nadia)"
                 value={kidName}
                 onChange={e => setKidName(e.target.value)}
@@ -225,7 +225,7 @@ export function KidsSchedule() {
 
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Nama Kegiatan (contoh: Matematika, Les Piano, Tidur)"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
@@ -250,13 +250,15 @@ export function KidsSchedule() {
               </div>
 
               {/* Schedule Type Selection: Weekly vs Specific Date */}
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
                 <button
                   type="button"
                   className="py-1.5 rounded-lg text-xs font-semibold"
                   style={{
                     background: scheduleType === 'weekly' ? 'var(--surface)' : 'transparent',
                     color: scheduleType === 'weekly' ? 'var(--text)' : 'var(--text3)',
+                    // The well is inset, so the selected segment rises out of it.
+                    boxShadow: scheduleType === 'weekly' ? 'var(--neu-raised-sm)' : 'none',
                   }}
                   onClick={() => setScheduleType('weekly')}
                 >
@@ -268,6 +270,7 @@ export function KidsSchedule() {
                   style={{
                     background: scheduleType === 'date' ? 'var(--surface)' : 'transparent',
                     color: scheduleType === 'date' ? 'var(--text)' : 'var(--text3)',
+                    boxShadow: scheduleType === 'date' ? 'var(--neu-raised-sm)' : 'none',
                   }}
                   onClick={() => setScheduleType('date')}
                 >
@@ -283,7 +286,7 @@ export function KidsSchedule() {
                     </label>
                     <select
                       className="w-full px-3 py-2.5 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={dayOfWeek}
                       onChange={e => setDayOfWeek(e.target.value)}
                     >
@@ -298,7 +301,7 @@ export function KidsSchedule() {
                     <input
                       type="date"
                       className="w-full px-3 py-2.5 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={scheduleDate}
                       onChange={e => setScheduleDate(e.target.value)}
                     />
@@ -311,7 +314,7 @@ export function KidsSchedule() {
                   <input
                     type="time"
                     className="w-full px-3 py-2.5 rounded-xl text-xs outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     value={scheduleTime}
                     onChange={e => setScheduleTime(e.target.value)}
                   />
@@ -320,7 +323,7 @@ export function KidsSchedule() {
 
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Catatan tambahan (opsional)"
                 value={note}
                 onChange={e => setNote(e.target.value)}
@@ -329,7 +332,7 @@ export function KidsSchedule() {
               <div className="flex gap-2 mt-2">
                 <motion.button
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                  style={{ background: 'var(--accent)', opacity: saving ? 0.6 : 1 }}
+                  style={{ background: 'var(--accentFill)', opacity: saving ? 0.6 : 1 }}
                   whileTap={{ scale: 0.97 }}
                   transition={springs.snappy}
                   onClick={handleSave}
@@ -339,7 +342,7 @@ export function KidsSchedule() {
                 </motion.button>
                 <motion.button
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                  style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                  style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                   whileTap={{ scale: 0.97 }}
                   transition={springs.snappy}
                   onClick={resetForm}
@@ -368,7 +371,7 @@ export function KidsSchedule() {
                 style={{
                   background: selectedKid === kid ? 'var(--accentSoft)' : 'var(--surface)',
                   color: selectedKid === kid ? 'var(--accent)' : 'var(--text2)',
-                  border: `1px solid ${selectedKid === kid ? 'var(--accent)' : 'var(--sep)'}`,
+                  boxShadow: selectedKid === kid ? 'var(--neu-pressed)' : 'var(--neu-raised-sm)',
                 }}
               >
                 {kid === 'Semua' ? '👧👦 Semua Anak' : `🧒 ${kid}`}
@@ -378,7 +381,7 @@ export function KidsSchedule() {
         </div>
 
         {/* Schedule Type Filter */}
-        <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+        <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
           {['Semua', 'pelajaran', 'aktivitas', 'rutinitas'].map(t => (
             <button
               key={t}
@@ -419,7 +422,7 @@ export function KidsSchedule() {
                 {groupedSchedules[dayKey].map(s => {
                   const typeColors = {
                     pelajaran: { bg: 'rgba(10,132,255,0.12)', text: '#0A84FF', symbol: '📖' },
-                    aktivitas: { bg: 'rgba(255,159,10,0.12)', text: '#FF9F0A', symbol: '🎨' },
+                    aktivitas: { bg: 'rgba(255,159,10,0.12)', text: 'var(--warn)', symbol: '🎨' },
                     rutinitas: { bg: 'rgba(94,92,230,0.12)', text: '#5E5CE6', symbol: '⏰' }
                   };
                   const col = typeColors[s.type] || { bg: 'var(--track)', text: 'var(--text)', symbol: '📅' };
@@ -429,7 +432,7 @@ export function KidsSchedule() {
                       key={s.id}
                       layout
                       className="rounded-2xl p-3.5 flex items-center justify-between gap-3"
-                      style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                     >
                       <div className="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center text-lg"
                         style={{ background: col.bg, color: col.text }}>
@@ -439,7 +442,7 @@ export function KidsSchedule() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider"
-                            style={{ background: 'var(--track)', color: 'var(--text2)' }}>
+                            style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}>
                             {s.kid_name}
                           </span>
                           <span className="text-xs font-bold" style={{ color: 'var(--text3)' }}>
@@ -475,7 +478,7 @@ export function KidsSchedule() {
                           whileTap={{ scale: 0.85 }}
                           onClick={() => handleDelete(s.id)}
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                             <polyline points="3 6 5 6 21 6" />
                             <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                           </svg>

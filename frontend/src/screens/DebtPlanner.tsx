@@ -158,7 +158,7 @@ export function DebtPlanner() {
       <div className="flex items-center gap-3 mb-6">
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={goBack}
@@ -188,20 +188,20 @@ export function DebtPlanner() {
           {/* Total */}
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={springs.gentle}
           >
             <p className="text-[10px] font-extrabold uppercase tracking-wider mb-1" style={{ color: 'var(--text3)' }}>TOTAL UTANG AKTIF</p>
-            <p className="text-3xl font-black" style={{ color: '#FF453A', letterSpacing: '-0.5px' }}>{formatRp(totalDebt)}</p>
+            <p className="text-3xl font-black" style={{ color: 'var(--neg)', letterSpacing: '-0.5px' }}>{formatRp(totalDebt)}</p>
             <p className="text-xs mt-1" style={{ color: 'var(--text3)' }}>{unpaidDebts.length} utang belum lunas</p>
           </motion.div>
 
           {/* Method selector */}
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.05 }}
@@ -213,7 +213,7 @@ export function DebtPlanner() {
                   key={m}
                   className="py-3 rounded-xl text-xs font-bold"
                   style={{
-                    background: method === m ? 'var(--accent)' : 'var(--bg)',
+                    background: method === m ? 'var(--accentFill)' : 'var(--bg)',
                     color: method === m ? 'white' : 'var(--text2)',
                     border: `1px solid ${method === m ? 'var(--accent)' : 'var(--sep)'}`,
                   }}
@@ -238,7 +238,7 @@ export function DebtPlanner() {
           {/* Extra monthly */}
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.08 }}
@@ -248,7 +248,7 @@ export function DebtPlanner() {
               <span className="text-sm font-bold" style={{ color: 'var(--text2)' }}>Rp</span>
               <input
                 className="flex-1 px-3 py-2.5 rounded-xl text-sm outline-none font-semibold"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="0"
                 inputMode="numeric"
                 value={extraInput}
@@ -285,7 +285,7 @@ export function DebtPlanner() {
           {/* Urutan pelunasan + Bayar button */}
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.12 }}
@@ -311,10 +311,10 @@ export function DebtPlanner() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <p className="font-bold text-sm" style={{ color: '#FF453A' }}>{formatRp(d.amount_idr)}</p>
+                    <p className="font-bold text-sm" style={{ color: 'var(--neg)' }}>{formatRp(d.amount_idr)}</p>
                     <motion.button
                       className="px-3 py-1.5 rounded-xl text-[11px] font-bold"
-                      style={{ background: 'var(--accent)', color: 'white' }}
+                      style={{ background: 'var(--accentFill)', color: 'white' }}
                       whileTap={{ scale: 0.94 }}
                       transition={springs.snappy}
                       onClick={() => openPayForm(d)}
@@ -342,7 +342,7 @@ export function DebtPlanner() {
             />
             <motion.div
               className="fixed left-0 right-0 bottom-0 z-50 max-w-[430px] mx-auto rounded-t-[28px] px-5 pt-5 pb-10"
-              style={{ background: 'var(--surface)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -356,7 +356,7 @@ export function DebtPlanner() {
               {/* Amount */}
               <div className="mb-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>JUMLAH</p>
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
                   <span className="text-sm font-bold" style={{ color: 'var(--text2)' }}>Rp</span>
                   <input
                     className="flex-1 bg-transparent outline-none text-sm font-semibold"
@@ -377,7 +377,7 @@ export function DebtPlanner() {
                 <input
                   type="date"
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none font-semibold"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={payForm.date}
                   onChange={e => setPayForm(f => f && ({ ...f, date: e.target.value }))}
                 />
@@ -389,7 +389,7 @@ export function DebtPlanner() {
                   <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>REKENING (KREDIT)</p>
                   <select
                     className="w-full px-3 py-2.5 rounded-xl text-sm outline-none font-semibold appearance-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     value={payForm.bankAccountId}
                     onChange={e => setPayForm(f => f && ({ ...f, bankAccountId: e.target.value }))}
                   >
@@ -411,7 +411,7 @@ export function DebtPlanner() {
                 <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>CATATAN (OPSIONAL)</p>
                 <input
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Cicilan ke-1, via transfer, dll"
                   value={payForm.note}
                   onChange={e => setPayForm(f => f && ({ ...f, note: e.target.value }))}
@@ -420,7 +420,7 @@ export function DebtPlanner() {
 
               <motion.button
                 className="w-full py-3.5 rounded-2xl font-bold text-sm"
-                style={{ background: 'var(--accent)', color: 'white', opacity: saving ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', color: 'white', opacity: saving ? 0.6 : 1 }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 onClick={handlePay}

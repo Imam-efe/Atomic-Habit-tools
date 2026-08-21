@@ -2,23 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * First-paint defaults. These mirror lightTokens in src/tokens/theme.ts and are
+ * overwritten by applyTheme() once React mounts; keeping them in sync stops the
+ * page flashing the old flat palette on load.
+ */
 :root {
-  --bg: #000000;
-  --surface: #1C1C1E;
-  --text: #FFFFFF;
-  --text2: rgba(235,235,245,0.62);
-  --text3: rgba(235,235,245,0.30);
-  --sep: rgba(84,84,88,0.50);
-  --track: rgba(120,120,128,0.28);
-  --blur: rgba(22,22,24,0.78);
-  --accent: #7C5CFF;
-  --accent2: #9D7CFF;
-  --accentSoft: rgba(124,92,255,0.16);
-  --warnBorder: rgba(255,159,10,0.35);
+  --bg: #E6E9EF;
+  --surface: #E6E9EF;
+  --text: #171A21;
+  --text2: #4A5261;
+  --text3: #5C6472;
+  --sep: rgba(195,201,212,0.55);
+  --track: #D5DAE3;
+  --blur: rgba(230,233,239,0.82);
+  --accent: #5B41D6;
+  --accentFill: #5B41D6;
+  --accentFill2: #7761DD;
+  --accentSoft: rgba(91,65,214,0.14);
+  --pos: #1B6E37;
+  --neg: #C0281A;
+  --warn: #8A5300;
+  --info: #0A5FC8;
+  --posFill: #1B6E37;
+  --negFill: #C0281A;
+  --warnFill: #8A5300;
+  --warnBorder: rgba(138,83,0,0.35);
 
-  /* Apple-inspired Motion Easing Curves */
-  --ease-out-apple: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  --ease-in-out-apple: cubic-bezier(0.34, 1.56, 0.64, 1); /* Settle spring-like */
+  --neu-light: #FFFFFF;
+  --neu-dark: #C3C9D4;
+  --neu-raised: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+  --neu-raised-sm: 3px 3px 7px var(--neu-dark), -3px -3px 7px var(--neu-light);
+  --neu-raised-lg: 10px 10px 24px var(--neu-dark), -10px -10px 24px var(--neu-light);
+  --neu-inset: inset 4px 4px 9px var(--neu-dark), inset -4px -4px 9px var(--neu-light);
+  --neu-pressed: inset 6px 6px 12px var(--neu-dark), inset -6px -6px 12px var(--neu-light);
+  --neu-sheet: 0 -8px 24px var(--neu-dark);
+  --neu-flat: 0 0 0 0 rgba(0,0,0,0);
+
+  /* Depth changes ease out; presses settle with a slight overshoot. */
+  --ease-depth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-settle: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 body {
@@ -35,16 +58,90 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Scrollbar hiding globally */
 ::-webkit-scrollbar {
   display: none;
 }
 
-/* 120fps Smooth Keyframe Animations */
+/* ---------------------------------------------------------------------------
+ * Neumorphic surfaces
+ *
+ * All of these share the page background — depth is the shadow pair alone. Use
+ * the class on new markup; existing screens set the same shadows inline.
+ * ------------------------------------------------------------------------- */
+
+.neu {
+  background: var(--surface);
+  box-shadow: var(--neu-raised);
+}
+
+.neu-sm {
+  background: var(--surface);
+  box-shadow: var(--neu-raised-sm);
+}
+
+.neu-lg {
+  background: var(--surface);
+  box-shadow: var(--neu-raised-lg);
+}
+
+.neu-inset {
+  background: var(--surface);
+  box-shadow: var(--neu-inset);
+}
+
+.neu-pressed {
+  background: var(--surface);
+  box-shadow: var(--neu-pressed);
+}
+
+/*
+ * Primary action. A coloured fill still needs the raised pair, or it reads as a
+ * sticker dropped onto the page rather than part of it.
+ */
+.neu-cta {
+  box-shadow: var(--neu-raised);
+  transition: box-shadow 180ms var(--ease-depth);
+}
+
+.neu-cta:active {
+  box-shadow: var(--neu-pressed);
+}
+
+/* Carved inputs need their own placeholder colour; the UA default is far below AA. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text3);
+  opacity: 1;
+}
+
+/*
+ * Interactive press. The surface sinks instead of moving, which is the whole
+ * point of the style — a translate would read as a flat card sliding.
+ */
+.neu-press {
+  transition: box-shadow 180ms var(--ease-depth);
+}
+
+.neu-press:active {
+  box-shadow: var(--neu-pressed);
+}
+
+/* Selected/toggled state, held rather than momentary. */
+.neu-press[aria-pressed='true'],
+.neu-press[data-active='true'] {
+  box-shadow: var(--neu-pressed);
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion
+ *
+ * Depth-first: things bloom out of the surface rather than sliding across it.
+ * ------------------------------------------------------------------------- */
+
 @keyframes fyScreen {
   from {
     opacity: 0;
-    transform: translateX(10px) scale(0.995);
+    transform: translateY(6px) scale(0.994);
   }
   to {
     opacity: 1;
@@ -52,78 +149,55 @@ body {
   }
 }
 
-@keyframes fyCardIn {
+/* Card entrance — the shadow grows in, so the card appears to rise. */
+@keyframes fyRise {
   from {
     opacity: 0;
-    transform: translateY(22px);
+    transform: translateY(10px);
+    box-shadow: var(--neu-flat);
   }
   to {
     opacity: 1;
     transform: none;
+    box-shadow: var(--neu-raised);
   }
 }
 
-@keyframes fyPop {
-  0% {
-    transform: scale(0);
+/* Same idea at chip scale. */
+@keyframes fyRiseSm {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    box-shadow: var(--neu-flat);
   }
-  60% {
-    transform: scale(1.18);
+  to {
+    opacity: 1;
+    transform: none;
+    box-shadow: var(--neu-raised-sm);
+  }
+}
+
+/* Completion feedback: the surface pushes in, then settles back out. */
+@keyframes fyPressPop {
+  0% {
+    box-shadow: var(--neu-raised);
+  }
+  45% {
+    box-shadow: var(--neu-pressed);
   }
   100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes fyRoll {
-  from {
-    opacity: 0;
-    transform: translateY(11px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes fyDraw {
-  from {
-    stroke-dashoffset: var(--seg);
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes fyBar {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
+    box-shadow: var(--neu-raised);
   }
 }
 
 @keyframes fyBreathe {
   0%, 100% {
     transform: scale(1);
-    opacity: 0.82;
+    opacity: 0.86;
   }
   50% {
-    transform: scale(1.035);
+    transform: scale(1.03);
     opacity: 1;
-  }
-}
-
-@keyframes fyTabPop {
-  0% {
-    transform: scale(1);
-  }
-  45% {
-    transform: scale(1.24);
-  }
-  100% {
-    transform: scale(1);
   }
 }
 
@@ -133,18 +207,6 @@ body {
   }
   to {
     transform: translateY(0);
-  }
-}
-
-@keyframes fyGlow {
-  0% {
-    box-shadow: 0 0 0 0 var(--accentSoft);
-  }
-  50% {
-    box-shadow: 0 0 26px 4px var(--accentSoft);
-  }
-  100% {
-    box-shadow: 0 0 0 0 var(--accentSoft);
   }
 }
 

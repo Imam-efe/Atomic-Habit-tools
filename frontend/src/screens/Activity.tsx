@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { ACTIVITY_COLORS } from '@/constants/colors';
 
 interface ActivityLog {
   id: string;
@@ -11,16 +12,7 @@ interface ActivityLog {
   log_date: string;
 }
 
-const LABEL_COLORS: Record<string, string> = {
-  'Deep Work': '#7C5CFF',
-  'Shallow Work': '#FF9F0A',
-  'Rest': '#5AC8FA',
-  'Learning': '#34C759',
-  'Social': '#FF375F',
-  'Health': '#5E5CE6',
-};
-
-const LABELS = Object.keys(LABEL_COLORS);
+const LABELS = Object.keys(ACTIVITY_COLORS);
 
 export function Activity() {
   const { setSubScreen } = useUIStore();
@@ -188,7 +180,7 @@ export function Activity() {
   const activeSummaries = LABELS.map(name => ({
     name,
     hours: summaryMap[name],
-    color: LABEL_COLORS[name],
+    color: ACTIVITY_COLORS[name],
     pct: totalHours > 0 ? (summaryMap[name] / totalHours) * 100 : 0,
   })).filter(x => x.hours > 0);
 
@@ -237,14 +229,14 @@ export function Activity() {
           <button
             onClick={() => setShowTimer(t => !t)}
             className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           >
             ⏱️
           </button>
           <motion.button
             onClick={() => setShowAdd(s => !s)}
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}
+            className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--accentFill)' }}
             whileTap={{ scale: 0.9 }}
             transition={springs.snappy}
           >
@@ -268,15 +260,15 @@ export function Activity() {
         {showTimer && (
           <motion.div
             className="rounded-[22px] p-5 mb-5 flex flex-col items-center gap-4 text-center"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={springs.smooth}
           >
             <div>
-              <span className="text-[10px] font-black text-violet-400 block uppercase tracking-widest">⏱️ FOCUS TRACKER</span>
-              <p className="text-xs text-neutral-400 mt-0.5">Blokir waktu harian Anda untuk Deep Work</p>
+              <span className="text-[10px] font-black text-[var(--accent)] block uppercase tracking-widest">⏱️ FOCUS TRACKER</span>
+              <p className="text-xs text-[var(--text2)] mt-0.5">Blokir waktu harian Anda untuk Deep Work</p>
             </div>
 
             {/* Circular Progress Timer */}
@@ -357,14 +349,14 @@ export function Activity() {
               <button
                 onClick={toggleTimer}
                 className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-colors"
-                style={{ background: isTimerRunning ? '#FF9F0A' : 'var(--accent)' }}
+                style={{ background: isTimerRunning ? 'var(--warnFill)' : 'var(--accentFill)' }}
               >
                 {isTimerRunning ? 'Pause' : 'Start Focus'}
               </button>
               <button
                 onClick={resetTimer}
                 className="px-4 py-2.5 rounded-xl text-xs font-bold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
               >
                 Reset
               </button>
@@ -378,7 +370,7 @@ export function Activity() {
         {showAdd && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -387,7 +379,7 @@ export function Activity() {
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Log Alokasi Waktu</p>
             <select
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={label}
               onChange={e => setLabel(e.target.value)}
             >
@@ -399,7 +391,7 @@ export function Activity() {
               type="number"
               step="0.5"
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Durasi (jam)... misal 1.5 atau 4"
               value={hours}
               onChange={e => setHours(e.target.value)}
@@ -408,7 +400,7 @@ export function Activity() {
             <div className="flex gap-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: saving ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: saving ? 0.6 : 1 }}
                 onClick={handleAddLog}
                 disabled={saving}
                 whileTap={{ scale: 0.97 }}
@@ -417,7 +409,7 @@ export function Activity() {
               </motion.button>
               <motion.button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => { setShowAdd(false); setHours(''); }}
                 whileTap={{ scale: 0.97 }}
               >
@@ -450,7 +442,7 @@ export function Activity() {
 
       {/* Productivity Focus Score Card */}
       {totalHours > 0 && (
-        <div className="rounded-[18px] p-4 mb-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+        <div className="rounded-[18px] p-4 mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
           {(() => {
             const productive = (summaryMap['Deep Work'] || 0) + (summaryMap['Learning'] || 0);
             const score = totalHours > 0 ? Math.round((productive / totalHours) * 100) : 0;
@@ -458,12 +450,12 @@ export function Activity() {
               <>
                 <div className="flex justify-between items-center mb-2">
                   <div>
-                    <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase block">SKOR FOKUS HARI INI</span>
+                    <span className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase block">SKOR FOKUS HARI INI</span>
                     <span className="text-xs" style={{ color: 'var(--text2)' }}>
                       Rasio Deep Work & Belajar
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-violet-400">{score}/100</span>
+                  <span className="text-2xl font-black text-[var(--accent)]">{score}/100</span>
                 </div>
                 <div className="h-2 rounded-full overflow-hidden mb-2.5" style={{ background: 'var(--track)' }}>
                   <div 
@@ -487,8 +479,8 @@ export function Activity() {
 
       {/* Legend & Summary Cards */}
       {totalHours > 0 && (
-        <div className="rounded-[18px] p-4 mb-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
-          <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">RINGKASAN DURASI</p>
+        <div className="rounded-[18px] p-4 mb-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+          <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase">RINGKASAN DURASI</p>
           <div className="grid grid-cols-2 gap-3">
             {activeSummaries.map(s => (
               <div key={s.name} className="flex items-center gap-2">
@@ -549,7 +541,7 @@ export function Activity() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase mb-1">LOG DETAIL</p>
+          <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase mb-1">LOG DETAIL</p>
           <AnimatePresence>
             {logs.map(log => (
               <motion.div
@@ -559,10 +551,10 @@ export function Activity() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 className="rounded-[14px] px-4 py-3 flex items-center justify-between"
-                style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: LABEL_COLORS[log.label] || '#fff' }} />
+                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: ACTIVITY_COLORS[log.label] || '#fff' }} />
                   <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{log.label}</span>
                 </div>
                 <div className="flex items-center gap-3">

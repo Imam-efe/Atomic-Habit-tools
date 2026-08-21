@@ -298,7 +298,7 @@ export function More() {
 
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {accounts.map((account, i) => {
             const isActive = account.userId === session?.user.id;
@@ -339,7 +339,12 @@ export function More() {
                         exit={{ scale: 0 }}
                         transition={springs.bouncy}
                         className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--accent)' }}
+                        style={{
+                          background: 'var(--accentFill)',
+                          // A 20px status dot, not a button: shallow shadow, and
+                          // none of .neu-cta's press behaviour.
+                          boxShadow: 'var(--neu-raised-sm)',
+                        }}
                       >
                         <svg
                           width="10"
@@ -409,7 +414,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {[
             { label: 'Projects', id: 'projects', desc: 'Kelola tugas & project terkait goal' },
@@ -455,14 +460,14 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] p-4 flex flex-col gap-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {/* Theme toggler */}
           <div className="flex items-center justify-between">
             <span style={{ color: 'var(--text)' }} className="font-semibold text-sm">Mode Gelap</span>
             <button
               className="w-12 h-7 rounded-full p-1 transition-colors relative"
-              style={{ background: theme === 'dark' ? 'var(--accent)' : 'var(--track)' }}
+              style={{ background: theme === 'dark' ? 'var(--accentFill)' : 'var(--track)' }}
               onClick={() => handleThemeChange(theme === 'dark' ? 'light' : 'dark')}
             >
               <motion.div
@@ -483,9 +488,9 @@ export function More() {
               {(['violet', 'green', 'blue', 'orange'] as const).map(colorKey => {
                 const colors = {
                   violet: '#7C5CFF',
-                  green: '#34C759',
+                  green: 'var(--pos)',
                   blue: '#0A84FF',
-                  orange: '#FF9F0A'
+                  orange: 'var(--warn)'
                 };
                 const hex = colors[colorKey];
                 const isSelected = accent === colorKey;
@@ -517,7 +522,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] p-4 flex flex-col gap-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <div className="flex items-center justify-between">
             <div>
@@ -526,7 +531,7 @@ export function More() {
             </div>
             <button
               className="w-12 h-7 rounded-full p-1 transition-colors relative"
-              style={{ background: pushEnabled ? 'var(--accent)' : 'var(--track)' }}
+              style={{ background: pushEnabled ? 'var(--accentFill)' : 'var(--track)' }}
               onClick={handleTogglePush}
             >
               <motion.div
@@ -564,7 +569,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] p-4 flex flex-col gap-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <div>
             <span style={{ color: 'var(--text)' }} className="font-semibold text-sm block">API Key Pintasan</span>
@@ -576,13 +581,13 @@ export function More() {
               type="text"
               readOnly
               className="flex-1 px-3 py-2.5 rounded-xl text-xs outline-none font-mono"
-              style={{ background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-inset)' }}
               value={loadingToken ? 'Memuat...' : (shortcutToken || 'Belum ada API Key')}
             />
             {shortcutToken && (
               <button
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-white flex-shrink-0"
-                style={{ background: 'var(--accent)' }}
+                className="neu-cta px-4 py-2.5 rounded-xl text-xs font-bold text-white flex-shrink-0"
+                style={{ background: 'var(--accentFill)' }}
                 onClick={handleCopyToken}
               >
                 {copied ? 'Tersalin!' : 'Salin'}
@@ -600,8 +605,8 @@ export function More() {
           </button>
 
           {shortcutToken && (
-            <div className="rounded-xl p-3 text-xs leading-relaxed flex flex-col gap-2" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
-              <span className="font-bold text-orange-400">💡 Panduan Cepat iOS Shortcut:</span>
+            <div className="rounded-xl p-3 text-xs leading-relaxed flex flex-col gap-2" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+              <span className="font-bold text-[var(--warn)]">💡 Panduan Cepat iOS Shortcut:</span>
               <ol className="list-decimal pl-4 flex flex-col gap-1.5" style={{ color: 'var(--text2)' }}>
                 <li>Buka aplikasi <strong>Shortcuts</strong> di iPhone.</li>
                 <li>Buat Shortcut baru, tambahkan aksi <strong>Get Contents of URL</strong>.</li>
@@ -615,10 +620,10 @@ export function More() {
                 </li>
                 <li>Pilih JSON Request Body sesuai kebutuhan:
                   <ul className="list-disc pl-4 mt-1 text-[10px] flex flex-col gap-1">
-                    <li><strong>Tambah Tugas:</strong> Endpoint <code className="text-violet-400">/tasks</code><br />Body: <code className="text-neutral-400">{"{ \"projectName\": \"Inbox\", \"taskName\": \"Tugas baru\" }"}</code></li>
-                    <li><strong>Centang Habit:</strong> Endpoint <code className="text-violet-400">/habits/toggle</code><br />Body: <code className="text-neutral-400">{"{ \"habitName\": \"Minum Air Putih\" }"}</code></li>
-                    <li><strong>Catat Pengeluaran:</strong> Endpoint <code className="text-violet-400">/budget</code><br />Body: <code className="text-neutral-400">{"{ \"type\": \"expense\", \"amount\": 20000, \"category\": \"Makanan\", \"note\": \"Kopi\" }"}</code></li>
-                    <li><strong>Baca Notifikasi (polling):</strong> Endpoint <code className="text-violet-400">/notifications?token=&lt;API_KEY&gt;</code> dengan Method <strong>GET</strong> tanpa Headers.<br />Mengembalikan notifikasi sistem (pengingat habit, alert kadaluarsa) yang belum dibaca — cocok untuk Automation berkala. Panduan lengkap ada di <code className="bg-black/20 px-1 rounded">docs/shortcuts</code> repo.</li>
+                    <li><strong>Tambah Tugas:</strong> Endpoint <code className="text-[var(--accent)]">/tasks</code><br />Body: <code className="text-[var(--text2)]">{"{ \"projectName\": \"Inbox\", \"taskName\": \"Tugas baru\" }"}</code></li>
+                    <li><strong>Centang Habit:</strong> Endpoint <code className="text-[var(--accent)]">/habits/toggle</code><br />Body: <code className="text-[var(--text2)]">{"{ \"habitName\": \"Minum Air Putih\" }"}</code></li>
+                    <li><strong>Catat Pengeluaran:</strong> Endpoint <code className="text-[var(--accent)]">/budget</code><br />Body: <code className="text-[var(--text2)]">{"{ \"type\": \"expense\", \"amount\": 20000, \"category\": \"Makanan\", \"note\": \"Kopi\" }"}</code></li>
+                    <li><strong>Baca Notifikasi (polling):</strong> Endpoint <code className="text-[var(--accent)]">/notifications?token=&lt;API_KEY&gt;</code> dengan Method <strong>GET</strong> tanpa Headers.<br />Mengembalikan notifikasi sistem (pengingat habit, alert kadaluarsa) yang belum dibaca — cocok untuk Automation berkala. Panduan lengkap ada di <code className="bg-black/20 px-1 rounded">docs/shortcuts</code> repo.</li>
                   </ul>
                 </li>
               </ol>
@@ -647,7 +652,7 @@ export function More() {
           {showAddBank && (
             <motion.div
               className="rounded-[18px] p-4 mb-3"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
@@ -656,7 +661,7 @@ export function More() {
               <div className="flex flex-col gap-2.5">
                 <input
                   className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Nama Bank/E-Wallet (contoh: BCA, GoPay)"
                   value={newBankName}
                   onChange={e => setNewBankName(e.target.value)}
@@ -664,7 +669,7 @@ export function More() {
                 <div className="flex gap-2">
                   <select
                     className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     value={newBankType}
                     onChange={e => setNewBankType(e.target.value)}
                   >
@@ -674,7 +679,7 @@ export function More() {
                   </select>
                   <input
                     className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     placeholder="Saldo Awal (Rp)"
                     value={newBankBalance}
                     onChange={e => setNewBankBalance(e.target.value.replace(/\D/g, ''))}
@@ -684,8 +689,8 @@ export function More() {
                 <button
                   onClick={handleAddBank}
                   disabled={savingBank}
-                  className="w-full py-2.5 rounded-xl text-xs font-bold text-white"
-                  style={{ background: 'var(--accent)' }}
+                  className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
+                  style={{ background: 'var(--accentFill)' }}
                 >
                   {savingBank ? 'Menyimpan...' : 'Simpan Rekening'}
                 </button>
@@ -697,7 +702,7 @@ export function More() {
         {/* Bank Accounts List */}
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {loadingBanks ? (
             <div className="flex items-center justify-center py-4">
@@ -729,7 +734,7 @@ export function More() {
                       onClick={() => handleDeleteBank(bank.id)}
                       className="w-6 h-6 flex items-center justify-center bg-red-950/10 rounded-lg"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                       </svg>
@@ -752,8 +757,8 @@ export function More() {
         </p>
         <div className="flex gap-3">
           <motion.button
-            className="flex-1 py-3 rounded-xl text-xs font-bold text-white"
-            style={{ background: 'var(--accent)' }}
+            className="neu-cta flex-1 py-3 rounded-xl text-xs font-bold text-white"
+            style={{ background: 'var(--accentFill)' }}
             disabled={exportingData}
             onClick={handleExportData}
             whileTap={{ scale: 0.97 }}
@@ -777,7 +782,7 @@ export function More() {
       {/* Logout */}
       <motion.button
         className="w-full py-3 rounded-2xl font-semibold text-center"
-        style={{ background: 'rgba(255,69,58,0.12)', color: '#FF453A' }}
+        style={{ background: 'rgba(255,69,58,0.12)', color: 'var(--neg)' }}
         onClick={handleLogout}
         whileTap={{ scale: 0.97 }}
         transition={springs.snappy}

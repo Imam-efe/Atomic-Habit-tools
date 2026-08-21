@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
-import { springs } from '@/tokens/motion';
+import { press, springs } from '@/tokens/motion';
 import type { TabName } from '@/types';
 
 const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
@@ -69,7 +69,7 @@ export function TabBar() {
         background: 'var(--blur)',
         backdropFilter: 'blur(22px)',
         WebkitBackdropFilter: 'blur(22px)',
-        borderTop: '1px solid var(--sep)',
+        boxShadow: 'var(--neu-sheet)',
         paddingTop: '9px',
         paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
       }}
@@ -81,15 +81,23 @@ export function TabBar() {
             key={tab.id}
             className="flex flex-col items-center gap-1 min-w-[48px]"
             onClick={() => setTab(tab.id)}
-            whileTap={{ scale: 0.9 }}
+            aria-current={isActive ? 'page' : undefined}
+            whileTap={press.control}
             transition={springs.snappy}
           >
+            {/*
+              The active tab is a well the icon sits inside, rather than a tinted
+              pill. Box-shadow is transitioned in CSS — framer cannot interpolate
+              the multi-layer shadow these tokens expand to.
+            */}
             <motion.div
-              animate={{
-                scale: isActive ? 1.1 : 1,
-                color: isActive ? 'var(--accent)' : 'var(--text3)',
+              className="px-3.5 py-1.5 rounded-2xl"
+              style={{
+                boxShadow: isActive ? 'var(--neu-pressed)' : 'none',
+                transition: 'box-shadow 220ms var(--ease-depth)',
               }}
-              transition={springs.bouncy}
+              animate={{ color: isActive ? 'var(--accent)' : 'var(--text3)' }}
+              transition={springs.gentle}
             >
               {tab.icon}
             </motion.div>

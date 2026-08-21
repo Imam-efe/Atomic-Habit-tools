@@ -160,8 +160,8 @@ export function Projects() {
 
         <motion.button
           onClick={() => setShowAddProject(s => !s)}
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
         >
@@ -181,7 +181,7 @@ export function Projects() {
         {showAddProject && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -190,7 +190,7 @@ export function Projects() {
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Tambah Project Baru</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Nama project..."
               value={projectName}
               onChange={e => setProjectName(e.target.value)}
@@ -198,7 +198,7 @@ export function Projects() {
             />
             <select
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={projectGoalId}
               onChange={e => setProjectGoalId(e.target.value)}
             >
@@ -212,7 +212,7 @@ export function Projects() {
             <div className="flex gap-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: savingProject ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: savingProject ? 0.6 : 1 }}
                 onClick={handleCreateProject}
                 disabled={savingProject}
                 whileTap={{ scale: 0.97 }}
@@ -221,7 +221,7 @@ export function Projects() {
               </motion.button>
               <motion.button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => { setShowAddProject(false); setProjectName(''); }}
                 whileTap={{ scale: 0.97 }}
               >
@@ -250,7 +250,7 @@ export function Projects() {
             <motion.div
               key={project.id}
               className="rounded-[18px] p-4 flex flex-col gap-3"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               layout
             >
               {/* Project Title & Badge & Delete */}
@@ -302,7 +302,7 @@ export function Projects() {
                 {addingTaskForProjId === project.id && (
                   <motion.div
                     className="p-3 rounded-xl flex flex-col gap-2.5"
-                    style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
@@ -330,8 +330,8 @@ export function Projects() {
                     </select>
                     <div className="flex gap-2 pt-1">
                       <motion.button
-                        className="flex-1 py-1.5 rounded-lg text-xs font-semibold text-white"
-                        style={{ background: 'var(--accent)' }}
+                        className="neu-cta flex-1 py-1.5 rounded-lg text-xs font-semibold text-white"
+                        style={{ background: 'var(--accentFill)' }}
                         onClick={() => handleCreateTask(project.id)}
                         disabled={savingTask}
                         whileTap={{ scale: 0.97 }}
@@ -340,7 +340,7 @@ export function Projects() {
                       </motion.button>
                       <button
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                        style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                        style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                         onClick={() => setAddingTaskForProjId(null)}
                       >
                         Batal
@@ -366,7 +366,7 @@ export function Projects() {
                           className="w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border"
                           style={{
                             borderColor: isDone ? 'var(--accent)' : 'var(--text3)',
-                            background: isDone ? 'var(--accent)' : 'transparent',
+                            background: isDone ? 'var(--accentFill)' : 'transparent',
                           }}
                           onClick={() => handleToggleTask(task.id)}
                           whileTap={{ scale: 0.8 }}

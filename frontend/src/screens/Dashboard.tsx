@@ -225,10 +225,10 @@ export function Dashboard() {
             <span className="text-xl">💡</span>
             <div className="min-w-0">
               <p className="text-xs font-bold text-white" style={{ color: 'var(--text)' }}>Rangkuman Sistem Hari Ini</p>
-              <p className="text-[10px] truncate text-neutral-400">Analisis kebiasaan, waktu, keuangan & nutrisi</p>
+              <p className="text-[10px] truncate text-[var(--text2)]">Analisis kebiasaan, waktu, keuangan & nutrisi</p>
             </div>
           </div>
-          <span className="text-[10px] font-bold px-2 py-1 rounded-lg text-white" style={{ background: 'var(--accent)' }}>Lihat</span>
+          <span className="neu-cta text-[10px] font-bold px-2 py-1 rounded-lg text-white" style={{ background: 'var(--accentFill)' }}>Lihat</span>
         </div>
 
         {/* AI System Insights Modal */}
@@ -242,7 +242,7 @@ export function Dashboard() {
             >
               <motion.div
                 className="w-full max-w-[430px] rounded-t-[30px] p-5 flex flex-col gap-4 shadow-2xl relative"
-                style={{ background: 'var(--surface)', borderTop: '1px solid var(--sep)', maxHeight: '85vh', overflowY: 'auto' }}
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)', maxHeight: '85vh', overflowY: 'auto' }}
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
@@ -253,7 +253,7 @@ export function Dashboard() {
 
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[10px] font-black text-violet-400 block uppercase tracking-widest">💡 ANALISIS PERSONAL SYSTEM</span>
+                    <span className="text-[10px] font-black text-[var(--accent)] block uppercase tracking-widest">💡 ANALISIS PERSONAL SYSTEM</span>
                     <h3 className="text-lg font-black text-white" style={{ color: 'var(--text)' }}>
                       Rangkuman Sistem {now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}
                     </h3>
@@ -270,7 +270,7 @@ export function Dashboard() {
                   <div className="flex flex-col items-center justify-center py-20 gap-3">
                     <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
                       style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-                    <span className="text-xs text-neutral-400">Merangkum data harian...</span>
+                    <span className="text-xs text-[var(--text2)]">Merangkum data harian...</span>
                   </div>
                 ) : insights ? (
                   <div className="flex flex-col gap-4">
@@ -278,7 +278,7 @@ export function Dashboard() {
                     <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-xs font-bold text-white">🔄 Konsistensi Kebiasaan</span>
-                        <span className="text-xs font-extrabold text-violet-400">{insights.habitScore}%</span>
+                        <span className="text-xs font-extrabold text-[var(--accent)]">{insights.habitScore}%</span>
                       </div>
                       <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
                         {insights.habitText}
@@ -319,7 +319,7 @@ export function Dashboard() {
 
         {/* Identity Hero Card */}
         <motion.div className="rounded-[24px] p-5 mb-4"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))', boxShadow: '0 14px 30px var(--accentSoft)' }}
+          style={{ background: 'linear-gradient(135deg, var(--accentFill), var(--accentFill2))', boxShadow: 'var(--neu-raised-lg)' }}
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springs.gentle, delay: 0.06 }}>
           <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
             IDENTITY HARI INI
@@ -345,13 +345,13 @@ export function Dashboard() {
         {data?.missedHabitAlert && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex gap-3 items-center"
-            style={{ background: 'var(--surface)', border: '1px solid rgba(255,159,10,0.35)' }}
+            style={{ background: 'var(--surface)', border: '1px solid var(--warnBorder)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.08 }}
           >
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-base"
-              style={{ background: 'rgba(255,159,10,0.16)', color: '#FF9F0A' }}>
+              style={{ background: 'rgba(255,159,10,0.16)', color: 'var(--warn)' }}>
               ⚠️
             </div>
             <div className="flex-1">
@@ -383,7 +383,9 @@ export function Dashboard() {
                   className="rounded-[18px] p-3 flex items-center justify-between cursor-pointer border transition-all"
                   style={{
                     background: 'var(--surface)',
-                    borderColor: h.doneToday ? h.color + '40' : 'var(--sep)'
+                    // Completed habits sink into the surface; pending ones stay raised.
+                    boxShadow: h.doneToday ? 'var(--neu-pressed)' : 'var(--neu-raised)',
+                    borderColor: h.doneToday ? h.color + '55' : 'transparent'
                   }}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -411,7 +413,7 @@ export function Dashboard() {
                           toggleHabit(h.id, true);
                         }}
                         className="px-2 py-1 rounded-lg font-bold text-[9px] text-white flex items-center gap-0.5"
-                        style={{ background: `linear-gradient(135deg, ${h.color}, #5BD97A)` }}
+                        style={{ background: 'var(--accentFill)' }}
                       >
                         ⚡ 2M
                       </button>
@@ -440,7 +442,7 @@ export function Dashboard() {
         {/* System Module Grid */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div onClick={() => setTab('goals')} className="rounded-[18px] p-4 cursor-pointer border flex flex-col justify-between"
-            style={{ background: 'var(--surface)', borderColor: 'var(--sep)' }}>
+            style={{ background: 'var(--surface)', borderColor: 'transparent', boxShadow: 'var(--neu-raised)' }}>
             <div className="flex justify-between items-start">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: 'rgba(124,92,255,0.16)', color: '#7C5CFF' }}>🎯</div>
               <span className="text-xl font-bold" style={{ color: 'var(--text)' }}>{goalsText}</span>
@@ -452,10 +454,10 @@ export function Dashboard() {
           </div>
 
           <div onClick={() => setTab('uang')} className="rounded-[18px] p-4 cursor-pointer border flex flex-col justify-between"
-            style={{ background: 'var(--surface)', borderColor: 'var(--sep)' }}>
+            style={{ background: 'var(--surface)', borderColor: 'transparent', boxShadow: 'var(--neu-raised)' }}>
             <div className="flex justify-between items-start">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: 'rgba(52,199,89,0.16)', color: '#34C759' }}>💰</div>
-              <span className="text-xs font-extrabold text-green-500">Uang</span>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: 'rgba(52,199,89,0.16)', color: 'var(--pos)' }}>💰</div>
+              <span className="text-xs font-extrabold text-[var(--pos)]">Uang</span>
             </div>
             <div className="mt-4">
               <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Budget</p>
@@ -468,31 +470,31 @@ export function Dashboard() {
         {netWorth && (
           <motion.div
             className="rounded-[18px] p-4 mt-2.5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.1 }}
           >
             <div className="flex justify-between items-center mb-3">
               <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--text3)' }}>NET WORTH</p>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(52,199,89,0.12)', color: '#34C759' }}>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(52,199,89,0.12)', color: 'var(--pos)' }}>
                 {netWorth.current.month}
               </span>
             </div>
             <p
               className="text-2xl font-extrabold mb-3"
-              style={{ color: netWorth.current.net_worth >= 0 ? '#34C759' : '#FF453A' }}
+              style={{ color: netWorth.current.net_worth >= 0 ? 'var(--pos)' : 'var(--neg)' }}
             >
               {formatRp(netWorth.current.net_worth)}
             </p>
             <div className="flex gap-4">
               <div>
                 <p className="text-[10px]" style={{ color: 'var(--text3)' }}>Aset</p>
-                <p className="text-xs font-bold text-green-400">{formatRp(netWorth.current.assets)}</p>
+                <p className="text-xs font-bold text-[var(--pos)]">{formatRp(netWorth.current.assets)}</p>
               </div>
               <div>
                 <p className="text-[10px]" style={{ color: 'var(--text3)' }}>Utang</p>
-                <p className="text-xs font-bold text-red-400">{formatRp(netWorth.current.liabilities)}</p>
+                <p className="text-xs font-bold text-[var(--neg)]">{formatRp(netWorth.current.liabilities)}</p>
               </div>
             </div>
             {netWorth.history.length > 1 && (
@@ -524,7 +526,7 @@ export function Dashboard() {
           {[
             { label: 'Projects & Tasks', id: 'projects', desc: 'Lihat tugas terhubung dengan goals', icon: '📁', bg: 'rgba(10,132,255,0.16)', color: '#0A84FF' },
             { label: 'Alokasi Waktu', id: 'activity', desc: 'Analisis Deep vs Shallow Work harian', icon: '⏱️', bg: 'rgba(94,92,230,0.16)', color: '#5E5CE6' },
-            { label: 'Nutrisi & Makanan', id: 'nutrition', desc: 'Catat kalori & makronutrisi harian', icon: '🍎', bg: 'rgba(255,55,95,0.16)', color: '#FF375F' },
+            { label: 'Nutrisi & Makanan', id: 'nutrition', desc: 'Catat kalori & makronutrisi harian', icon: '🍎', bg: 'rgba(230, 57, 70, 0.16)', color: '#E63946' },
           ].map((m) => (
             <div
               key={m.id}
@@ -533,7 +535,7 @@ export function Dashboard() {
                 setTimeout(() => useUIStore.getState().setSubScreen(m.id), 20);
               }}
               className="rounded-[18px] p-3 flex items-center justify-between cursor-pointer border"
-              style={{ background: 'var(--surface)', borderColor: 'var(--sep)' }}
+              style={{ background: 'var(--surface)', borderColor: 'transparent', boxShadow: 'var(--neu-raised)' }}
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center text-base" style={{ background: m.bg, color: m.color }}>
@@ -544,7 +546,7 @@ export function Dashboard() {
                   <p className="text-[11px]" style={{ color: 'var(--text2)' }}>{m.desc}</p>
                 </div>
               </div>
-              <span className="text-neutral-500 text-lg">›</span>
+              <span className="text-[var(--text3)] text-lg">›</span>
             </div>
           ))}
         </div>

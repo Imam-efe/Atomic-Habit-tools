@@ -124,7 +124,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
         {showAddForm && (
           <motion.div
             className="rounded-[18px] p-4 mb-4"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -137,7 +137,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
                 </label>
                 <select
                   className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={selectedRequired}
                   onChange={(e) => setSelectedRequired(e.target.value)}
                 >
@@ -156,7 +156,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
                 </label>
                 <select
                   className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={selectedDesire}
                   onChange={(e) => setSelectedDesire(e.target.value)}
                 >
@@ -176,7 +176,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
                 <input
                   type="text"
                   className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Contoh: Minum kopi favorit"
                   value={rewardDesc}
                   onChange={(e) => setRewardDesc(e.target.value)}
@@ -186,8 +186,8 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
               <button
                 onClick={handleAddBundle}
                 disabled={saving}
-                className="w-full py-2.5 rounded-xl text-xs font-bold text-white"
-                style={{ background: 'var(--accent)' }}
+                className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
+                style={{ background: 'var(--accentFill)' }}
               >
                 {saving ? 'Menyimpan...' : 'Buat Bundle'}
               </button>
@@ -205,7 +205,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
       ) : (
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {bundles.map((bundle, i) => (
             <div key={bundle.id}>
@@ -230,7 +230,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
                     className="w-6 h-6 flex items-center justify-center rounded-lg flex-shrink-0"
                     style={{ background: 'rgba(255,69,58,0.1)' }}
                   >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                       <polyline points="3 6 5 6 21 6" />
                       <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                     </svg>

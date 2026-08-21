@@ -19,7 +19,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   activeTab: 'beranda',
   subScreen: null,
   tabHistory: [],
-  theme: 'dark',
+  // Light is the neumorphic default: the shadow pair needs a mid-grey base to
+  // read, and the light palette is where the effect is strongest.
+  theme: 'light',
   accent: 'violet',
 
   setTab: (tab) => set(state => ({

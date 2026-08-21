@@ -26,7 +26,7 @@ interface ScoreData {
   goals: { id: string; identityStatement: string; color: string; habitCount: number; score: number }[];
 }
 
-const COLORS = ['#7C5CFF', '#34C759', '#0A84FF', '#FF9F0A', '#FF453A', '#FF2D55'];
+const COLORS = ['#7C5CFF', 'var(--pos)', '#0A84FF', 'var(--warn)', 'var(--neg)', '#FF2D55'];
 
 export function Goals() {
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -154,8 +154,8 @@ export function Goals() {
           Goals
         </h1>
         <motion.button
-          className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => setShowAdd(s => !s)}
@@ -171,8 +171,8 @@ export function Goals() {
         <motion.div
           className="rounded-[22px] p-5 mb-4"
           style={{
-            background: `linear-gradient(135deg, var(--accent), var(--accent2))`,
-            boxShadow: '0 14px 30px var(--accentSoft)',
+            background: `linear-gradient(135deg, var(--accentFill), var(--accentFill2))`,
+            boxShadow: 'var(--neu-raised-lg)',
           }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -218,7 +218,7 @@ export function Goals() {
       {/* Compounding Chart Card */}
       <motion.div
         className="rounded-[22px] p-5 mb-5"
-        style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+        style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={springs.gentle}
@@ -264,7 +264,7 @@ export function Goals() {
         {showAdd && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -274,7 +274,7 @@ export function Goals() {
             <p className="text-[11px] -mb-1" style={{ color: 'var(--text3)' }}>Saya adalah orang yang...</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="...terus belajar setiap hari"
               value={statement}
               onChange={e => setStatement(e.target.value)}
@@ -297,7 +297,7 @@ export function Goals() {
             {/* Connect Habits Selector */}
             {habits.length > 0 && (
               <div className="flex flex-col gap-1.5 mt-1">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Hubungkan Kebiasaan</p>
+                <p className="text-[10px] font-bold text-[var(--text2)] uppercase">Hubungkan Kebiasaan</p>
                 <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
                   {habits.map(h => {
                     const isChecked = selectedHabitIds.includes(h.id);
@@ -306,9 +306,9 @@ export function Goals() {
                         key={h.id}
                         onClick={() => toggleHabitInAdd(h.id)}
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
-                        style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
+                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accentFill)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
                         </div>
                         <span className="text-xs" style={{ color: 'var(--text)' }}>{h.name}</span>
@@ -331,7 +331,7 @@ export function Goals() {
               </motion.button>
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => { setShowAdd(false); setStatement(''); setSelectedHabitIds([]); }}
               >
                 Batal
@@ -346,7 +346,7 @@ export function Goals() {
         {editingGoal && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -356,7 +356,7 @@ export function Goals() {
             <p className="text-[11px] -mb-1" style={{ color: 'var(--text3)' }}>Saya adalah orang yang...</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={editStatement}
               onChange={e => setEditStatement(e.target.value)}
               autoFocus
@@ -378,7 +378,7 @@ export function Goals() {
             {/* Connect Habits Selector */}
             {habits.length > 0 && (
               <div className="flex flex-col gap-1.5 mt-1">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Hubungkan Kebiasaan</p>
+                <p className="text-[10px] font-bold text-[var(--text2)] uppercase">Hubungkan Kebiasaan</p>
                 <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
                   {habits.map(h => {
                     const isChecked = editSelectedHabitIds.includes(h.id);
@@ -387,9 +387,9 @@ export function Goals() {
                         key={h.id}
                         onClick={() => toggleHabitInEdit(h.id)}
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
-                        style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
+                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accentFill)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
                         </div>
                         <span className="text-xs" style={{ color: 'var(--text)' }}>{h.name}</span>
@@ -412,7 +412,7 @@ export function Goals() {
               </motion.button>
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => setEditingGoal(null)}
               >
                 Batal

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { NUTRITION_MACROS } from '@/constants/colors';
 
 interface FoodLog {
   id: string;
@@ -160,10 +161,10 @@ export function Nutrition() {
 
   // Macro progress calculations
   const macros = data ? [
-    { name: 'Protein', key: 'protein', summary: data.summary.protein, target: data.target.protein, color: '#FF375F', unit: 'g' },
-    { name: 'Karbohidrat', key: 'carbs', summary: data.summary.carbs, target: data.target.carbs, color: '#FF9F0A', unit: 'g' },
-    { name: 'Lemak', key: 'fat', summary: data.summary.fat, target: data.target.fat, color: '#5AC8FA', unit: 'g' },
-    { name: 'Serat', key: 'fiber', summary: data.summary.fiber, target: data.target.fiber, color: '#34C759', unit: 'g' },
+    { name: 'Protein', key: 'protein', summary: data.summary.protein, target: data.target.protein, color: NUTRITION_MACROS.protein, unit: 'g' },
+    { name: 'Karbohidrat', key: 'carbs', summary: data.summary.carbs, target: data.target.carbs, color: NUTRITION_MACROS.carbs, unit: 'g' },
+    { name: 'Lemak', key: 'fat', summary: data.summary.fat, target: data.target.fat, color: NUTRITION_MACROS.fat, unit: 'g' },
+    { name: 'Serat', key: 'fiber', summary: data.summary.fiber, target: data.target.fiber, color: NUTRITION_MACROS.fiber, unit: 'g' },
   ] : [];
 
   // Gap analysis string
@@ -182,11 +183,11 @@ export function Nutrition() {
   const getLabelColors = (label: string | null) => {
     switch (label) {
       case 'Sehat':
-        return { bg: 'rgba(52,199,89,0.15)', text: '#34C759' };
+        return { bg: 'rgba(52,199,89,0.15)', text: 'var(--pos)' };
       case 'Moderat':
-        return { bg: 'rgba(255,159,10,0.15)', text: '#FF9F0A' };
+        return { bg: 'rgba(255,159,10,0.15)', text: 'var(--warn)' };
       case 'Indulge':
-        return { bg: 'rgba(255,55,95,0.15)', text: '#FF375F' };
+        return { bg: 'rgba(230, 57, 70, 0.15)', text: NUTRITION_MACROS.protein };
       default:
         return { bg: 'var(--track)', text: 'var(--text2)' };
     }
@@ -212,7 +213,7 @@ export function Nutrition() {
           <motion.button
             onClick={() => setShowEditTarget(s => !s)}
             className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             whileTap={{ scale: 0.9 }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2" strokeLinecap="round">
@@ -222,8 +223,8 @@ export function Nutrition() {
           {/* Add food button */}
           <motion.button
             onClick={() => setShowAddFood(s => !s)}
-            className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}
+            className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--accentFill)' }}
             whileTap={{ scale: 0.9 }}
             transition={springs.snappy}
           >
@@ -244,7 +245,7 @@ export function Nutrition() {
         {showEditTarget && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -253,51 +254,51 @@ export function Nutrition() {
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Ubah Target Nutrisi Harian</p>
             <div className="grid grid-cols-2 gap-2">
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Kalori (kkal)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Kalori (kkal)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={targetKcal}
                   onChange={e => setTargetKcal(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Protein (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Protein (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={targetProt}
                   onChange={e => setTargetProt(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Karbohidrat (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Karbohidrat (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={targetCarb}
                   onChange={e => setTargetCarb(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Lemak (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Lemak (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={targetFat}
                   onChange={e => setTargetFat(e.target.value)}
                 />
               </div>
               <div className="flex flex-col gap-1 col-span-2">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Serat (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Serat (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={targetFib}
                   onChange={e => setTargetFib(e.target.value)}
                 />
@@ -306,7 +307,7 @@ export function Nutrition() {
             <div className="flex gap-2 mt-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: savingTarget ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: savingTarget ? 0.6 : 1 }}
                 onClick={handleSaveTarget}
                 disabled={savingTarget}
                 whileTap={{ scale: 0.97 }}
@@ -315,7 +316,7 @@ export function Nutrition() {
               </motion.button>
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => setShowEditTarget(false)}
               >
                 Batal
@@ -330,7 +331,7 @@ export function Nutrition() {
         {showAddFood && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -339,7 +340,7 @@ export function Nutrition() {
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Log Makanan Baru</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Nama makanan... misal Nasi Putih"
               value={foodName}
               onChange={e => setFoodName(e.target.value)}
@@ -347,7 +348,7 @@ export function Nutrition() {
             />
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Porsi... misal 1 piring atau 150g"
               value={portion}
               onChange={e => setPortion(e.target.value)}
@@ -356,7 +357,7 @@ export function Nutrition() {
               <input
                 type="number"
                 className="px-3 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Kalori (kkal)"
                 value={calories}
                 onChange={e => setCalories(e.target.value)}
@@ -365,7 +366,7 @@ export function Nutrition() {
                 type="number"
                 step="0.1"
                 className="px-3 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Protein (g)"
                 value={protein}
                 onChange={e => setProtein(e.target.value)}
@@ -374,7 +375,7 @@ export function Nutrition() {
                 type="number"
                 step="0.1"
                 className="px-3 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Karbo (g)"
                 value={carbs}
                 onChange={e => setCarbs(e.target.value)}
@@ -383,7 +384,7 @@ export function Nutrition() {
                 type="number"
                 step="0.1"
                 className="px-3 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Lemak (g)"
                 value={fat}
                 onChange={e => setFat(e.target.value)}
@@ -392,7 +393,7 @@ export function Nutrition() {
                 type="number"
                 step="0.1"
                 className="px-3 py-2.5 rounded-xl text-sm outline-none col-span-2"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Serat (g)"
                 value={fiber}
                 onChange={e => setFiber(e.target.value)}
@@ -400,7 +401,7 @@ export function Nutrition() {
             </div>
             <select
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={foodLabel}
               onChange={e => setFoodLabel(e.target.value)}
             >
@@ -411,7 +412,7 @@ export function Nutrition() {
             <div className="flex gap-2 mt-1">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: savingFood ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: savingFood ? 0.6 : 1 }}
                 onClick={handleAddFood}
                 disabled={savingFood}
                 whileTap={{ scale: 0.97 }}
@@ -420,7 +421,7 @@ export function Nutrition() {
               </motion.button>
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => setShowAddFood(false)}
               >
                 Batal
@@ -440,7 +441,7 @@ export function Nutrition() {
           {/* Calorie Ring Card */}
           <motion.div
             className="rounded-[22px] p-5 flex items-center gap-6"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={springs.gentle}
@@ -473,8 +474,8 @@ export function Nutrition() {
           </motion.div>
 
           {/* Macro Progress Bars Card */}
-          <div className="rounded-[20px] p-5 flex flex-col gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
-            <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">MAKRONUTRISI</p>
+          <div className="rounded-[20px] p-5 flex flex-col gap-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+            <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase">MAKRONUTRISI</p>
             <div className="flex flex-col gap-3.5">
               {macros.map(m => {
                 const pct = m.target > 0 ? (m.summary / m.target) * 100 : 0;
@@ -498,7 +499,7 @@ export function Nutrition() {
               })}
             </div>
             {gapString && (
-              <p className="text-xs font-bold mt-2 text-orange-400">{gapString}</p>
+              <p className="text-xs font-bold mt-2 text-[var(--warn)]">{gapString}</p>
             )}
 
             {/* Macro Energy Ratios */}
@@ -516,23 +517,23 @@ export function Nutrition() {
 
               return (
                 <div className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid var(--sep)' }}>
-                  <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Distribusi Energi Makro</p>
+                  <p className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider">Distribusi Energi Makro</p>
                   <div className="h-3.5 rounded-lg overflow-hidden flex">
-                    <div style={{ background: '#FF375F', width: `${pPct}%` }} />
-                    <div style={{ background: '#FF9F0A', width: `${cPct}%` }} />
-                    <div style={{ background: '#5AC8FA', width: `${fPct}%` }} />
+                    <div style={{ background: NUTRITION_MACROS.protein, width: `${pPct}%` }} />
+                    <div style={{ background: 'var(--warnFill)', width: `${cPct}%` }} />
+                    <div style={{ background: NUTRITION_MACROS.fat, width: `${fPct}%` }} />
                   </div>
                   <div className="flex justify-between text-[11px] font-semibold mt-1" style={{ color: 'var(--text2)' }}>
                     <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: '#FF375F' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ background: NUTRITION_MACROS.protein }} />
                       Pro ({Math.round(pPct)}%)
                     </span>
                     <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: '#FF9F0A' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ background: 'var(--warnFill)' }} />
                       Carb ({Math.round(cPct)}%)
                     </span>
                     <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: '#5AC8FA' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ background: NUTRITION_MACROS.fat }} />
                       Lemak ({Math.round(fPct)}%)
                     </span>
                   </div>
@@ -543,7 +544,7 @@ export function Nutrition() {
 
           {/* Food Log List */}
           <div>
-            <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase mb-2">MAKANAN HARI INI</p>
+            <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase mb-2">MAKANAN HARI INI</p>
             {data?.foodLogs.length === 0 ? (
               <div className="py-8 text-center text-sm" style={{ color: 'var(--text3)' }}>
                 Belum ada makanan yang dicatat hari ini
@@ -560,7 +561,7 @@ export function Nutrition() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -20 }}
                       className="rounded-[14px] px-4 py-3 flex items-center justify-between"
-                      style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
