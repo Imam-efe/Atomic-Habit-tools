@@ -53,6 +53,9 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Scoped API tokens cannot read /memberships, so wrangler cannot
+          # discover the account on its own — it has to be named here.
+          accountId: 55f322d1725346acdc018b7197bd71f4
+          wranglerVersion: '4.103.0'
           workingDirectory: frontend
           command: pages deploy dist --project-name=fayolla --branch=main
