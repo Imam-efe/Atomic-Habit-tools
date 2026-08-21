@@ -23,7 +23,12 @@ import weeklyReview from './routes/weekly_review';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
-import { buildPushPayload } from '@block65/webcrypto-web-push';
+import scheduledNotifications, {
+  deliverScheduledNotification,
+  type ScheduledNotificationRow,
+} from './routes/scheduled_notifications';
+import { sendPushToUser, queueNotificationEvent } from './lib/push';
+import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
 
@@ -75,27 +80,9 @@ app.route('/api/weekly-review', weeklyReview);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
 app.route('/api/habit-stacks', habitStacks);
+app.route('/api/scheduled-notifications', scheduledNotifications);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
-
-// Queue a notification event so external consumers (iOS Shortcuts) can poll it
-async function queueNotificationEvent(
-  env: Env,
-  userId: string,
-  type: string,
-  title: string,
-  body: string,
-  payload?: Record<string, unknown>
-) {
-  try {
-    await env.DB.prepare(`
-      INSERT INTO notification_events (id, user_id, type, title, body, payload)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-    `).bind(nanoid(), userId, type, title, body, payload ? JSON.stringify(payload) : null).run();
-  } catch (err) {
-    console.error('Failed to queue notification event', err);
-  }
-}
 
 // Trigger push notifications for habit reminders matching the current time (Jakarta GMT+7)
 async function triggerReminders(env: Env) {
@@ -105,86 +92,61 @@ async function triggerReminders(env: Env) {
   const minutes = String(jakartaTime.getUTCMinutes()).padStart(2, '0');
   const hhmm = `${hours}:${minutes}`;
 
-  // Find habits with action_time matching the current hhmm
+  // Find habits with action_time matching the current hhmm, for users who can receive push
   const habitsToRemind = await env.DB.prepare(`
-    SELECT h.id, h.name, h.user_id, h.action_time, s.endpoint, s.p256dh, s.auth
+    SELECT DISTINCT h.id, h.name, h.user_id
     FROM habits h
     JOIN push_subscriptions s ON h.user_id = s.user_id
     WHERE h.action_time = ?1
-  `).bind(hhmm).all<{
-    id: string;
-    name: string;
-    user_id: string;
-    action_time: string;
-    endpoint: string;
-    p256dh: string;
-    auth: string;
-  }>();
+  `).bind(hhmm).all<{ id: string; name: string; user_id: string }>();
 
-  if (!habitsToRemind.results || habitsToRemind.results.length === 0) {
-    return;
+  const rows = habitsToRemind.results ?? [];
+  if (rows.length === 0) return;
+
+  for (const row of rows) {
+    const title = 'Pengingat Kebiasaan';
+    const body = `Ayo lakukan kebiasaanmu: ${row.name}! ✨`;
+
+    await queueNotificationEvent(env, row.user_id, 'habit_reminder', title, body, {
+      habitId: row.id,
+      habitName: row.name,
+      url: '/kebiasaan',
+    });
+
+    await sendPushToUser(env, row.user_id, { title, body, url: '/kebiasaan' });
   }
+}
 
-  const vapid = {
-    subject: env.VAPID_SUBJECT,
-    publicKey: env.VAPID_PUBLIC_KEY,
-    privateKey: env.VAPID_PRIVATE_KEY,
-  };
+// Send every custom reminder whose next_run_at has come due (Notification Center)
+async function processScheduledNotifications(env: Env) {
+  const now = Math.floor(Date.now() / 1000);
 
-  // Queue events for Shortcuts polling (dedupe per user+habit — subscriptions join can duplicate rows)
-  const queued = new Set<string>();
-  for (const row of habitsToRemind.results) {
-    const key = `${row.user_id}:${row.id}`;
-    if (queued.has(key)) continue;
-    queued.add(key);
-    await queueNotificationEvent(
-      env,
-      row.user_id,
-      'habit_reminder',
-      'Pengingat Kebiasaan',
-      `Ayo lakukan kebiasaanmu: ${row.name}! ✨`,
-      { habitId: row.id, habitName: row.name, url: '/kebiasaan' }
-    );
+  const due = await env.DB.prepare(`
+    SELECT * FROM scheduled_notifications
+    WHERE is_active = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?1
+    ORDER BY next_run_at ASC
+    LIMIT 50
+  `).bind(now).all<ScheduledNotificationRow>();
+
+  for (const row of due.results ?? []) {
+    // A slow previous run can overlap the next cron tick — don't fire twice in one minute
+    if (row.last_fired_at !== null && now - row.last_fired_at < 30) continue;
+
+    const firedCount = row.fired_count + 1;
+    const reachedMax = row.max_occurrences !== null && firedCount >= row.max_occurrences;
+    const nextRunAt = row.schedule_type === 'once' || reachedMax
+      ? null
+      : computeNextRun(row, now);
+
+    // Advance the schedule before delivering, so a failed send can never double-fire
+    await env.DB.prepare(`
+      UPDATE scheduled_notifications
+      SET next_run_at = ?1, last_fired_at = ?2, fired_count = ?3, is_active = ?4
+      WHERE id = ?5
+    `).bind(nextRunAt, now, firedCount, nextRunAt === null ? 0 : 1, row.id).run();
+
+    await deliverScheduledNotification(env, row);
   }
-
-  const promises = habitsToRemind.results.map(async (row) => {
-    const subscription = {
-      endpoint: row.endpoint,
-      expirationTime: null,
-      keys: {
-        p256dh: row.p256dh,
-        auth: row.auth,
-      },
-    };
-
-    const message = {
-      data: JSON.stringify({
-        title: 'Pengingat Kebiasaan',
-        body: `Ayo lakukan kebiasaanmu: ${row.name}! ✨`,
-        url: '/kebiasaan',
-      })
-    };
-
-    try {
-      const payload = await buildPushPayload(message, subscription, vapid);
-      if (payload.headers) {
-        if (typeof (payload.headers as any).set === 'function') {
-          (payload.headers as any).set('Urgency', 'high');
-        } else {
-          (payload.headers as any)['Urgency'] = 'high';
-        }
-      }
-      const res = await fetch(row.endpoint, payload);
-      if (res.status === 410 || res.status === 404) {
-        // Clean up expired subscriptions
-        await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1').bind(row.endpoint).run();
-      }
-    } catch (err) {
-      console.error('Failed to send push notification', err);
-    }
-  });
-
-  await Promise.all(promises);
 }
 
 async function processRecurringBudget(env: Env) {
@@ -274,59 +236,20 @@ async function triggerExpiryAlerts(env: Env) {
     byUser.get(item.user_id)!.push(item);
   }
 
-  const vapid = {
-    subject: env.VAPID_SUBJECT,
-    publicKey: env.VAPID_PUBLIC_KEY,
-    privateKey: env.VAPID_PRIVATE_KEY,
-  };
-
   for (const [userId, userItems] of byUser.entries()) {
-    const subs = await env.DB.prepare(
-      'SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?1'
-    ).bind(userId).all<{ endpoint: string; p256dh: string; auth: string }>();
-
-    if (!subs.results || subs.results.length === 0) continue;
-
     const itemList = userItems.map(i => `• ${i.name} (${i.quantity} ${i.unit}) — kadaluarsa ${i.expiry_date}`).join('\n');
+    const title = '⚠️ Stok Mau Kadaluarsa';
     const body = userItems.length === 1
       ? `${userItems[0].name} kadaluarsa ${userItems[0].expiry_date}. Segera gunakan! 🚨`
       : `${userItems.length} item akan kadaluarsa:\n${itemList}`;
 
-    const message = {
-      data: JSON.stringify({
-        title: '⚠️ Stok Mau Kadaluarsa',
-        body,
-        url: '/lainnya',
-      })
-    };
-
-    await queueNotificationEvent(env, userId, 'expiry_alert', '⚠️ Stok Mau Kadaluarsa', body, {
+    await queueNotificationEvent(env, userId, 'expiry_alert', title, body, {
       items: userItems.map(i => ({ name: i.name, expiryDate: i.expiry_date })),
       url: '/lainnya',
     });
 
-    for (const sub of subs.results) {
-      try {
-        const payload = await buildPushPayload(message, {
-          endpoint: sub.endpoint,
-          expirationTime: null,
-          keys: { p256dh: sub.p256dh, auth: sub.auth },
-        }, vapid);
-        if (payload.headers) {
-          if (typeof (payload.headers as any).set === 'function') {
-            (payload.headers as any).set('Urgency', 'high');
-          } else {
-            (payload.headers as any)['Urgency'] = 'high';
-          }
-        }
-        const res = await fetch(sub.endpoint, payload);
-        if (res.status === 410 || res.status === 404) {
-          await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1').bind(sub.endpoint).run();
-        }
-      } catch (err) {
-        console.error('Expiry alert push failed', err);
-      }
-    }
+    const pushResult = await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
+    if (pushResult.subscriptions === 0) continue;
 
     // Mark all notified items as sent today
     const placeholders = userItems.map((_, i) => `?${i + 2}`).join(',');
@@ -344,12 +267,17 @@ const handler = {
   async scheduled(event: any, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(Promise.all([
       triggerReminders(env),
+      processScheduledNotifications(env),
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
       // Purge notification events older than 7 days
       env.DB.prepare(
         "DELETE FROM notification_events WHERE created_at < unixepoch() - 7 * 86400"
       ).run().catch((err) => console.error('Notification event cleanup failed', err)),
+      // Keep 30 days of delivery history
+      env.DB.prepare(
+        "DELETE FROM notification_deliveries WHERE fired_at < unixepoch() - 30 * 86400"
+      ).run().catch((err) => console.error('Delivery history cleanup failed', err)),
     ]));
   }
 };

@@ -58,10 +58,10 @@ export default function HabitStacks({ habits, onRefresh }: Props) {
     try {
       await apiFetch('/habit-stacks', {
         method: 'POST',
-        body: {
+        body: JSON.stringify({
           name: stackName,
           habit_ids: selectedHabits,
-        },
+        }),
       });
       setStackName('');
       setSelectedHabits([]);
