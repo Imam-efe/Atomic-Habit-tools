@@ -225,7 +225,7 @@ export function Dashboard() {
             <span className="text-xl">💡</span>
             <div className="min-w-0">
               <p className="text-xs font-bold text-white" style={{ color: 'var(--text)' }}>Rangkuman Sistem Hari Ini</p>
-              <p className="text-[10px] truncate text-neutral-400">Analisis kebiasaan, waktu, keuangan & nutrisi</p>
+              <p className="text-[10px] truncate text-[var(--text2)]">Analisis kebiasaan, waktu, keuangan & nutrisi</p>
             </div>
           </div>
           <span className="neu-cta text-[10px] font-bold px-2 py-1 rounded-lg text-white" style={{ background: 'var(--accent)' }}>Lihat</span>
@@ -253,7 +253,7 @@ export function Dashboard() {
 
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[10px] font-black text-violet-400 block uppercase tracking-widest">💡 ANALISIS PERSONAL SYSTEM</span>
+                    <span className="text-[10px] font-black text-[var(--accent)] block uppercase tracking-widest">💡 ANALISIS PERSONAL SYSTEM</span>
                     <h3 className="text-lg font-black text-white" style={{ color: 'var(--text)' }}>
                       Rangkuman Sistem {now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}
                     </h3>
@@ -270,7 +270,7 @@ export function Dashboard() {
                   <div className="flex flex-col items-center justify-center py-20 gap-3">
                     <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
                       style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-                    <span className="text-xs text-neutral-400">Merangkum data harian...</span>
+                    <span className="text-xs text-[var(--text2)]">Merangkum data harian...</span>
                   </div>
                 ) : insights ? (
                   <div className="flex flex-col gap-4">
@@ -278,7 +278,7 @@ export function Dashboard() {
                     <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-xs font-bold text-white">🔄 Konsistensi Kebiasaan</span>
-                        <span className="text-xs font-extrabold text-violet-400">{insights.habitScore}%</span>
+                        <span className="text-xs font-extrabold text-[var(--accent)]">{insights.habitScore}%</span>
                       </div>
                       <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
                         {insights.habitText}
@@ -546,7 +546,7 @@ export function Dashboard() {
                   <p className="text-[11px]" style={{ color: 'var(--text2)' }}>{m.desc}</p>
                 </div>
               </div>
-              <span className="text-neutral-500 text-lg">›</span>
+              <span className="text-[var(--text3)] text-lg">›</span>
             </div>
           ))}
         </div>

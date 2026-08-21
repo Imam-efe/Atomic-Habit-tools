@@ -601,7 +601,7 @@ export function More() {
 
           {shortcutToken && (
             <div className="rounded-xl p-3 text-xs leading-relaxed flex flex-col gap-2" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="font-bold text-orange-400">💡 Panduan Cepat iOS Shortcut:</span>
+              <span className="font-bold text-[var(--warn)]">💡 Panduan Cepat iOS Shortcut:</span>
               <ol className="list-decimal pl-4 flex flex-col gap-1.5" style={{ color: 'var(--text2)' }}>
                 <li>Buka aplikasi <strong>Shortcuts</strong> di iPhone.</li>
                 <li>Buat Shortcut baru, tambahkan aksi <strong>Get Contents of URL</strong>.</li>
@@ -615,10 +615,10 @@ export function More() {
                 </li>
                 <li>Pilih JSON Request Body sesuai kebutuhan:
                   <ul className="list-disc pl-4 mt-1 text-[10px] flex flex-col gap-1">
-                    <li><strong>Tambah Tugas:</strong> Endpoint <code className="text-violet-400">/tasks</code><br />Body: <code className="text-neutral-400">{"{ \"projectName\": \"Inbox\", \"taskName\": \"Tugas baru\" }"}</code></li>
-                    <li><strong>Centang Habit:</strong> Endpoint <code className="text-violet-400">/habits/toggle</code><br />Body: <code className="text-neutral-400">{"{ \"habitName\": \"Minum Air Putih\" }"}</code></li>
-                    <li><strong>Catat Pengeluaran:</strong> Endpoint <code className="text-violet-400">/budget</code><br />Body: <code className="text-neutral-400">{"{ \"type\": \"expense\", \"amount\": 20000, \"category\": \"Makanan\", \"note\": \"Kopi\" }"}</code></li>
-                    <li><strong>Baca Notifikasi (polling):</strong> Endpoint <code className="text-violet-400">/notifications?token=&lt;API_KEY&gt;</code> dengan Method <strong>GET</strong> tanpa Headers.<br />Mengembalikan notifikasi sistem (pengingat habit, alert kadaluarsa) yang belum dibaca — cocok untuk Automation berkala. Panduan lengkap ada di <code className="bg-black/20 px-1 rounded">docs/shortcuts</code> repo.</li>
+                    <li><strong>Tambah Tugas:</strong> Endpoint <code className="text-[var(--accent)]">/tasks</code><br />Body: <code className="text-[var(--text2)]">{"{ \"projectName\": \"Inbox\", \"taskName\": \"Tugas baru\" }"}</code></li>
+                    <li><strong>Centang Habit:</strong> Endpoint <code className="text-[var(--accent)]">/habits/toggle</code><br />Body: <code className="text-[var(--text2)]">{"{ \"habitName\": \"Minum Air Putih\" }"}</code></li>
+                    <li><strong>Catat Pengeluaran:</strong> Endpoint <code className="text-[var(--accent)]">/budget</code><br />Body: <code className="text-[var(--text2)]">{"{ \"type\": \"expense\", \"amount\": 20000, \"category\": \"Makanan\", \"note\": \"Kopi\" }"}</code></li>
+                    <li><strong>Baca Notifikasi (polling):</strong> Endpoint <code className="text-[var(--accent)]">/notifications?token=&lt;API_KEY&gt;</code> dengan Method <strong>GET</strong> tanpa Headers.<br />Mengembalikan notifikasi sistem (pengingat habit, alert kadaluarsa) yang belum dibaca — cocok untuk Automation berkala. Panduan lengkap ada di <code className="bg-black/20 px-1 rounded">docs/shortcuts</code> repo.</li>
                   </ul>
                 </li>
               </ol>

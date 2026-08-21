@@ -275,8 +275,8 @@ export function Activity() {
             transition={springs.smooth}
           >
             <div>
-              <span className="text-[10px] font-black text-violet-400 block uppercase tracking-widest">⏱️ FOCUS TRACKER</span>
-              <p className="text-xs text-neutral-400 mt-0.5">Blokir waktu harian Anda untuk Deep Work</p>
+              <span className="text-[10px] font-black text-[var(--accent)] block uppercase tracking-widest">⏱️ FOCUS TRACKER</span>
+              <p className="text-xs text-[var(--text2)] mt-0.5">Blokir waktu harian Anda untuk Deep Work</p>
             </div>
 
             {/* Circular Progress Timer */}
@@ -458,12 +458,12 @@ export function Activity() {
               <>
                 <div className="flex justify-between items-center mb-2">
                   <div>
-                    <span className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase block">SKOR FOKUS HARI INI</span>
+                    <span className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase block">SKOR FOKUS HARI INI</span>
                     <span className="text-xs" style={{ color: 'var(--text2)' }}>
                       Rasio Deep Work & Belajar
                     </span>
                   </div>
-                  <span className="text-2xl font-black text-violet-400">{score}/100</span>
+                  <span className="text-2xl font-black text-[var(--accent)]">{score}/100</span>
                 </div>
                 <div className="h-2 rounded-full overflow-hidden mb-2.5" style={{ background: 'var(--track)' }}>
                   <div 
@@ -488,7 +488,7 @@ export function Activity() {
       {/* Legend & Summary Cards */}
       {totalHours > 0 && (
         <div className="rounded-[18px] p-4 mb-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
-          <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">RINGKASAN DURASI</p>
+          <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase">RINGKASAN DURASI</p>
           <div className="grid grid-cols-2 gap-3">
             {activeSummaries.map(s => (
               <div key={s.name} className="flex items-center gap-2">
@@ -549,7 +549,7 @@ export function Activity() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase mb-1">LOG DETAIL</p>
+          <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase mb-1">LOG DETAIL</p>
           <AnimatePresence>
             {logs.map(log => (
               <motion.div

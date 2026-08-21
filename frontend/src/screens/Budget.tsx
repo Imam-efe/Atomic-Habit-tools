@@ -586,11 +586,11 @@ export function Budget() {
               exit={{ scale: 0.9, y: 30 }}
             >
               <div>
-                <span className="text-[10px] font-black text-violet-400 block uppercase mb-1">🤖 AI RECEIPT SCANNER</span>
+                <span className="text-[10px] font-black text-[var(--accent)] block uppercase mb-1">🤖 AI RECEIPT SCANNER</span>
                 <h3 className="text-base font-bold text-white" style={{ color: 'var(--text)' }}>
                   Pindai Struk Belanja Anda
                 </h3>
-                <p className="text-xs text-neutral-400">Analisis cepat toko, jumlah, tanggal & kategori menggunakan AI.</p>
+                <p className="text-xs text-[var(--text2)]">Analisis cepat toko, jumlah, tanggal & kategori menggunakan AI.</p>
               </div>
 
               {/* Upload area or Scanner view */}
@@ -640,7 +640,7 @@ export function Budget() {
                       className="hidden"
                       onChange={handleOcrFileSelected}
                     />
-                    <span className="text-[10px] text-neutral-500">ATAU</span>
+                    <span className="text-[10px] text-[var(--text3)]">ATAU</span>
                     <button
                       onClick={() => triggerOcrScan('mock')}
                       className="text-xs font-bold underline hover:opacity-80 transition-opacity"
@@ -661,7 +661,7 @@ export function Budget() {
                     </div>
                     
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Nama Toko / Catatan</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Nama Toko / Catatan</label>
                       <input
                         type="text"
                         value={ocrResult.merchant}
@@ -671,7 +671,7 @@ export function Budget() {
                     </div>
                     
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Jumlah Pembayaran (Rp)</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Jumlah Pembayaran (Rp)</label>
                       <input
                         type="number"
                         value={ocrResult.amount || ''}
@@ -681,7 +681,7 @@ export function Budget() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Kategori</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Kategori</label>
                       <select
                         value={ocrResult.category}
                         onChange={(e) => setOcrResult({ ...ocrResult, category: e.target.value })}
@@ -695,7 +695,7 @@ export function Budget() {
                     </div>
 
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-neutral-400 font-semibold">Tanggal</label>
+                      <label className="text-[10px] text-[var(--text2)] font-semibold">Tanggal</label>
                       <input
                         type="date"
                         value={ocrResult.date}
@@ -808,7 +808,7 @@ export function Budget() {
 
               {/* Bank accounts allocator */}
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1">Sumber Uang / Bank</label>
+                <label className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider pl-1">Sumber Uang / Bank</label>
                 <select
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                   style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
@@ -825,7 +825,7 @@ export function Budget() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1">Pengulangan (Opsional)</label>
+                <label className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider pl-1">Pengulangan (Opsional)</label>
                 <select
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                   style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
@@ -849,7 +849,7 @@ export function Budget() {
 
               {/* Receipt photo upload */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider pl-1">Lampirkan Struk / Nota</label>
+                <label className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider pl-1">Lampirkan Struk / Nota</label>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -1114,7 +1114,7 @@ export function Budget() {
                       {entry.bank_account_id && (() => {
                         const matchedBank = bankAccounts.find(b => b.id === entry.bank_account_id);
                         return matchedBank ? (
-                          <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/5 mt-1 text-zinc-400">
+                          <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/5 mt-1 text-[var(--text2)]">
                             🏦 {matchedBank.name}
                           </span>
                         ) : null;
@@ -1236,7 +1236,7 @@ export function Budget() {
 
       {/* CALCULATOR WIDGET */}
       <div className="mt-8 pt-5" style={{ borderTop: '1px solid var(--sep)' }}>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 pl-1 mb-2.5">🧮 KALKULATOR BANTUAN</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text2)] pl-1 mb-2.5">🧮 KALKULATOR BANTUAN</p>
         <div className="rounded-[18px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
           {/* Calc Display */}
           <div className="px-3.5 py-2.5 rounded-xl text-right text-base font-mono flex items-center justify-between"

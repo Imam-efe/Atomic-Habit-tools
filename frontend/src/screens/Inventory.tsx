@@ -431,11 +431,11 @@ export function Inventory() {
               exit={{ scale: 0.9, y: 20 }}
             >
               <div>
-                <span className="text-[10px] font-bold text-orange-400 block uppercase mb-1">🛒 KONFIRMASI BELANJA</span>
+                <span className="text-[10px] font-bold text-[var(--warn)] block uppercase mb-1">🛒 KONFIRMASI BELANJA</span>
                 <h3 className="text-base font-bold text-white" style={{ color: 'var(--text)' }}>
                   Beli {buyingItem.name}?
                 </h3>
-                <p className="text-xs text-neutral-400">Barang akan diisi kembali ke stok inventaris.</p>
+                <p className="text-xs text-[var(--text2)]">Barang akan diisi kembali ke stok inventaris.</p>
               </div>
 
               <div className="flex flex-col gap-3">
@@ -450,7 +450,7 @@ export function Inventory() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[9px] font-bold text-neutral-400 block mb-1 uppercase">Jumlah Stok Baru</label>
+                    <label className="text-[9px] font-bold text-[var(--text2)] block mb-1 uppercase">Jumlah Stok Baru</label>
                     <input
                       type="number"
                       className="w-full px-3 py-2 rounded-xl text-xs outline-none"
@@ -460,7 +460,7 @@ export function Inventory() {
                     />
                   </div>
                   <div>
-                    <label className="text-[9px] font-bold text-neutral-400 block mb-1 uppercase">Expiry Baru (opsional)</label>
+                    <label className="text-[9px] font-bold text-[var(--text2)] block mb-1 uppercase">Expiry Baru (opsional)</label>
                     <input
                       type="date"
                       className="w-full px-3 py-2 rounded-xl text-xs outline-none"
@@ -472,7 +472,7 @@ export function Inventory() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-bold text-neutral-400 block uppercase">Potong Dari Bank/E-Wallet</label>
+                  <label className="text-[9px] font-bold text-[var(--text2)] block uppercase">Potong Dari Bank/E-Wallet</label>
                   <select
                     className="w-full px-3 py-2 rounded-xl text-xs outline-none"
                     style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
@@ -704,7 +704,7 @@ export function Inventory() {
                     <span className="text-xs block mt-0.5" style={{ color: 'var(--text3)' }}>
                       Kategori: {item.category} {item.unit ? `(${item.unit})` : ''}
                     </span>
-                    {item.note && <span className="text-[10px] block italic text-neutral-400">📝 {item.note}</span>}
+                    {item.note && <span className="text-[10px] block italic text-[var(--text2)]">📝 {item.note}</span>}
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0">

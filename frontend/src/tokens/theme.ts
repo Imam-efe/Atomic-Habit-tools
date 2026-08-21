@@ -93,6 +93,7 @@ export const lightTokens = {
   pos: '#1B6E37',
   neg: '#C0281A',
   warn: '#8A5300',
+  info: '#0A5FC8',
   warnBorder: 'rgba(138,83,0,0.35)',
   ...neuShadows('#FFFFFF', '#C3C9D4'),
 };
@@ -109,6 +110,7 @@ export const darkTokens = {
   pos: '#34C759',
   neg: '#FF453A',
   warn: '#FF9F0A',
+  info: '#5FB0FF',
   warnBorder: 'rgba(255,159,10,0.35)',
   ...neuShadows('#2B2F36', '#171A1E'),
 };

@@ -474,7 +474,7 @@ export function FinancialReport() {
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={springs.gentle} className="flex flex-col gap-4">
               {/* Form toggler */}
               <div className="flex justify-between items-center">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 pl-1">Daftar Utang & Piutang</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text2)] pl-1">Daftar Utang & Piutang</h3>
                 <button
                   onClick={() => setShowDebtForm(s => !s)}
                   className="neu-cta px-3 py-1.5 rounded-lg text-xs font-bold text-white"
@@ -540,7 +540,7 @@ export function FinancialReport() {
                       />
 
                       <div>
-                        <label className="text-[9px] font-bold text-neutral-400 block mb-1 uppercase">Jatuh Tempo (Opsional)</label>
+                        <label className="text-[9px] font-bold text-[var(--text2)] block mb-1 uppercase">Jatuh Tempo (Opsional)</label>
                         <input
                           type="date"
                           className="w-full px-3 py-2 rounded-xl text-xs outline-none"
@@ -583,7 +583,7 @@ export function FinancialReport() {
                   >
                     <div className="flex justify-between items-center mb-3">
                       <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>📝 Catat Pembayaran Cicilan</p>
-                      <button className="text-xs text-neutral-400" onClick={() => setSelectedDebtId(null)}>Tutup</button>
+                      <button className="text-xs text-[var(--text2)]" onClick={() => setSelectedDebtId(null)}>Tutup</button>
                     </div>
                     <div className="flex flex-col gap-2">
                       <input
@@ -624,7 +624,7 @@ export function FinancialReport() {
               {/* Debt payment schedules reminders */}
               {report && report.upcoming_payments.length > 0 && (
                 <div className="rounded-[18px] p-4 flex flex-col gap-2.5" style={{ background: 'rgba(255,159,10,0.06)', border: '1px solid rgba(255,159,10,0.2)' }}>
-                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider block">⏰ SCHEDULE BAYAR JATUH TEMPO</p>
+                  <p className="text-[10px] font-bold text-[var(--warn)] uppercase tracking-wider block">⏰ SCHEDULE BAYAR JATUH TEMPO</p>
                   <div className="flex flex-col gap-2">
                     {report.upcoming_payments.map(pay => (
                       <div key={pay.id} className="flex items-center justify-between bg-black/10 dark:bg-white/5 p-2 rounded-xl text-xs">
@@ -637,7 +637,7 @@ export function FinancialReport() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-orange-400 mr-1">{formatRp(pay.amount)}</span>
+                          <span className="font-bold text-[var(--warn)] mr-1">{formatRp(pay.amount)}</span>
                           <button
                             onClick={() => completeUpcomingPayment(pay.id, pay.debt_id, pay.amount, pay.person_name, pay.debt_type)}
                             className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-2.5 py-1 rounded-lg text-[10px]"
@@ -723,7 +723,7 @@ export function FinancialReport() {
                         {/* List of Payments */}
                         {debt.payments.length > 0 && (
                           <div className="pl-1 py-1 rounded-xl bg-black/10 dark:bg-white/5 p-2 flex flex-col gap-1 text-[10px]">
-                            <span className="font-bold text-neutral-400 block mb-0.5 uppercase tracking-wider">Histori Cicilan</span>
+                            <span className="font-bold text-[var(--text2)] block mb-0.5 uppercase tracking-wider">Histori Cicilan</span>
                             {debt.payments.map(p => (
                               <div key={p.id} className="flex justify-between text-[10px]">
                                 <span style={{ color: 'var(--text3)' }}>

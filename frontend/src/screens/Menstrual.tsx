@@ -765,11 +765,11 @@ export function Menstrual() {
             {/* Legend */}
             <div className="flex flex-wrap gap-x-4 gap-y-2 border-t pt-3 text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: 'var(--sep)', color: 'var(--text2)' }}>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-[#FF453A]" />
+                <span className="w-3 h-3 rounded-full bg-[var(--neg)]" />
                 <span>Haid (Logged)</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-full border border-dashed border-[#FF453A] bg-[#FF453A]/10" />
+                <span className="w-3 h-3 rounded-full border border-dashed border-[var(--neg)] bg-[#FF453A]/10" />
                 <span>Prediksi Haid</span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -852,7 +852,7 @@ export function Menstrual() {
                 return (
                   <button
                     onClick={() => handleDeleteLog(logged.log!.id)}
-                    className="w-full py-2.5 rounded-xl border font-bold text-sm text-[#FF453A] flex items-center justify-center gap-1.5"
+                    className="w-full py-2.5 rounded-xl border font-bold text-sm text-[var(--neg)] flex items-center justify-center gap-1.5"
                     style={{ borderColor: 'rgba(255, 69, 58, 0.3)', background: 'rgba(255, 69, 58, 0.05)' }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -917,7 +917,7 @@ export function Menstrual() {
 
                     <button
                       onClick={() => handleDeleteLog(log.id)}
-                      className="text-xs font-semibold p-1.5 rounded-lg text-[#FF453A] hover:bg-[#FF453A]/10"
+                      className="text-xs font-semibold p-1.5 rounded-lg text-[var(--neg)] hover:bg-[#FF453A]/10"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />

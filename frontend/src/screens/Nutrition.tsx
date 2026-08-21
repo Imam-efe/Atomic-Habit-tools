@@ -253,7 +253,7 @@ export function Nutrition() {
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Ubah Target Nutrisi Harian</p>
             <div className="grid grid-cols-2 gap-2">
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Kalori (kkal)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Kalori (kkal)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
@@ -263,7 +263,7 @@ export function Nutrition() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Protein (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Protein (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
@@ -273,7 +273,7 @@ export function Nutrition() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Karbohidrat (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Karbohidrat (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
@@ -283,7 +283,7 @@ export function Nutrition() {
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Lemak (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Lemak (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
@@ -293,7 +293,7 @@ export function Nutrition() {
                 />
               </div>
               <div className="flex flex-col gap-1 col-span-2">
-                <span className="text-[10px] uppercase font-bold text-neutral-400">Serat (g)</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text2)]">Serat (g)</span>
                 <input
                   type="number"
                   className="px-3 py-2 rounded-xl text-sm outline-none"
@@ -474,7 +474,7 @@ export function Nutrition() {
 
           {/* Macro Progress Bars Card */}
           <div className="rounded-[20px] p-5 flex flex-col gap-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
-            <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase">MAKRONUTRISI</p>
+            <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase">MAKRONUTRISI</p>
             <div className="flex flex-col gap-3.5">
               {macros.map(m => {
                 const pct = m.target > 0 ? (m.summary / m.target) * 100 : 0;
@@ -498,7 +498,7 @@ export function Nutrition() {
               })}
             </div>
             {gapString && (
-              <p className="text-xs font-bold mt-2 text-orange-400">{gapString}</p>
+              <p className="text-xs font-bold mt-2 text-[var(--warn)]">{gapString}</p>
             )}
 
             {/* Macro Energy Ratios */}
@@ -516,7 +516,7 @@ export function Nutrition() {
 
               return (
                 <div className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid var(--sep)' }}>
-                  <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">Distribusi Energi Makro</p>
+                  <p className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider">Distribusi Energi Makro</p>
                   <div className="h-3.5 rounded-lg overflow-hidden flex">
                     <div style={{ background: '#FF375F', width: `${pPct}%` }} />
                     <div style={{ background: 'var(--warn)', width: `${cPct}%` }} />
@@ -543,7 +543,7 @@ export function Nutrition() {
 
           {/* Food Log List */}
           <div>
-            <p className="text-[11px] font-bold tracking-wider text-neutral-400 uppercase mb-2">MAKANAN HARI INI</p>
+            <p className="text-[11px] font-bold tracking-wider text-[var(--text2)] uppercase mb-2">MAKANAN HARI INI</p>
             {data?.foodLogs.length === 0 ? (
               <div className="py-8 text-center text-sm" style={{ color: 'var(--text3)' }}>
                 Belum ada makanan yang dicatat hari ini

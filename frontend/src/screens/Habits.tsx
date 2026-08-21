@@ -310,7 +310,7 @@ export function Habits() {
 
             {/* Reminder Time input */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-neutral-400 uppercase px-1">Waktu Pengingat (Notifikasi)</label>
+              <label className="text-[10px] font-bold text-[var(--text2)] uppercase px-1">Waktu Pengingat (Notifikasi)</label>
               <input
                 type="time"
                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
@@ -336,7 +336,7 @@ export function Habits() {
             {/* Goals selection list */}
             {goals.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Hubungkan ke Identitas</p>
+                <p className="text-[10px] font-bold text-[var(--text2)] uppercase">Hubungkan ke Identitas</p>
                 <div className="flex flex-col gap-1.5 max-h-28 overflow-y-auto pr-1">
                   {goals.map(g => {
                     const isChecked = newGoalIds.includes(g.id);
@@ -418,7 +418,7 @@ export function Habits() {
 
             {/* Edit Reminder Time input */}
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-bold text-neutral-400 uppercase px-1">Waktu Pengingat (Notifikasi)</label>
+              <label className="text-[10px] font-bold text-[var(--text2)] uppercase px-1">Waktu Pengingat (Notifikasi)</label>
               <input
                 type="time"
                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
@@ -444,7 +444,7 @@ export function Habits() {
             {/* Goals selection list */}
             {goals.length > 0 && (
               <div className="flex flex-col gap-1.5">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Hubungkan ke Identitas</p>
+                <p className="text-[10px] font-bold text-[var(--text2)] uppercase">Hubungkan ke Identitas</p>
                 <div className="flex flex-col gap-1.5 max-h-28 overflow-y-auto pr-1">
                   {goals.map(g => {
                     const isChecked = editGoalIds.includes(g.id);
@@ -559,7 +559,7 @@ export function Habits() {
                         </p>
                       )}
                       {habit.reminderTime && (
-                        <p className="text-[11px] mt-0.5 font-semibold text-orange-400 flex items-center gap-1">
+                        <p className="text-[11px] mt-0.5 font-semibold text-[var(--warn)] flex items-center gap-1">
                           ⏰ Pengingat: {habit.reminderTime}
                         </p>
                       )}
@@ -569,7 +569,7 @@ export function Habits() {
                     <div className="flex items-center gap-2">
                       {/* Streak display */}
                       {habit.streak > 0 && (
-                        <div className="flex items-center gap-0.5 flex-shrink-0 font-bold text-sm bg-orange-500/10 text-orange-400 px-2 py-0.5 rounded-lg">
+                        <div className="flex items-center gap-0.5 flex-shrink-0 font-bold text-sm bg-orange-500/10 text-[var(--warn)] px-2 py-0.5 rounded-lg">
                           🔥 {habit.streak}
                         </div>
                       )}
@@ -621,7 +621,7 @@ export function Habits() {
                           ✓ Rebound 2M
                         </span>
                       ) : (
-                        <span className="text-[10px] text-neutral-400 italic">Selesai Penuh</span>
+                        <span className="text-[10px] text-[var(--text2)] italic">Selesai Penuh</span>
                       )}
                     </div>
                   )}
@@ -658,19 +658,19 @@ export function Habits() {
           animate={{ opacity: 1, scale: 1 }}
           transition={springs.gentle}
         >
-          <h3 className="text-base font-bold text-white mb-0.5">Habit Loop · {loopHabit.name}</h3>
+          <h3 className="text-base font-bold mb-0.5" style={{ color: 'var(--text)' }}>Habit Loop · {loopHabit.name}</h3>
           <p className="text-xs mb-4" style={{ color: 'var(--text2)' }}>Membangun kebiasaan melalui 4 hukum psikologi</p>
 
           <div className="grid grid-cols-2 gap-3.5">
             <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">1. Cue (Petunjuk)</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--info)]">1. Cue (Petunjuk)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 {loopHabit.triggerCue ? `Setelah ${loopHabit.triggerCue}` : 'Set alarm pagi / rutinitas tetap'}
               </p>
             </div>
 
             <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">2. Craving (Gairah)</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--warn)]">2. Craving (Gairah)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 Membangun kebiasaan 1% lebih konsisten
               </p>
@@ -684,7 +684,7 @@ export function Habits() {
             </div>
 
             <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500">4. Reward (Penghargaan)</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">4. Reward (Penghargaan)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 Streak bertambah & merasa bangga!
               </p>

@@ -297,7 +297,7 @@ export function Goals() {
             {/* Connect Habits Selector */}
             {habits.length > 0 && (
               <div className="flex flex-col gap-1.5 mt-1">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Hubungkan Kebiasaan</p>
+                <p className="text-[10px] font-bold text-[var(--text2)] uppercase">Hubungkan Kebiasaan</p>
                 <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
                   {habits.map(h => {
                     const isChecked = selectedHabitIds.includes(h.id);
@@ -378,7 +378,7 @@ export function Goals() {
             {/* Connect Habits Selector */}
             {habits.length > 0 && (
               <div className="flex flex-col gap-1.5 mt-1">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Hubungkan Kebiasaan</p>
+                <p className="text-[10px] font-bold text-[var(--text2)] uppercase">Hubungkan Kebiasaan</p>
                 <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
                   {habits.map(h => {
                     const isChecked = editSelectedHabitIds.includes(h.id);
