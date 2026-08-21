@@ -22,6 +22,7 @@ import netWorth from './routes/net_worth';
 import weeklyReview from './routes/weekly_review';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
+import habitStacks from './routes/habit_stacks';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
@@ -73,6 +74,7 @@ app.route('/api/net-worth', netWorth);
 app.route('/api/weekly-review', weeklyReview);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
+app.route('/api/habit-stacks', habitStacks);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
