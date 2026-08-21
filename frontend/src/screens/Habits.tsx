@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { CONFETTI_COLORS } from '@/constants/colors';
 import { HabitBundles } from '@/components/HabitBundles';
 import HabitStacks from '@/components/HabitStacks';
 
@@ -83,7 +84,7 @@ export function Habits() {
     const ctx = cv.getContext('2d');
     if (!ctx) return;
 
-    const colors = ['#7C5CFF', 'var(--pos)', 'var(--warn)', '#FF375F', '#0A84FF', '#5E5CE6'];
+    const colors = CONFETTI_COLORS;
     const N = isMilestone ? 90 : 30;
     const parts: any[] = [];
 

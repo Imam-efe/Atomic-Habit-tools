@@ -526,7 +526,7 @@ export function Dashboard() {
           {[
             { label: 'Projects & Tasks', id: 'projects', desc: 'Lihat tugas terhubung dengan goals', icon: '📁', bg: 'rgba(10,132,255,0.16)', color: '#0A84FF' },
             { label: 'Alokasi Waktu', id: 'activity', desc: 'Analisis Deep vs Shallow Work harian', icon: '⏱️', bg: 'rgba(94,92,230,0.16)', color: '#5E5CE6' },
-            { label: 'Nutrisi & Makanan', id: 'nutrition', desc: 'Catat kalori & makronutrisi harian', icon: '🍎', bg: 'rgba(255,55,95,0.16)', color: '#FF375F' },
+            { label: 'Nutrisi & Makanan', id: 'nutrition', desc: 'Catat kalori & makronutrisi harian', icon: '🍎', bg: 'rgba(230, 57, 70, 0.16)', color: '#E63946' },
           ].map((m) => (
             <div
               key={m.id}

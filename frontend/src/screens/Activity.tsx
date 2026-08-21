@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { ACTIVITY_COLORS } from '@/constants/colors';
 
 interface ActivityLog {
   id: string;
@@ -11,16 +12,7 @@ interface ActivityLog {
   log_date: string;
 }
 
-const LABEL_COLORS: Record<string, string> = {
-  'Deep Work': '#7C5CFF',
-  'Shallow Work': 'var(--warn)',
-  'Rest': '#5AC8FA',
-  'Learning': 'var(--pos)',
-  'Social': '#FF375F',
-  'Health': '#5E5CE6',
-};
-
-const LABELS = Object.keys(LABEL_COLORS);
+const LABELS = Object.keys(ACTIVITY_COLORS);
 
 export function Activity() {
   const { setSubScreen } = useUIStore();
@@ -188,7 +180,7 @@ export function Activity() {
   const activeSummaries = LABELS.map(name => ({
     name,
     hours: summaryMap[name],
-    color: LABEL_COLORS[name],
+    color: ACTIVITY_COLORS[name],
     pct: totalHours > 0 ? (summaryMap[name] / totalHours) * 100 : 0,
   })).filter(x => x.hours > 0);
 
@@ -562,7 +554,7 @@ export function Activity() {
                 style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: LABEL_COLORS[log.label] || '#fff' }} />
+                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ background: ACTIVITY_COLORS[log.label] || '#fff' }} />
                   <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{log.label}</span>
                 </div>
                 <div className="flex items-center gap-3">

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { NUTRITION_MACROS } from '@/constants/colors';
 
 interface FoodLog {
   id: string;
@@ -160,10 +161,10 @@ export function Nutrition() {
 
   // Macro progress calculations
   const macros = data ? [
-    { name: 'Protein', key: 'protein', summary: data.summary.protein, target: data.target.protein, color: '#FF375F', unit: 'g' },
-    { name: 'Karbohidrat', key: 'carbs', summary: data.summary.carbs, target: data.target.carbs, color: 'var(--warn)', unit: 'g' },
-    { name: 'Lemak', key: 'fat', summary: data.summary.fat, target: data.target.fat, color: '#5AC8FA', unit: 'g' },
-    { name: 'Serat', key: 'fiber', summary: data.summary.fiber, target: data.target.fiber, color: 'var(--pos)', unit: 'g' },
+    { name: 'Protein', key: 'protein', summary: data.summary.protein, target: data.target.protein, color: NUTRITION_MACROS.protein, unit: 'g' },
+    { name: 'Karbohidrat', key: 'carbs', summary: data.summary.carbs, target: data.target.carbs, color: NUTRITION_MACROS.carbs, unit: 'g' },
+    { name: 'Lemak', key: 'fat', summary: data.summary.fat, target: data.target.fat, color: NUTRITION_MACROS.fat, unit: 'g' },
+    { name: 'Serat', key: 'fiber', summary: data.summary.fiber, target: data.target.fiber, color: NUTRITION_MACROS.fiber, unit: 'g' },
   ] : [];
 
   // Gap analysis string
@@ -186,7 +187,7 @@ export function Nutrition() {
       case 'Moderat':
         return { bg: 'rgba(255,159,10,0.15)', text: 'var(--warn)' };
       case 'Indulge':
-        return { bg: 'rgba(255,55,95,0.15)', text: '#FF375F' };
+        return { bg: 'rgba(230, 57, 70, 0.15)', text: NUTRITION_MACROS.protein };
       default:
         return { bg: 'var(--track)', text: 'var(--text2)' };
     }
@@ -518,13 +519,13 @@ export function Nutrition() {
                 <div className="mt-3 pt-3 flex flex-col gap-2" style={{ borderTop: '1px solid var(--sep)' }}>
                   <p className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider">Distribusi Energi Makro</p>
                   <div className="h-3.5 rounded-lg overflow-hidden flex">
-                    <div style={{ background: '#FF375F', width: `${pPct}%` }} />
+                    <div style={{ background: NUTRITION_MACROS.protein, width: `${pPct}%` }} />
                     <div style={{ background: 'var(--warnFill)', width: `${cPct}%` }} />
-                    <div style={{ background: '#5AC8FA', width: `${fPct}%` }} />
+                    <div style={{ background: NUTRITION_MACROS.fat, width: `${fPct}%` }} />
                   </div>
                   <div className="flex justify-between text-[11px] font-semibold mt-1" style={{ color: 'var(--text2)' }}>
                     <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: '#FF375F' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ background: NUTRITION_MACROS.protein }} />
                       Pro ({Math.round(pPct)}%)
                     </span>
                     <span className="flex items-center gap-1">
@@ -532,7 +533,7 @@ export function Nutrition() {
                       Carb ({Math.round(cPct)}%)
                     </span>
                     <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: '#5AC8FA' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ background: NUTRITION_MACROS.fat }} />
                       Lemak ({Math.round(fPct)}%)
                     </span>
                   </div>

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
 
 interface BudgetEntry {
@@ -1023,7 +1024,7 @@ export function Budget() {
                     }))
                     .sort((a, b) => b.amount - a.amount);
 
-                  const colors = ['#7C5CFF', 'var(--warn)', '#0A84FF', '#FF375F', 'var(--pos)', '#5E5CE6', 'var(--neg)', '#8E8E93', '#5AC8FA', '#FF1493', '#32CD32'];
+                  const colors = CHART_PALETTE;
 
                   return (
                     <div className="w-full flex h-full">
@@ -1058,7 +1059,7 @@ export function Budget() {
                     }))
                     .sort((a, b) => b.amount - a.amount);
 
-                  const colors = ['#7C5CFF', 'var(--warn)', '#0A84FF', '#FF375F', 'var(--pos)', '#5E5CE6', 'var(--neg)', '#8E8E93', '#5AC8FA', '#FF1493', '#32CD32'];
+                  const colors = CHART_PALETTE;
 
                   return expenseCategoriesList.map((cat, idx) => (
                     <div key={cat.name} className="flex items-center gap-1.5 text-[10px]">
