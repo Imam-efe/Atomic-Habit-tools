@@ -47,6 +47,8 @@ export function More() {
   const [newBankBalance, setNewBankBalance] = useState('');
   const [showAddBank, setShowAddBank] = useState(false);
   const [savingBank, setSavingBank] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
+  const [importingData, setImportingData] = useState(false);
 
   const fetchBankAccounts = async () => {
     setLoadingBanks(true);
@@ -230,6 +232,50 @@ export function More() {
     try {
       await apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify({ accent: a }) });
     } catch {}
+  };
+
+  const handleExportData = async () => {
+    setExportingData(true);
+    try {
+      const data = await apiFetch<Record<string, unknown>>('/export', { method: 'GET' });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fayolla-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      alert('Data berhasil diekspor.');
+    } catch (error) {
+      alert('Gagal mengekspor data.');
+      console.error(error);
+    } finally {
+      setExportingData(false);
+    }
+  };
+
+  const handleImportData = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setImportingData(true);
+      try {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        const result = await apiFetch<{ imported_count: number }>('/export', { method: 'POST', body: JSON.stringify(payload) });
+        alert(`Data berhasil diimpor: ${result.imported_count} records.`);
+      } catch (error) {
+        alert('Gagal mengimpor data. Pastikan file valid.');
+        console.error(error);
+      } finally {
+        setImportingData(false);
+      }
+    };
+    input.click();
   };
 
   return (
@@ -691,6 +737,38 @@ export function More() {
               </div>
             ))
           )}
+        </div>
+      </section>
+
+      {/* Export/Import Data Section */}
+      <section className="mb-6">
+        <p
+          className="text-xs font-bold uppercase tracking-widest mb-3"
+          style={{ color: 'var(--text3)' }}
+        >
+          DATA & BACKUP
+        </p>
+        <div className="flex gap-3">
+          <motion.button
+            className="flex-1 py-3 rounded-xl text-xs font-bold text-white"
+            style={{ background: 'var(--accent)' }}
+            disabled={exportingData}
+            onClick={handleExportData}
+            whileTap={{ scale: 0.97 }}
+            transition={springs.snappy}
+          >
+            {exportingData ? 'Mengekspor...' : '📥 Ekspor Data'}
+          </motion.button>
+          <motion.button
+            className="flex-1 py-3 rounded-xl text-xs font-bold border"
+            style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+            disabled={importingData}
+            onClick={handleImportData}
+            whileTap={{ scale: 0.97 }}
+            transition={springs.snappy}
+          >
+            {importingData ? 'Mengimpor...' : '📤 Impor Data'}
+          </motion.button>
         </div>
       </section>
 
