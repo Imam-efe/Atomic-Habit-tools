@@ -60,7 +60,7 @@ const PHASE_DETAILS = {
     name: 'Menstruasi',
     color: 'var(--neg)',
     bg: 'rgba(255, 69, 58, 0.15)',
-    gradient: 'linear-gradient(135deg, #FF453A, #FF2D55)',
+    gradient: 'linear-gradient(135deg, #C30B00, #E8002C)',
     desc: 'Tubuh meluruhkan lapisan dinding rahim karena tidak terjadi pembuahan. Estrogen & progesteron berada pada kadar terendah.',
     energy: 'Rendah (Sedikit lelah, kram perut, atau lesu adalah hal yang wajar).',
     workout: 'Olahraga ringan/pemulihan (Jalan santai, yin yoga, peregangan lembut).',
@@ -70,7 +70,7 @@ const PHASE_DETAILS = {
     name: 'Folikular',
     color: 'var(--pos)',
     bg: 'rgba(52, 199, 89, 0.15)',
-    gradient: 'linear-gradient(135deg, #34C759, #5BD97A)',
+    gradient: 'linear-gradient(135deg, #1D6F32, #1F8438)',
     desc: 'FSH meningkat memicu perkembangan folikel telur. Estrogen mulai naik, membantu menebalkan kembali dinding rahim dan meningkatkan stamina.',
     energy: 'Meningkat secara bertahap (Suasana hati membaik, motivasi & fokus tinggi).',
     workout: 'Cardio sedang & latihan kekuatan (Brisk walking, jogging ringan, pilates dinamis).',
@@ -80,7 +80,7 @@ const PHASE_DETAILS = {
     name: 'Ovulasi & Jendela Subur',
     color: '#AF52DE',
     bg: 'rgba(175, 82, 222, 0.15)',
-    gradient: 'linear-gradient(135deg, #AF52DE, #7C5CFF)',
+    gradient: 'linear-gradient(135deg, #9327CA, #7553FF)',
     desc: 'Sel telur matang dilepaskan ke tuba falopi. Hormon estrogen mencapai puncak, memicu lonjakan LH. Peluang kehamilan berada di titik tertinggi.',
     energy: 'Sangat Tinggi (Penuh percaya diri, komunikatif, dan bertenaga).',
     workout: 'Latihan intensitas tinggi (HIIT, angkat beban berat, lari cepat, olahraga kelompok).',
@@ -90,7 +90,7 @@ const PHASE_DETAILS = {
     name: 'Luteal',
     color: 'var(--warn)',
     bg: 'rgba(255, 159, 10, 0.15)',
-    gradient: 'linear-gradient(135deg, #FF9F0A, #FFB740)',
+    gradient: 'linear-gradient(135deg, #8B5400, #A36600)',
     desc: 'Folikel kosong berubah menjadi korpus luteum yang memproduksi progesteron untuk mempersiapkan rahim. Jika tidak dibuahi, kadar hormon akan drop tajam di akhir fase.',
     energy: 'Menurun perlahan (Lebih introspektif, mungkin mengalami retensi air atau gejala PMS menjelang akhir fase).',
     workout: 'Intensitas sedang-rendah (Pilates, yoga vinyasa, latihan kekuatan beban sedang).',
@@ -100,7 +100,7 @@ const PHASE_DETAILS = {
     name: 'Belum Ada Data',
     color: '#8E8E93',
     bg: 'rgba(142, 142, 147, 0.15)',
-    gradient: 'linear-gradient(135deg, #8E8E93, #AEAEB2)',
+    gradient: 'linear-gradient(135deg, #606065, #737379)',
     desc: 'Tambahkan log menstruasi pertama Anda untuk mulai memproyeksikan siklus menstruasi, hari subur, hari ovulasi, serta informasi fase hormon harian.',
     energy: '-',
     workout: '-',
@@ -451,7 +451,7 @@ export function Menstrual() {
           <motion.button
             onClick={() => setShowAddLog(s => !s)}
             className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}
+            style={{ background: 'var(--accentFill)' }}
             whileTap={{ scale: 0.9 }}
             transition={springs.snappy}
           >
@@ -516,7 +516,7 @@ export function Menstrual() {
                 onClick={handleSaveSettings}
                 disabled={savingSettings}
                 className="neu-cta px-3 py-1.5 text-xs font-semibold rounded-lg text-white"
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'var(--accentFill)' }}
               >
                 {savingSettings ? 'Menyimpan...' : 'Simpan'}
               </button>
@@ -581,7 +581,7 @@ export function Menstrual() {
                 onClick={handleAddLog}
                 disabled={savingLog || !startDateVal}
                 className="neu-cta px-3 py-1.5 text-xs font-semibold rounded-lg text-white"
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'var(--accentFill)' }}
               >
                 {savingLog ? 'Menyimpan...' : 'Simpan Log'}
               </button>
@@ -742,7 +742,7 @@ export function Menstrual() {
                     {isToday && (
                       <span
                         className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
-                        style={{ background: isLogged ? '#FFFFFF' : 'var(--accent)' }}
+                        style={{ background: isLogged ? '#FFFFFF' : 'var(--accentFill)' }}
                       />
                     )}
 
@@ -794,7 +794,14 @@ export function Menstrual() {
               </p>
               <h3 className="font-bold text-lg" style={{ color: 'var(--text)' }}>
                 {formatReadableDate(selectedDayStr)}
-                {selectedDayStr === todayStr && <span className="ml-1.5 text-xs text-white bg-black/40 dark:bg-white/20 px-2 py-0.5 rounded-full font-bold">Hari Ini</span>}
+                {selectedDayStr === todayStr && (
+                  <span
+                    className="ml-1.5 text-xs px-2 py-0.5 rounded-full font-bold"
+                    style={{ background: 'var(--accentFill)', color: '#FFFFFF' }}
+                  >
+                    Hari Ini
+                  </span>
+                )}
               </h3>
             </div>
 
@@ -869,7 +876,7 @@ export function Menstrual() {
                       setShowAddLog(true);
                     }}
                     className="neu-cta w-full py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5"
-                    style={{ background: 'var(--accent)' }}
+                    style={{ background: 'var(--accentFill)' }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />

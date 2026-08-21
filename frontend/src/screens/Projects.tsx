@@ -161,7 +161,7 @@ export function Projects() {
         <motion.button
           onClick={() => setShowAddProject(s => !s)}
           className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
         >
@@ -212,7 +212,7 @@ export function Projects() {
             <div className="flex gap-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: savingProject ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: savingProject ? 0.6 : 1 }}
                 onClick={handleCreateProject}
                 disabled={savingProject}
                 whileTap={{ scale: 0.97 }}
@@ -331,7 +331,7 @@ export function Projects() {
                     <div className="flex gap-2 pt-1">
                       <motion.button
                         className="neu-cta flex-1 py-1.5 rounded-lg text-xs font-semibold text-white"
-                        style={{ background: 'var(--accent)' }}
+                        style={{ background: 'var(--accentFill)' }}
                         onClick={() => handleCreateTask(project.id)}
                         disabled={savingTask}
                         whileTap={{ scale: 0.97 }}
@@ -366,7 +366,7 @@ export function Projects() {
                           className="w-5 h-5 rounded flex-shrink-0 flex items-center justify-center border"
                           style={{
                             borderColor: isDone ? 'var(--accent)' : 'var(--text3)',
-                            background: isDone ? 'var(--accent)' : 'transparent',
+                            background: isDone ? 'var(--accentFill)' : 'transparent',
                           }}
                           onClick={() => handleToggleTask(task.id)}
                           whileTap={{ scale: 0.8 }}

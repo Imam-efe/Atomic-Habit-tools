@@ -223,7 +223,7 @@ export function Nutrition() {
           <motion.button
             onClick={() => setShowAddFood(s => !s)}
             className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}
+            style={{ background: 'var(--accentFill)' }}
             whileTap={{ scale: 0.9 }}
             transition={springs.snappy}
           >
@@ -306,7 +306,7 @@ export function Nutrition() {
             <div className="flex gap-2 mt-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: savingTarget ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: savingTarget ? 0.6 : 1 }}
                 onClick={handleSaveTarget}
                 disabled={savingTarget}
                 whileTap={{ scale: 0.97 }}
@@ -411,7 +411,7 @@ export function Nutrition() {
             <div className="flex gap-2 mt-1">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: savingFood ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: savingFood ? 0.6 : 1 }}
                 onClick={handleAddFood}
                 disabled={savingFood}
                 whileTap={{ scale: 0.97 }}
@@ -519,7 +519,7 @@ export function Nutrition() {
                   <p className="text-[10px] font-bold text-[var(--text2)] uppercase tracking-wider">Distribusi Energi Makro</p>
                   <div className="h-3.5 rounded-lg overflow-hidden flex">
                     <div style={{ background: '#FF375F', width: `${pPct}%` }} />
-                    <div style={{ background: 'var(--warn)', width: `${cPct}%` }} />
+                    <div style={{ background: 'var(--warnFill)', width: `${cPct}%` }} />
                     <div style={{ background: '#5AC8FA', width: `${fPct}%` }} />
                   </div>
                   <div className="flex justify-between text-[11px] font-semibold mt-1" style={{ color: 'var(--text2)' }}>
@@ -528,7 +528,7 @@ export function Nutrition() {
                       Pro ({Math.round(pPct)}%)
                     </span>
                     <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: 'var(--warn)' }} />
+                      <span className="w-2 h-2 rounded-full" style={{ background: 'var(--warnFill)' }} />
                       Carb ({Math.round(cPct)}%)
                     </span>
                     <span className="flex items-center gap-1">

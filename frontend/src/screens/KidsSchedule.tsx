@@ -188,7 +188,7 @@ export function KidsSchedule() {
         </div>
         <motion.button
           className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
@@ -332,7 +332,7 @@ export function KidsSchedule() {
               <div className="flex gap-2 mt-2">
                 <motion.button
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                  style={{ background: 'var(--accent)', opacity: saving ? 0.6 : 1 }}
+                  style={{ background: 'var(--accentFill)', opacity: saving ? 0.6 : 1 }}
                   whileTap={{ scale: 0.97 }}
                   transition={springs.snappy}
                   onClick={handleSave}

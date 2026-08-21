@@ -453,7 +453,7 @@ export function NotificationCenter() {
                     key={tab.value}
                     className="py-2 rounded-lg text-xs font-semibold"
                     style={{
-                      background: scheduleType === tab.value ? 'var(--accent)' : 'var(--bg)',
+                      background: scheduleType === tab.value ? 'var(--accentFill)' : 'var(--bg)',
                       color: scheduleType === tab.value ? '#fff' : 'var(--text2)',
                       border: '1px solid var(--sep)',
                     }}
@@ -526,7 +526,7 @@ export function NotificationCenter() {
                       key={day.value}
                       className="py-2 rounded-lg text-[11px] font-bold"
                       style={{
-                        background: days.includes(day.value) ? 'var(--accent)' : 'var(--bg)',
+                        background: days.includes(day.value) ? 'var(--accentFill)' : 'var(--bg)',
                         color: days.includes(day.value) ? '#fff' : 'var(--text3)',
                         border: '1px solid var(--sep)',
                       }}
@@ -567,7 +567,7 @@ export function NotificationCenter() {
                     className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
                     style={{
                       border: `1px solid ${useQuiet ? 'var(--accent)' : 'var(--text3)'}`,
-                      background: useQuiet ? 'var(--accent)' : 'transparent',
+                      background: useQuiet ? 'var(--accentFill)' : 'transparent',
                     }}
                   >
                     {useQuiet && <span className="text-[9px] text-white">✓</span>}
@@ -633,7 +633,7 @@ export function NotificationCenter() {
             <div className="flex gap-2 mt-1">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'var(--accent)', opacity: saving ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', opacity: saving ? 0.6 : 1 }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 disabled={saving}
@@ -658,7 +658,7 @@ export function NotificationCenter() {
       {!showForm && (
         <motion.button
           className="neu-cta w-full py-3 rounded-[18px] text-sm font-semibold text-white mb-5"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.98 }}
           transition={springs.snappy}
           onClick={openCreate}

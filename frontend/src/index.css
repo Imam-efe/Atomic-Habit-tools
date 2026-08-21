@@ -17,12 +17,16 @@
   --track: #D5DAE3;
   --blur: rgba(230,233,239,0.82);
   --accent: #5B41D6;
-  --accent2: #7C5CFF;
+  --accentFill: #5B41D6;
+  --accentFill2: #7761DD;
   --accentSoft: rgba(91,65,214,0.14);
   --pos: #1B6E37;
   --neg: #C0281A;
   --warn: #8A5300;
   --info: #0A5FC8;
+  --posFill: #1B6E37;
+  --negFill: #C0281A;
+  --warnFill: #8A5300;
   --warnBorder: rgba(138,83,0,0.35);
 
   --neu-light: #FFFFFF;

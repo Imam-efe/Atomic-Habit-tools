@@ -228,7 +228,7 @@ export function Dashboard() {
               <p className="text-[10px] truncate text-[var(--text2)]">Analisis kebiasaan, waktu, keuangan & nutrisi</p>
             </div>
           </div>
-          <span className="neu-cta text-[10px] font-bold px-2 py-1 rounded-lg text-white" style={{ background: 'var(--accent)' }}>Lihat</span>
+          <span className="neu-cta text-[10px] font-bold px-2 py-1 rounded-lg text-white" style={{ background: 'var(--accentFill)' }}>Lihat</span>
         </div>
 
         {/* AI System Insights Modal */}
@@ -319,7 +319,7 @@ export function Dashboard() {
 
         {/* Identity Hero Card */}
         <motion.div className="rounded-[24px] p-5 mb-4"
-          style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))', boxShadow: 'var(--neu-raised-lg)' }}
+          style={{ background: 'linear-gradient(135deg, var(--accentFill), var(--accentFill2))', boxShadow: 'var(--neu-raised-lg)' }}
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springs.gentle, delay: 0.06 }}>
           <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
             IDENTITY HARI INI
@@ -413,7 +413,7 @@ export function Dashboard() {
                           toggleHabit(h.id, true);
                         }}
                         className="px-2 py-1 rounded-lg font-bold text-[9px] text-white flex items-center gap-0.5"
-                        style={{ background: `linear-gradient(135deg, ${h.color}, #5BD97A)` }}
+                        style={{ background: 'var(--accentFill)' }}
                       >
                         ⚡ 2M
                       </button>

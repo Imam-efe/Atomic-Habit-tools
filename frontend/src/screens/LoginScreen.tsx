@@ -59,7 +59,7 @@ export function LoginScreen() {
           <div
             className="w-20 h-20 rounded-[22px] flex items-center justify-center text-white text-3xl font-bold"
             style={{
-              background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+              background: 'linear-gradient(135deg, var(--accentFill), var(--accentFill2))',
               boxShadow: 'var(--neu-raised-lg)',
             }}
           >
@@ -99,7 +99,7 @@ export function LoginScreen() {
           )}
           <motion.button
             className="neu-cta w-full py-4 rounded-2xl font-semibold text-base text-white"
-            style={{ background: 'var(--accent)' }}
+            style={{ background: 'var(--accentFill)' }}
             whileTap={{ scale: 0.97 }}
             transition={springs.snappy}
             onClick={handleLogin}

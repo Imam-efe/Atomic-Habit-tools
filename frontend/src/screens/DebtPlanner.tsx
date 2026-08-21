@@ -213,7 +213,7 @@ export function DebtPlanner() {
                   key={m}
                   className="py-3 rounded-xl text-xs font-bold"
                   style={{
-                    background: method === m ? 'var(--accent)' : 'var(--bg)',
+                    background: method === m ? 'var(--accentFill)' : 'var(--bg)',
                     color: method === m ? 'white' : 'var(--text2)',
                     border: `1px solid ${method === m ? 'var(--accent)' : 'var(--sep)'}`,
                   }}
@@ -314,7 +314,7 @@ export function DebtPlanner() {
                     <p className="font-bold text-sm" style={{ color: 'var(--neg)' }}>{formatRp(d.amount_idr)}</p>
                     <motion.button
                       className="px-3 py-1.5 rounded-xl text-[11px] font-bold"
-                      style={{ background: 'var(--accent)', color: 'white' }}
+                      style={{ background: 'var(--accentFill)', color: 'white' }}
                       whileTap={{ scale: 0.94 }}
                       transition={springs.snappy}
                       onClick={() => openPayForm(d)}
@@ -420,7 +420,7 @@ export function DebtPlanner() {
 
               <motion.button
                 className="w-full py-3.5 rounded-2xl font-bold text-sm"
-                style={{ background: 'var(--accent)', color: 'white', opacity: saving ? 0.6 : 1 }}
+                style={{ background: 'var(--accentFill)', color: 'white', opacity: saving ? 0.6 : 1 }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 onClick={handlePay}

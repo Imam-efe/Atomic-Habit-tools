@@ -187,7 +187,7 @@ export function HabitBundles({ habits, onRefresh }: HabitBundlesProps) {
                 onClick={handleAddBundle}
                 disabled={saving}
                 className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'var(--accentFill)' }}
               >
                 {saving ? 'Menyimpan...' : 'Buat Bundle'}
               </button>

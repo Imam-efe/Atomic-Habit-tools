@@ -155,7 +155,7 @@ export function Goals() {
         </h1>
         <motion.button
           className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => setShowAdd(s => !s)}
@@ -171,7 +171,7 @@ export function Goals() {
         <motion.div
           className="rounded-[22px] p-5 mb-4"
           style={{
-            background: `linear-gradient(135deg, var(--accent), var(--accent2))`,
+            background: `linear-gradient(135deg, var(--accentFill), var(--accentFill2))`,
             boxShadow: 'var(--neu-raised-lg)',
           }}
           initial={{ opacity: 0, y: 12 }}
@@ -308,7 +308,7 @@ export function Goals() {
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
                         style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
+                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accentFill)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
                         </div>
                         <span className="text-xs" style={{ color: 'var(--text)' }}>{h.name}</span>
@@ -389,7 +389,7 @@ export function Goals() {
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
                         style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
+                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accentFill)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
                         </div>
                         <span className="text-xs" style={{ color: 'var(--text)' }}>{h.name}</span>

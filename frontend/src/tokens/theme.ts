@@ -18,11 +18,26 @@
 export type AccentName = 'violet' | 'green' | 'blue' | 'orange';
 export type ThemeName = 'dark' | 'light';
 
+/**
+ * An accent has two jobs that pull in opposite directions, and one value cannot
+ * do both on a dark page:
+ *
+ *   - as text or an icon on the page, it must be light enough to read against
+ *     the background;
+ *   - as a button fill under white text, it must be dark enough for the label.
+ *
+ * On #22252A those requirements do not overlap — reading needs luminance above
+ * 0.26 and white-on-fill needs it below 0.18 — so `primary` and `fill` are
+ * separate tokens. On the light base a single value satisfies both, and the two
+ * are simply equal.
+ */
 interface AccentTokens {
-  /** Fills and icons. Carries white text at AA. */
+  /** Text, icons, borders — readable against the page. */
   primary: string;
-  /** Lighter sibling, for gradient fills. */
-  gradient: string;
+  /** Button and badge fills. Carries white text at AA. */
+  fill: string;
+  /** Gradient sibling of `fill`. Also white-safe, so the label holds across the whole sweep. */
+  fill2: string;
   /** Translucent tint for icon chips and glows. */
   soft: string;
 }
@@ -32,17 +47,17 @@ interface AccentTokens {
  * text on the grey base; dark accents are lightened for the same reason.
  */
 const lightAccents: Record<AccentName, AccentTokens> = {
-  violet: { primary: '#5B41D6', gradient: '#7C5CFF', soft: 'rgba(91,65,214,0.14)' },
-  green: { primary: '#1B6E37', gradient: '#2E9C52', soft: 'rgba(27,110,55,0.14)' },
-  blue: { primary: '#0A5FC8', gradient: '#2A86F0', soft: 'rgba(10,95,200,0.14)' },
-  orange: { primary: '#8A5300', gradient: '#C07A10', soft: 'rgba(138,83,0,0.14)' },
+  violet: { primary: '#5B41D6', fill: '#5B41D6', fill2: '#7761DD', soft: 'rgba(91,65,214,0.14)' },
+  green: { primary: '#1B6E37', fill: '#1B6E37', fill2: '#218643', soft: 'rgba(27,110,55,0.14)' },
+  blue: { primary: '#0A5FC8', fill: '#0A5FC8', fill2: '#0C70EC', soft: 'rgba(10,95,200,0.14)' },
+  orange: { primary: '#8A5300', fill: '#8A5300', fill2: '#A96500', soft: 'rgba(138,83,0,0.14)' },
 };
 
 const darkAccents: Record<AccentName, AccentTokens> = {
-  violet: { primary: '#A48DFF', gradient: '#7C5CFF', soft: 'rgba(164,141,255,0.18)' },
-  green: { primary: '#5BD97A', gradient: '#34C759', soft: 'rgba(91,217,122,0.18)' },
-  blue: { primary: '#5FB0FF', gradient: '#0A84FF', soft: 'rgba(95,176,255,0.18)' },
-  orange: { primary: '#FFB740', gradient: '#FF9F0A', soft: 'rgba(255,183,64,0.18)' },
+  violet: { primary: '#A48DFF', fill: '#7250FF', fill2: '#5127FF', soft: 'rgba(164,141,255,0.18)' },
+  green: { primary: '#5BD97A', fill: '#22823A', fill2: '#1A622C', soft: 'rgba(91,217,122,0.18)' },
+  blue: { primary: '#5FB0FF', fill: '#006FDE', fill2: '#005BB5', soft: 'rgba(95,176,255,0.18)' },
+  orange: { primary: '#FFB740', fill: '#A26300', fill2: '#794A00', soft: 'rgba(255,183,64,0.18)' },
 };
 
 export const accents = lightAccents;
@@ -94,6 +109,11 @@ export const lightTokens = {
   neg: '#C0281A',
   warn: '#8A5300',
   info: '#0A5FC8',
+  // On this base the reading value is already dark enough to carry white text,
+  // so fill and text share one value.
+  posFill: '#1B6E37',
+  negFill: '#C0281A',
+  warnFill: '#8A5300',
   warnBorder: 'rgba(138,83,0,0.35)',
   ...neuShadows('#FFFFFF', '#C3C9D4'),
 };
@@ -111,6 +131,11 @@ export const darkTokens = {
   neg: '#FF453A',
   warn: '#FF9F0A',
   info: '#5FB0FF',
+  // Darkened for white labels. The bright values above read well on the page
+  // but drop to ~2.2:1 under white text, so badges need their own set.
+  posFill: '#22823A',
+  negFill: '#E30D00',
+  warnFill: '#A26300',
   warnBorder: 'rgba(255,159,10,0.35)',
   ...neuShadows('#2B2F36', '#171A1E'),
 };
@@ -125,7 +150,8 @@ export function applyTheme(theme: ThemeName, accent: AccentName): void {
   });
 
   root.style.setProperty('--accent', accentTokens.primary);
-  root.style.setProperty('--accent2', accentTokens.gradient);
+  root.style.setProperty('--accentFill', accentTokens.fill);
+  root.style.setProperty('--accentFill2', accentTokens.fill2);
   root.style.setProperty('--accentSoft', accentTokens.soft);
   root.setAttribute('data-theme', theme);
 }

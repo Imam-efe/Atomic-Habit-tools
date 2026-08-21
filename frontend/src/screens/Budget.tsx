@@ -534,7 +534,7 @@ export function Budget() {
         </h1>
         <motion.button
           className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => { setShowAdd(s => !s); if (!showAdd) setActiveSubTab('transaksi'); }}
@@ -629,7 +629,7 @@ export function Budget() {
                     <button
                       onClick={() => ocrFileInputRef.current?.click()}
                       className="neu-cta px-4 py-2 rounded-xl text-xs font-bold text-white shadow-md hover:opacity-90 active:scale-95 transition-all"
-                      style={{ background: 'var(--accent)' }}
+                      style={{ background: 'var(--accentFill)' }}
                     >
                       📁 Pilih Foto Struk
                     </button>
@@ -713,7 +713,7 @@ export function Budget() {
                   <button
                     onClick={applyOcrResult}
                     className="neu-cta flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
-                    style={{ background: 'var(--accent)' }}
+                    style={{ background: 'var(--accentFill)' }}
                   >
                     📥 Terapkan Ke Formulir
                   </button>
@@ -752,7 +752,7 @@ export function Budget() {
                 type="button"
                 onClick={() => setShowOcrModal(true)}
                 className="neu-cta px-3 py-1 rounded-lg text-xs font-bold text-white"
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'var(--accentFill)' }}
               >
                 🤖 AI Scan Struk
               </button>
@@ -765,7 +765,7 @@ export function Budget() {
                   key={t}
                   className="flex-1 py-2 rounded-xl text-sm font-semibold"
                   style={{
-                    background: type === t ? (t === 'expense' ? 'var(--neg)' : 'var(--pos)') : 'var(--track)',
+                    background: type === t ? (t === 'expense' ? 'var(--negFill)' : 'var(--posFill)') : 'var(--track)',
                     color: type === t ? 'white' : 'var(--text2)',
                   }}
                   whileTap={{ scale: 0.97 }}
@@ -885,7 +885,7 @@ export function Budget() {
             <div className="flex gap-2">
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: type === 'expense' ? 'var(--neg)' : 'var(--pos)', opacity: saving ? 0.6 : 1 }}
+                style={{ background: type === 'expense' ? 'var(--negFill)' : 'var(--posFill)', opacity: saving ? 0.6 : 1 }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 onClick={addEntry}
@@ -918,7 +918,7 @@ export function Budget() {
                   key={p}
                   className="flex-1 py-1.5 rounded-xl text-[11px] font-bold"
                   style={{
-                    background: rangePreset === p ? 'var(--accent)' : 'var(--track)',
+                    background: rangePreset === p ? 'var(--accentFill)' : 'var(--track)',
                     color: rangePreset === p ? 'white' : 'var(--text2)',
                   }}
                   whileTap={{ scale: 0.95 }}
@@ -1172,7 +1172,7 @@ export function Budget() {
                   onClick={handleUpdateLimit}
                   disabled={savingLimit}
                   className="neu-cta px-4 py-2 rounded-xl text-xs font-bold text-white flex-shrink-0"
-                  style={{ background: 'var(--accent)' }}
+                  style={{ background: 'var(--accentFill)' }}
                 >
                   {savingLimit ? 'Menyimpan...' : 'Simpan Batas'}
                 </button>
@@ -1273,7 +1273,7 @@ export function Budget() {
             <button
               onClick={applyCalculatorValue}
               className="neu-cta w-full py-2 rounded-xl text-xs font-bold text-white transition-all"
-              style={{ background: 'var(--accent)' }}
+              style={{ background: 'var(--accentFill)' }}
             >
               📥 Gunakan Hasil ({formatRp(parseFloat(calcDisplay))}) Ke Jumlah Form
             </button>
@@ -1451,7 +1451,7 @@ export function Budget() {
                   <div className="flex gap-2 mb-1">
                     {(['expense', 'income'] as const).map(t => (
                       <motion.button key={t} className="flex-1 py-2 rounded-xl text-sm font-semibold"
-                        style={{ background: editType === t ? (t === 'expense' ? 'var(--neg)' : 'var(--pos)') : 'var(--track)', color: editType === t ? 'white' : 'var(--text2)' }}
+                        style={{ background: editType === t ? (t === 'expense' ? 'var(--negFill)' : 'var(--posFill)') : 'var(--track)', color: editType === t ? 'white' : 'var(--text2)' }}
                         whileTap={{ scale: 0.97 }} transition={springs.snappy}
                         onClick={() => { setEditType(t); setEditCategory(t === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]); }}>
                         {t === 'expense' ? 'Pengeluaran' : 'Pemasukan'}
@@ -1486,7 +1486,7 @@ export function Budget() {
               <div className="flex gap-2 mt-5">
                 {editMode && (
                   <motion.button className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                    style={{ background: 'var(--accent)', opacity: savingEdit ? 0.6 : 1 }}
+                    style={{ background: 'var(--accentFill)', opacity: savingEdit ? 0.6 : 1 }}
                     whileTap={{ scale: 0.97 }} transition={springs.snappy}
                     onClick={saveEdit} disabled={savingEdit}>
                     {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}

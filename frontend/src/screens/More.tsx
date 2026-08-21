@@ -338,8 +338,13 @@ export function More() {
                         animate={{ scale: 1 }}
                         exit={{ scale: 0 }}
                         transition={springs.bouncy}
-                        className="neu-cta w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--accent)' }}
+                        className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{
+                          background: 'var(--accentFill)',
+                          // A 20px status dot, not a button: shallow shadow, and
+                          // none of .neu-cta's press behaviour.
+                          boxShadow: 'var(--neu-raised-sm)',
+                        }}
                       >
                         <svg
                           width="10"
@@ -462,7 +467,7 @@ export function More() {
             <span style={{ color: 'var(--text)' }} className="font-semibold text-sm">Mode Gelap</span>
             <button
               className="w-12 h-7 rounded-full p-1 transition-colors relative"
-              style={{ background: theme === 'dark' ? 'var(--accent)' : 'var(--track)' }}
+              style={{ background: theme === 'dark' ? 'var(--accentFill)' : 'var(--track)' }}
               onClick={() => handleThemeChange(theme === 'dark' ? 'light' : 'dark')}
             >
               <motion.div
@@ -526,7 +531,7 @@ export function More() {
             </div>
             <button
               className="w-12 h-7 rounded-full p-1 transition-colors relative"
-              style={{ background: pushEnabled ? 'var(--accent)' : 'var(--track)' }}
+              style={{ background: pushEnabled ? 'var(--accentFill)' : 'var(--track)' }}
               onClick={handleTogglePush}
             >
               <motion.div
@@ -582,7 +587,7 @@ export function More() {
             {shortcutToken && (
               <button
                 className="neu-cta px-4 py-2.5 rounded-xl text-xs font-bold text-white flex-shrink-0"
-                style={{ background: 'var(--accent)' }}
+                style={{ background: 'var(--accentFill)' }}
                 onClick={handleCopyToken}
               >
                 {copied ? 'Tersalin!' : 'Salin'}
@@ -685,7 +690,7 @@ export function More() {
                   onClick={handleAddBank}
                   disabled={savingBank}
                   className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
-                  style={{ background: 'var(--accent)' }}
+                  style={{ background: 'var(--accentFill)' }}
                 >
                   {savingBank ? 'Menyimpan...' : 'Simpan Rekening'}
                 </button>
@@ -753,7 +758,7 @@ export function More() {
         <div className="flex gap-3">
           <motion.button
             className="neu-cta flex-1 py-3 rounded-xl text-xs font-bold text-white"
-            style={{ background: 'var(--accent)' }}
+            style={{ background: 'var(--accentFill)' }}
             disabled={exportingData}
             onClick={handleExportData}
             whileTap={{ scale: 0.97 }}

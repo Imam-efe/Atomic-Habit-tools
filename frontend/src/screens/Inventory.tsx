@@ -189,7 +189,7 @@ export function Inventory() {
   };
 
   const getExpiryStatus = (expiryDateStr: string | null) => {
-    if (!expiryDateStr) return { label: 'Aman (Tanpa Ed)', color: 'var(--pos)', status: 'Aman' as const };
+    if (!expiryDateStr) return { label: 'Aman (Tanpa Ed)', color: 'var(--pos)', fill: 'var(--posFill)', status: 'Aman' as const };
     const expiry = new Date(expiryDateStr);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -199,11 +199,11 @@ export function Inventory() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      return { label: 'Kedaluwarsa', color: 'var(--neg)', status: 'Kedaluwarsa' as const, days: Math.abs(diffDays) };
+      return { label: 'Kedaluwarsa', color: 'var(--neg)', fill: 'var(--negFill)', status: 'Kedaluwarsa' as const, days: Math.abs(diffDays) };
     } else if (diffDays <= 3) {
-      return { label: `Kedaluwarsa ${diffDays} hari`, color: 'var(--warn)', status: 'Masa Pakai Tipis' as const, days: diffDays };
+      return { label: `Kedaluwarsa ${diffDays} hari`, color: 'var(--warn)', fill: 'var(--warnFill)', status: 'Masa Pakai Tipis' as const, days: diffDays };
     } else {
-      return { label: `Sisa ${diffDays} hari`, color: 'var(--pos)', status: 'Aman' as const, days: diffDays };
+      return { label: `Sisa ${diffDays} hari`, color: 'var(--pos)', fill: 'var(--posFill)', status: 'Aman' as const, days: diffDays };
     }
   };
 
@@ -253,7 +253,7 @@ export function Inventory() {
         </div>
         <motion.button
           className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => {
@@ -391,7 +391,7 @@ export function Inventory() {
               <div className="flex gap-2 mt-2">
                 <motion.button
                   className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                  style={{ background: 'var(--accent)', opacity: saving ? 0.6 : 1 }}
+                  style={{ background: 'var(--accentFill)', opacity: saving ? 0.6 : 1 }}
                   whileTap={{ scale: 0.97 }}
                   transition={springs.snappy}
                   onClick={handleSave}
@@ -493,7 +493,7 @@ export function Inventory() {
                     onClick={handleConfirmPurchase}
                     disabled={savingPurchase}
                     className="neu-cta flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
-                    style={{ background: 'var(--accent)' }}
+                    style={{ background: 'var(--accentFill)' }}
                   >
                     {savingPurchase ? 'Menyimpan...' : 'Bayar & Update Stok'}
                   </button>
@@ -634,7 +634,7 @@ export function Inventory() {
 
                     <div className="flex flex-col items-end gap-2.5 flex-shrink-0 ml-2">
                       <span className="text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider text-white"
-                        style={{ background: exp.color }}>
+                        style={{ background: exp.fill }}>
                         {exp.label}
                       </span>
 

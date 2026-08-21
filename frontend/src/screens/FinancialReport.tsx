@@ -309,7 +309,7 @@ export function FinancialReport() {
                       key={p}
                       className="flex-1 py-1.5 rounded-xl text-[11px] font-bold"
                       style={{
-                        background: rangePreset === p ? 'var(--accent)' : 'var(--track)',
+                        background: rangePreset === p ? 'var(--accentFill)' : 'var(--track)',
                         color: rangePreset === p ? 'white' : 'var(--text2)',
                       }}
                       whileTap={{ scale: 0.95 }}
@@ -397,7 +397,7 @@ export function FinancialReport() {
                             </span>
                           </div>
                           <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--track)' }}>
-                            <div className="h-full rounded-full" style={{ background: 'var(--accent)', width: `${percentage}%` }} />
+                            <div className="h-full rounded-full" style={{ background: 'var(--accentFill)', width: `${percentage}%` }} />
                           </div>
                         </div>
                       );
@@ -478,7 +478,7 @@ export function FinancialReport() {
                 <button
                   onClick={() => setShowDebtForm(s => !s)}
                   className="neu-cta px-3 py-1.5 rounded-lg text-xs font-bold text-white"
-                  style={{ background: 'var(--accent)' }}
+                  style={{ background: 'var(--accentFill)' }}
                 >
                   {showDebtForm ? 'Tutup Form' : '+ Catat Baru'}
                 </button>
@@ -502,7 +502,7 @@ export function FinancialReport() {
                           type="button"
                           className="flex-1 py-2 rounded-xl text-xs font-bold"
                           style={{
-                            background: debtType === 'debt' ? 'var(--neg)' : 'var(--track)',
+                            background: debtType === 'debt' ? 'var(--negFill)' : 'var(--track)',
                             color: debtType === 'debt' ? 'white' : 'var(--text2)'
                           }}
                           onClick={() => setDebtType('debt')}
@@ -513,7 +513,7 @@ export function FinancialReport() {
                           type="button"
                           className="flex-1 py-2 rounded-xl text-xs font-bold"
                           style={{
-                            background: debtType === 'receivable' ? 'var(--pos)' : 'var(--track)',
+                            background: debtType === 'receivable' ? 'var(--posFill)' : 'var(--track)',
                             color: debtType === 'receivable' ? 'white' : 'var(--text2)'
                           }}
                           onClick={() => setDebtType('receivable')}
@@ -562,7 +562,7 @@ export function FinancialReport() {
                         onClick={handleAddDebt}
                         disabled={savingDebt}
                         className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
-                        style={{ background: 'var(--accent)' }}
+                        style={{ background: 'var(--accentFill)' }}
                       >
                         {savingDebt ? 'Menyimpan...' : 'Simpan Utang'}
                       </button>
@@ -612,7 +612,7 @@ export function FinancialReport() {
                         onClick={handleAddPayment}
                         disabled={savingPayment}
                         className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white mt-1"
-                        style={{ background: 'var(--accent)' }}
+                        style={{ background: 'var(--accentFill)' }}
                       >
                         {savingPayment ? 'Menyimpan...' : 'Simpan Pembayaran'}
                       </button>
@@ -671,7 +671,7 @@ export function FinancialReport() {
                         style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                       >
                         {/* Side Bar Indicator */}
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: isDebt ? 'var(--neg)' : 'var(--pos)' }} />
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: isDebt ? 'var(--negFill)' : 'var(--posFill)' }} />
 
                         {/* Top Header */}
                         <div className="flex items-start justify-between pl-1">
@@ -712,7 +712,7 @@ export function FinancialReport() {
                               <div
                                 className="h-full rounded-full"
                                 style={{
-                                  background: isDebt ? 'var(--neg)' : 'var(--pos)',
+                                  background: isDebt ? 'var(--negFill)' : 'var(--posFill)',
                                   width: `${Math.min(100, (paidAmount / debt.amount_idr) * 100)}%`
                                 }}
                               />

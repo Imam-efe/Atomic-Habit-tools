@@ -262,7 +262,7 @@ export function Habits() {
         </div>
         <motion.button
           className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)' }}
+          style={{ background: 'var(--accentFill)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={() => setShowAdd(s => !s)}
@@ -347,7 +347,7 @@ export function Habits() {
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
                         style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
+                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accentFill)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
                         </div>
                         <span className="text-xs truncate" style={{ color: 'var(--text)' }}>
@@ -455,7 +455,7 @@ export function Habits() {
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
                         style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
+                        <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accentFill)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
                         </div>
                         <span className="text-xs truncate" style={{ color: 'var(--text)' }}>
@@ -606,13 +606,13 @@ export function Habits() {
                     <div className="mt-3 pt-2.5 border-t text-[11px] flex justify-between items-center" style={{ borderColor: 'var(--sep)', color: 'var(--text2)' }}>
                       <div className="flex flex-col">
                         <span>Versi 2-menit:</span>
-                        <span className="font-bold text-white mt-0.5">{habit.twoMin}</span>
+                        <span className="font-bold mt-0.5" style={{ color: 'var(--text)' }}>{habit.twoMin}</span>
                       </div>
                       {!habit.doneToday ? (
                         <button
                           onClick={(e) => toggle(habit.id, e, true)}
                           className="px-2.5 py-1 rounded-lg font-bold text-[10px] text-white flex items-center gap-1 transition-all"
-                          style={{ background: `linear-gradient(135deg, ${habit.color}, #5BD97A)` }}
+                          style={{ background: 'var(--accentFill)' }}
                         >
                           ⚡ Rebound 2M
                         </button>

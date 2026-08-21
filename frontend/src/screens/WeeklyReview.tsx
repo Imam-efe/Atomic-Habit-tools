@@ -244,7 +244,7 @@ export function WeeklyReview() {
 
           <motion.button
             className="w-full py-3.5 rounded-[18px] font-bold text-sm text-white"
-            style={{ background: saved ? 'var(--pos)' : 'var(--accent)', opacity: saving ? 0.7 : 1 }}
+            style={{ background: saved ? 'var(--posFill)' : 'var(--accentFill)', opacity: saving ? 0.7 : 1 }}
             onClick={handleSave}
             disabled={saving}
             whileTap={{ scale: 0.97 }}
