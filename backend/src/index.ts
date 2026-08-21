@@ -84,6 +84,25 @@ app.route('/api/scheduled-notifications', scheduledNotifications);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
+// Queue a notification event so external consumers (iOS Shortcuts) can poll it
+async function queueNotificationEvent(
+  env: Env,
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  payload?: Record<string, unknown>
+) {
+  try {
+    await env.DB.prepare(`
+      INSERT INTO notification_events (id, user_id, type, title, body, payload)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+    `).bind(nanoid(), userId, type, title, body, payload ? JSON.stringify(payload) : null).run();
+  } catch (err) {
+    console.error('Failed to queue notification event', err);
+  }
+}
+
 // Trigger push notifications for habit reminders matching the current time (Jakarta GMT+7)
 async function triggerReminders(env: Env) {
   const now = new Date();
@@ -121,12 +140,40 @@ async function triggerReminders(env: Env) {
 async function processScheduledNotifications(env: Env) {
   const now = Math.floor(Date.now() / 1000);
 
+<<<<<<< HEAD
   const due = await env.DB.prepare(`
     SELECT * FROM scheduled_notifications
     WHERE is_active = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?1
     ORDER BY next_run_at ASC
     LIMIT 50
   `).bind(now).all<ScheduledNotificationRow>();
+=======
+  // Queue events for Shortcuts polling (dedupe per user+habit — subscriptions join can duplicate rows)
+  const queued = new Set<string>();
+  for (const row of habitsToRemind.results) {
+    const key = `${row.user_id}:${row.id}`;
+    if (queued.has(key)) continue;
+    queued.add(key);
+    await queueNotificationEvent(
+      env,
+      row.user_id,
+      'habit_reminder',
+      'Pengingat Kebiasaan',
+      `Ayo lakukan kebiasaanmu: ${row.name}! ✨`,
+      { habitId: row.id, habitName: row.name, url: '/kebiasaan' }
+    );
+  }
+
+  const promises = habitsToRemind.results.map(async (row) => {
+    const subscription = {
+      endpoint: row.endpoint,
+      expirationTime: null,
+      keys: {
+        p256dh: row.p256dh,
+        auth: row.auth,
+      },
+    };
+>>>>>>> origin/main
 
   for (const row of due.results ?? []) {
     // A slow previous run can overlap the next cron tick — don't fire twice in one minute
@@ -248,8 +295,38 @@ async function triggerExpiryAlerts(env: Env) {
       url: '/lainnya',
     });
 
+<<<<<<< HEAD
     const pushResult = await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
     if (pushResult.subscriptions === 0) continue;
+=======
+    await queueNotificationEvent(env, userId, 'expiry_alert', '⚠️ Stok Mau Kadaluarsa', body, {
+      items: userItems.map(i => ({ name: i.name, expiryDate: i.expiry_date })),
+      url: '/lainnya',
+    });
+
+    for (const sub of subs.results) {
+      try {
+        const payload = await buildPushPayload(message, {
+          endpoint: sub.endpoint,
+          expirationTime: null,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        }, vapid);
+        if (payload.headers) {
+          if (typeof (payload.headers as any).set === 'function') {
+            (payload.headers as any).set('Urgency', 'high');
+          } else {
+            (payload.headers as any)['Urgency'] = 'high';
+          }
+        }
+        const res = await fetch(sub.endpoint, payload);
+        if (res.status === 410 || res.status === 404) {
+          await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1').bind(sub.endpoint).run();
+        }
+      } catch (err) {
+        console.error('Expiry alert push failed', err);
+      }
+    }
+>>>>>>> origin/main
 
     // Mark all notified items as sent today
     const placeholders = userItems.map((_, i) => `?${i + 2}`).join(',');
@@ -274,10 +351,13 @@ const handler = {
       env.DB.prepare(
         "DELETE FROM notification_events WHERE created_at < unixepoch() - 7 * 86400"
       ).run().catch((err) => console.error('Notification event cleanup failed', err)),
+<<<<<<< HEAD
       // Keep 30 days of delivery history
       env.DB.prepare(
         "DELETE FROM notification_deliveries WHERE fired_at < unixepoch() - 30 * 86400"
       ).run().catch((err) => console.error('Delivery history cleanup failed', err)),
+=======
+>>>>>>> origin/main
     ]));
   }
 };
