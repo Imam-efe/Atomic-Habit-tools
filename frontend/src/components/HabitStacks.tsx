@@ -197,7 +197,7 @@ export default function HabitStacks({ habits, onRefresh }: Props) {
               </div>
               <button
                 onClick={() => handleDeleteStack(stack.id)}
-                className="text-red-500 text-sm font-semibold hover:opacity-70"
+                className="text-[var(--neg)] text-sm font-semibold hover:opacity-70"
               >
                 Delete
               </button>

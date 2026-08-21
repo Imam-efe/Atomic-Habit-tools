@@ -345,7 +345,7 @@ export function NotificationCenter() {
       <div className="flex items-center gap-3 mb-2">
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={goBack}
@@ -380,7 +380,7 @@ export function NotificationCenter() {
       {error && (
         <div
           className="rounded-xl px-4 py-3 mb-4 text-sm"
-          style={{ background: 'rgba(255,69,58,0.12)', color: '#FF453A', border: '1px solid rgba(255,69,58,0.3)' }}
+          style={{ background: 'rgba(255,69,58,0.12)', color: 'var(--neg)', border: '1px solid rgba(255,69,58,0.3)' }}
         >
           {error}
         </div>
@@ -397,7 +397,7 @@ export function NotificationCenter() {
               <motion.button
                 key={preset.label}
                 className="px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap flex-shrink-0"
-                style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text)', boxShadow: 'var(--neu-raised)' }}
                 whileTap={{ scale: 0.95 }}
                 transition={springs.snappy}
                 onClick={() => applyPreset(preset)}
@@ -414,7 +414,7 @@ export function NotificationCenter() {
         {showForm && (
           <motion.div
             className="rounded-[22px] p-5 mb-5 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -485,7 +485,7 @@ export function NotificationCenter() {
                     <button
                       key={m}
                       className="px-2.5 py-1 rounded-lg text-[11px] font-semibold"
-                      style={{ background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-inset)' }}
                       onClick={() => setIntervalValue(String(m))}
                     >
                       {m >= 60 ? `${m / 60} jam` : `${m} mnt`}
@@ -493,7 +493,7 @@ export function NotificationCenter() {
                   ))}
                 </div>
                 {Number(intervalValue) < 5 && Number(intervalValue) >= 1 && (
-                  <p className="text-[11px] px-1" style={{ color: '#FF9F0A' }}>
+                  <p className="text-[11px] px-1" style={{ color: 'var(--warn)' }}>
                     Interval di bawah 5 menit berisiko dibatasi Apple — sebagian notifikasi bisa tidak sampai.
                   </p>
                 )}
@@ -643,7 +643,7 @@ export function NotificationCenter() {
               </motion.button>
               <motion.button
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-inset)' }}
                 whileTap={{ scale: 0.97 }}
                 transition={springs.snappy}
                 onClick={() => { setShowForm(false); resetForm(); setError(null); }}
@@ -657,7 +657,7 @@ export function NotificationCenter() {
 
       {!showForm && (
         <motion.button
-          className="w-full py-3 rounded-[18px] text-sm font-semibold text-white mb-5"
+          className="neu-cta w-full py-3 rounded-[18px] text-sm font-semibold text-white mb-5"
           style={{ background: 'var(--accent)' }}
           whileTap={{ scale: 0.98 }}
           transition={springs.snappy}
@@ -678,7 +678,7 @@ export function NotificationCenter() {
       ) : items.length === 0 ? (
         <div
           className="rounded-[22px] p-8 text-center animate-[fyBreathe_3.5s_ease-in-out_infinite]"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>Belum ada pengingat</p>
           <p className="text-xs" style={{ color: 'var(--text2)' }}>
@@ -693,7 +693,7 @@ export function NotificationCenter() {
               className="rounded-[18px] p-4"
               style={{
                 background: 'var(--surface)',
-                border: '1px solid var(--sep)',
+                boxShadow: item.isActive ? 'var(--neu-raised)' : 'var(--neu-raised-sm)',
                 opacity: item.isActive ? 1 : 0.55,
               }}
               initial={{ opacity: 0, y: 12 }}
@@ -740,7 +740,7 @@ export function NotificationCenter() {
               <div className="flex gap-2">
                 <motion.button
                   className="flex-1 py-2 rounded-lg text-[11px] font-semibold"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   whileTap={{ scale: 0.95 }}
                   transition={springs.snappy}
                   disabled={busyId === item.id}
@@ -750,7 +750,7 @@ export function NotificationCenter() {
                 </motion.button>
                 <motion.button
                   className="flex-1 py-2 rounded-lg text-[11px] font-semibold"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   whileTap={{ scale: 0.95 }}
                   transition={springs.snappy}
                   onClick={() => openEdit(item)}
@@ -759,7 +759,7 @@ export function NotificationCenter() {
                 </motion.button>
                 <motion.button
                   className="px-3 py-2 rounded-lg text-[11px] font-semibold"
-                  style={{ background: 'var(--bg)', color: '#FF453A', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--neg)', boxShadow: 'var(--neu-inset)' }}
                   whileTap={{ scale: 0.95 }}
                   transition={springs.snappy}
                   disabled={busyId === item.id}
@@ -789,7 +789,7 @@ export function NotificationCenter() {
           {showHistory && (
             <div
               className="rounded-[18px] overflow-hidden mt-1"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             >
               {deliveries.map((delivery, index) => (
                 <div key={delivery.id}>
@@ -806,7 +806,7 @@ export function NotificationCenter() {
                     <span
                       className="text-[10px] font-bold px-2 py-0.5 rounded flex-shrink-0"
                       style={{
-                        color: delivery.status === 'sent' ? '#34C759' : '#FF9F0A',
+                        color: delivery.status === 'sent' ? 'var(--pos)' : 'var(--warn)',
                         background: delivery.status === 'sent' ? 'rgba(52,199,89,0.15)' : 'rgba(255,159,10,0.15)',
                       }}
                     >

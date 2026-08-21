@@ -8,6 +8,18 @@ export const springs = {
   nav: { type: 'spring' as const, stiffness: 380, damping: 36, mass: 1 },
 };
 
+/**
+ * Neumorphic surfaces communicate by depth, so taps scale far less than they
+ * would on a flat card — the shadow swap carries the feedback instead. Pair
+ * these with `whileTap` and the `.neu-press` class.
+ */
+export const press = {
+  /** Cards and list rows. */
+  surface: { scale: 0.985 },
+  /** Chips, icon buttons, tab items. */
+  control: { scale: 0.94 },
+};
+
 export const duration = {
   micro: 0.15,
   component: 0.32,

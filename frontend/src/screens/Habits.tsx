@@ -23,7 +23,7 @@ interface Habit {
   reminderTime?: string | null;
 }
 
-const COLORS = ['#7C5CFF', '#34C759', '#0A84FF', '#FF9F0A', '#FF453A', '#FF2D55'];
+const COLORS = ['#7C5CFF', 'var(--pos)', '#0A84FF', 'var(--warn)', 'var(--neg)', '#FF2D55'];
 
 export function Habits() {
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -35,7 +35,7 @@ export function Habits() {
   const [newName, setNewName] = useState('');
   const [newCue, setNewCue] = useState('');
   const [newTwoMin, setNewTwoMin] = useState('');
-  const [newColor, setNewColor] = useState('#34C759');
+  const [newColor, setNewColor] = useState('var(--pos)');
   const [newGoalIds, setNewGoalIds] = useState<string[]>([]);
   const [newReminderTime, setNewReminderTime] = useState('');
   const [saving, setSaving] = useState(false);
@@ -45,7 +45,7 @@ export function Habits() {
   const [editName, setEditName] = useState('');
   const [editCue, setEditCue] = useState('');
   const [editTwoMin, setEditTwoMin] = useState('');
-  const [editColor, setEditColor] = useState('#34C759');
+  const [editColor, setEditColor] = useState('var(--pos)');
   const [editGoalIds, setEditGoalIds] = useState<string[]>([]);
   const [editReminderTime, setEditReminderTime] = useState('');
   const [updating, setUpdating] = useState(false);
@@ -83,7 +83,7 @@ export function Habits() {
     const ctx = cv.getContext('2d');
     if (!ctx) return;
 
-    const colors = ['#7C5CFF', '#34C759', '#FF9F0A', '#FF375F', '#0A84FF', '#5E5CE6'];
+    const colors = ['#7C5CFF', 'var(--pos)', 'var(--warn)', '#FF375F', '#0A84FF', '#5E5CE6'];
     const N = isMilestone ? 90 : 30;
     const parts: any[] = [];
 
@@ -261,7 +261,7 @@ export function Habits() {
           )}
         </div>
         <motion.button
-          className="w-10 h-10 rounded-full flex items-center justify-center"
+          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
           style={{ background: 'var(--accent)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
@@ -278,7 +278,7 @@ export function Habits() {
         {showAdd && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -287,7 +287,7 @@ export function Habits() {
             <p className="text-sm font-semibold text-white">Tambah Kebiasaan Baru</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Nama kebiasaan..."
               value={newName}
               onChange={e => setNewName(e.target.value)}
@@ -295,14 +295,14 @@ export function Habits() {
             />
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Setelah... (cue, misal: kopi pagi)"
               value={newCue}
               onChange={e => setNewCue(e.target.value)}
             />
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               placeholder="Versi 2-menit... (misal: buka buku 1 halaman)"
               value={newTwoMin}
               onChange={e => setNewTwoMin(e.target.value)}
@@ -314,7 +314,7 @@ export function Habits() {
               <input
                 type="time"
                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 value={newReminderTime}
                 onChange={e => setNewReminderTime(e.target.value)}
               />
@@ -345,7 +345,7 @@ export function Habits() {
                         key={g.id}
                         onClick={() => toggleGoalInAdd(g.id)}
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
-                        style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
                         <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
@@ -372,7 +372,7 @@ export function Habits() {
               </motion.button>
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => { setShowAdd(false); setNewName(''); setNewCue(''); setNewTwoMin(''); setNewGoalIds([]); }}
               >
                 Batal
@@ -387,7 +387,7 @@ export function Habits() {
         {editingHabit && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -396,21 +396,21 @@ export function Habits() {
             <p className="text-sm font-semibold text-white">Ubah Pengaturan Kebiasaan</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={editName}
               onChange={e => setEditName(e.target.value)}
               autoFocus
             />
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={editCue}
               placeholder="Setelah..."
               onChange={e => setEditCue(e.target.value)}
             />
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
               value={editTwoMin}
               placeholder="Versi 2-menit..."
               onChange={e => setEditTwoMin(e.target.value)}
@@ -422,7 +422,7 @@ export function Habits() {
               <input
                 type="time"
                 className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 value={editReminderTime}
                 onChange={e => setEditReminderTime(e.target.value)}
               />
@@ -453,7 +453,7 @@ export function Habits() {
                         key={g.id}
                         onClick={() => toggleGoalInEdit(g.id)}
                         className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer"
-                        style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
                         <div className="w-4 h-4 rounded border flex items-center justify-center" style={{ borderColor: isChecked ? 'var(--accent)' : 'var(--text3)', background: isChecked ? 'var(--accent)' : 'transparent' }}>
                           {isChecked && <span className="text-[9px] text-white">✓</span>}
@@ -480,7 +480,7 @@ export function Habits() {
               </motion.button>
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => setEditingHabit(null)}
               >
                 Batal
@@ -518,8 +518,8 @@ export function Habits() {
                   className="rounded-[18px] p-4 flex flex-col cursor-pointer border transition-all"
                   style={{
                     background: 'var(--surface)',
-                    borderColor: isSelected ? habit.color : 'var(--sep)',
-                    boxShadow: isSelected ? `${habit.color}15 0 8px 24px` : 'none',
+                    borderColor: isSelected ? habit.color : 'transparent',
+                    boxShadow: isSelected ? 'var(--neu-pressed)' : 'var(--neu-raised)',
                   }}
                 >
                   {/* Upper Row: Check & Details */}
@@ -653,7 +653,7 @@ export function Habits() {
         <motion.div
           key={loopHabit.id}
           className="rounded-[22px] p-5 mb-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={springs.gentle}
@@ -662,28 +662,28 @@ export function Habits() {
           <p className="text-xs mb-4" style={{ color: 'var(--text2)' }}>Membangun kebiasaan melalui 4 hukum psikologi</p>
 
           <div className="grid grid-cols-2 gap-3.5">
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
               <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">1. Cue (Petunjuk)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 {loopHabit.triggerCue ? `Setelah ${loopHabit.triggerCue}` : 'Set alarm pagi / rutinitas tetap'}
               </p>
             </div>
 
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
               <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500">2. Craving (Gairah)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 Membangun kebiasaan 1% lebih konsisten
               </p>
             </div>
 
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-green-500">3. Response (Tanggapan)</span>
+            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--pos)]">3. Response (Tanggapan)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 {loopHabit.twoMin ? `Versi 2-menit: ${loopHabit.twoMin}` : `Mulai lakukan ${loopHabit.name}`}
               </p>
             </div>
 
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
               <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500">4. Reward (Penghargaan)</span>
               <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
                 Streak bertambah & merasa bangga!

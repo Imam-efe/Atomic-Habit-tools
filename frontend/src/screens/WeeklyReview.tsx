@@ -86,7 +86,7 @@ export function WeeklyReview() {
   };
 
   const consistencyColor = (pct: number) =>
-    pct >= 80 ? '#34C759' : pct >= 50 ? '#FF9F0A' : '#FF453A';
+    pct >= 80 ? 'var(--pos)' : pct >= 50 ? 'var(--warn)' : 'var(--neg)';
 
   return (
     <div
@@ -96,7 +96,7 @@ export function WeeklyReview() {
       <div className="flex items-center gap-3 mb-6">
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={goBack}
@@ -126,7 +126,7 @@ export function WeeklyReview() {
         <div className="flex flex-col gap-4">
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={springs.gentle}
@@ -158,7 +158,7 @@ export function WeeklyReview() {
 
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.05 }}
@@ -191,7 +191,7 @@ export function WeeklyReview() {
 
           <motion.div
             className="rounded-[20px] p-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springs.gentle, delay: 0.1 }}
@@ -223,7 +223,7 @@ export function WeeklyReview() {
             <motion.div
               key={field.label}
               className="rounded-[20px] p-5"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...springs.gentle, delay: 0.12 + i * 0.05 }}
@@ -234,7 +234,7 @@ export function WeeklyReview() {
               <textarea
                 rows={3}
                 className="w-full resize-none rounded-xl px-3 py-2.5 text-sm outline-none leading-relaxed"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder={field.placeholder}
                 value={field.value}
                 onChange={e => field.setter(e.target.value)}
@@ -244,7 +244,7 @@ export function WeeklyReview() {
 
           <motion.button
             className="w-full py-3.5 rounded-[18px] font-bold text-sm text-white"
-            style={{ background: saved ? '#34C759' : 'var(--accent)', opacity: saving ? 0.7 : 1 }}
+            style={{ background: saved ? 'var(--pos)' : 'var(--accent)', opacity: saving ? 0.7 : 1 }}
             onClick={handleSave}
             disabled={saving}
             whileTap={{ scale: 0.97 }}

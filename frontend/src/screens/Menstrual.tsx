@@ -58,7 +58,7 @@ function formatReadableDate(dateStr: string): string {
 const PHASE_DETAILS = {
   menstrual: {
     name: 'Menstruasi',
-    color: '#FF453A',
+    color: 'var(--neg)',
     bg: 'rgba(255, 69, 58, 0.15)',
     gradient: 'linear-gradient(135deg, #FF453A, #FF2D55)',
     desc: 'Tubuh meluruhkan lapisan dinding rahim karena tidak terjadi pembuahan. Estrogen & progesteron berada pada kadar terendah.',
@@ -68,7 +68,7 @@ const PHASE_DETAILS = {
   },
   follicular: {
     name: 'Folikular',
-    color: '#34C759',
+    color: 'var(--pos)',
     bg: 'rgba(52, 199, 89, 0.15)',
     gradient: 'linear-gradient(135deg, #34C759, #5BD97A)',
     desc: 'FSH meningkat memicu perkembangan folikel telur. Estrogen mulai naik, membantu menebalkan kembali dinding rahim dan meningkatkan stamina.',
@@ -88,7 +88,7 @@ const PHASE_DETAILS = {
   },
   luteal: {
     name: 'Luteal',
-    color: '#FF9F0A',
+    color: 'var(--warn)',
     bg: 'rgba(255, 159, 10, 0.15)',
     gradient: 'linear-gradient(135deg, #FF9F0A, #FFB740)',
     desc: 'Folikel kosong berubah menjadi korpus luteum yang memproduksi progesteron untuk mempersiapkan rahim. Jika tidak dibuahi, kadar hormon akan drop tajam di akhir fase.',
@@ -439,7 +439,7 @@ export function Menstrual() {
           <motion.button
             onClick={() => setShowSettings(s => !s)}
             className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             whileTap={{ scale: 0.9 }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2" strokeLinecap="round">
@@ -450,7 +450,7 @@ export function Menstrual() {
           {/* Add Log Button */}
           <motion.button
             onClick={() => setShowAddLog(s => !s)}
-            className="w-10 h-10 rounded-full flex items-center justify-center"
+            className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
             style={{ background: 'var(--accent)' }}
             whileTap={{ scale: 0.9 }}
             transition={springs.snappy}
@@ -472,7 +472,7 @@ export function Menstrual() {
         {showSettings && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -488,7 +488,7 @@ export function Menstrual() {
                   value={cycleLengthVal}
                   onChange={(e) => setCycleLengthVal(parseInt(e.target.value) || 28)}
                   className="w-full px-3 py-2 text-sm rounded-lg"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--sep)', color: 'var(--text)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 />
               </div>
               <div className="flex-1">
@@ -500,7 +500,7 @@ export function Menstrual() {
                   value={periodLengthVal}
                   onChange={(e) => setPeriodLengthVal(parseInt(e.target.value) || 5)}
                   className="w-full px-3 py-2 text-sm rounded-lg"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--sep)', color: 'var(--text)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 />
               </div>
             </div>
@@ -515,7 +515,7 @@ export function Menstrual() {
               <button
                 onClick={handleSaveSettings}
                 disabled={savingSettings}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white"
+                className="neu-cta px-3 py-1.5 text-xs font-semibold rounded-lg text-white"
                 style={{ background: 'var(--accent)' }}
               >
                 {savingSettings ? 'Menyimpan...' : 'Simpan'}
@@ -530,7 +530,7 @@ export function Menstrual() {
         {showAddLog && (
           <motion.div
             className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -544,7 +544,7 @@ export function Menstrual() {
                   value={startDateVal}
                   onChange={(e) => setStartDateVal(e.target.value)}
                   className="w-full px-3 py-2 text-sm rounded-lg"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--sep)', color: 'var(--text)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   required
                 />
               </div>
@@ -555,7 +555,7 @@ export function Menstrual() {
                   value={endDateVal}
                   onChange={(e) => setEndDateVal(e.target.value)}
                   className="w-full px-3 py-2 text-sm rounded-lg"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--sep)', color: 'var(--text)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 />
               </div>
               <div>
@@ -565,7 +565,7 @@ export function Menstrual() {
                   value={notesVal}
                   onChange={(e) => setNotesVal(e.target.value)}
                   className="w-full px-3 py-2 text-sm rounded-lg h-16 resize-none"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--sep)', color: 'var(--text)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 />
               </div>
             </div>
@@ -580,7 +580,7 @@ export function Menstrual() {
               <button
                 onClick={handleAddLog}
                 disabled={savingLog || !startDateVal}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white"
+                className="neu-cta px-3 py-1.5 text-xs font-semibold rounded-lg text-white"
                 style={{ background: 'var(--accent)' }}
               >
                 {savingLog ? 'Menyimpan...' : 'Simpan Log'}
@@ -658,7 +658,7 @@ export function Menstrual() {
           {/* Calendar Card */}
           <div
             className="rounded-[24px] p-5 flex flex-col gap-4 shadow-sm"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           >
             {/* Calendar Header */}
             <div className="flex items-center justify-between">
@@ -712,12 +712,12 @@ export function Menstrual() {
                 let fontStyle = 'font-semibold';
 
                 if (isLogged) {
-                  dayBg = '#FF453A';
+                  dayBg = 'var(--neg)';
                   textColor = '#FFFFFF';
                 } else if (isPred) {
                   dayBg = 'rgba(255, 69, 58, 0.15)';
                   borderStyle = '1px dashed #FF453A';
-                  textColor = '#FF453A';
+                  textColor = 'var(--neg)';
                 } else if (isFert) {
                   dayBg = 'rgba(175, 82, 222, 0.15)';
                   textColor = '#AF52DE';
@@ -786,7 +786,7 @@ export function Menstrual() {
           {/* Selected Date Details */}
           <div
             className="rounded-[24px] p-5 flex flex-col gap-4 shadow-sm"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           >
             <div>
               <p className="text-[11px] font-bold uppercase tracking-widest" style={{ color: 'var(--text3)' }}>
@@ -868,7 +868,7 @@ export function Menstrual() {
                       setStartDateVal(selectedDayStr);
                       setShowAddLog(true);
                     }}
-                    className="w-full py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5"
+                    className="neu-cta w-full py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-1.5"
                     style={{ background: 'var(--accent)' }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -884,7 +884,7 @@ export function Menstrual() {
           {/* History List */}
           <div
             className="rounded-[24px] p-5 flex flex-col gap-4 shadow-sm"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           >
             <h3 className="font-bold text-[17px]" style={{ color: 'var(--text)' }}>Riwayat Log Menstruasi</h3>
 
@@ -904,7 +904,7 @@ export function Menstrual() {
                           {formatReadableDate(log.startDate)}
                         </p>
                         <span className="text-[10px]" style={{ color: 'var(--text3)' }}>sampai</span>
-                        <p className="text-sm font-bold" style={{ color: log.endDate ? 'var(--text)' : '#FF453A' }}>
+                        <p className="text-sm font-bold" style={{ color: log.endDate ? 'var(--text)' : 'var(--neg)' }}>
                           {log.endDate ? formatReadableDate(log.endDate) : '(Berjalan)'}
                         </p>
                       </div>

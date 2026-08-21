@@ -101,7 +101,7 @@ export function HabitHeatmap() {
       <div className="flex items-center gap-3 mb-6">
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
           onClick={goBack}
@@ -135,7 +135,7 @@ export function HabitHeatmap() {
                 style={{
                   background: selectedHabit === h.habitId ? h.color : 'var(--surface)',
                   color: selectedHabit === h.habitId ? 'white' : 'var(--text2)',
-                  border: `1px solid ${selectedHabit === h.habitId ? h.color : 'var(--sep)'}`,
+                  boxShadow: selectedHabit === h.habitId ? 'var(--neu-pressed)' : 'var(--neu-raised-sm)',
                 }}
                 onClick={() => setSelectedHabit(h.habitId)}
                 whileTap={{ scale: 0.93 }}
@@ -154,11 +154,11 @@ export function HabitHeatmap() {
               transition={springs.gentle}
             >
               <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="rounded-[16px] p-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+                <div className="rounded-[16px] p-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                   <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text3)' }}>Total Hari</p>
                   <p className="text-2xl font-black" style={{ color: activeHabit.color }}>{totalDone}</p>
                 </div>
-                <div className="rounded-[16px] p-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+                <div className="rounded-[16px] p-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                   <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text3)' }}>Streak Terpanjang</p>
                   <p className="text-2xl font-black" style={{ color: activeHabit.color }}>{longestStreak}🔥</p>
                 </div>
@@ -166,7 +166,7 @@ export function HabitHeatmap() {
 
               <div
                 className="rounded-[20px] p-4 overflow-x-auto"
-                style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               >
                 <div className="relative h-5 mb-1" style={{ minWidth: weeks.length * 13 }}>
                   {monthLabels.map(({ month, col }) => (

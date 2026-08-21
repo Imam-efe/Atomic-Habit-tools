@@ -260,7 +260,7 @@ export function FinancialReport() {
         <button
           onClick={() => setSubScreen(null)}
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <span style={{ color: 'var(--accent)' }} className="text-xl">‹</span>
         </button>
@@ -275,7 +275,7 @@ export function FinancialReport() {
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-5" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+      <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-5" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         {(['pnl', 'balance', 'debt'] as const).map(tab => (
           <button
             key={tab}
@@ -324,24 +324,24 @@ export function FinancialReport() {
                   <div className="flex gap-2 items-center">
                     <input type="date"
                       className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
                     <span className="text-xs" style={{ color: 'var(--text3)' }}>–</span>
                     <input type="date"
                       className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={customTo} onChange={e => setCustomTo(e.target.value)} />
                   </div>
                 )}
               </div>
 
               {/* Summary Card */}
-              <div className="rounded-[20px] p-5 flex flex-col gap-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+              <div className="rounded-[20px] p-5 flex flex-col gap-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                 <div>
                   <p className="text-[10px] font-bold tracking-wider uppercase mb-1" style={{ color: 'var(--text3)' }}>
                     HASIL BERSIH (NET INCOME)
                   </p>
-                  <h2 className="text-2xl font-black" style={{ color: report.pnl.net_profit >= 0 ? '#34C759' : '#FF453A' }}>
+                  <h2 className="text-2xl font-black" style={{ color: report.pnl.net_profit >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
                     {formatRp(report.pnl.net_profit)}
                   </h2>
                 </div>
@@ -352,14 +352,14 @@ export function FinancialReport() {
                     <span className="text-base font-bold text-emerald-500">{formatRp(report.pnl.income)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-red-400 block uppercase mb-0.5">Total Pengeluaran</span>
-                    <span className="text-base font-bold text-red-500">{formatRp(report.pnl.expense)}</span>
+                    <span className="text-[10px] font-bold text-[var(--neg)] block uppercase mb-0.5">Total Pengeluaran</span>
+                    <span className="text-base font-bold text-[var(--neg)]">{formatRp(report.pnl.expense)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Incomes Breakdown */}
-              <div className="rounded-[20px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+              <div className="rounded-[20px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                 <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: 'var(--text2)' }}>
                   💸 SUMBER PENDAPATAN
                 </p>
@@ -378,7 +378,7 @@ export function FinancialReport() {
               </div>
 
               {/* Expenses Breakdown */}
-              <div className="rounded-[20px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+              <div className="rounded-[20px] p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                 <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: 'var(--text2)' }}>
                   📉 POS PENGELUARAN
                 </p>
@@ -412,12 +412,12 @@ export function FinancialReport() {
           {activeTab === 'balance' && report && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={springs.gentle} className="flex flex-col gap-4">
               {/* Net Worth Hero */}
-              <div className="rounded-[20px] p-5 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+              <div className="rounded-[20px] p-5 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                 <div>
                   <p className="text-[10px] font-bold tracking-wider uppercase mb-1" style={{ color: 'var(--text3)' }}>
                     KEKAYAAN BERSIH (NET WORTH)
                   </p>
-                  <h2 className="text-3xl font-black" style={{ color: report.balance_sheet.net_worth >= 0 ? 'var(--accent)' : '#FF453A' }}>
+                  <h2 className="text-3xl font-black" style={{ color: report.balance_sheet.net_worth >= 0 ? 'var(--accent)' : 'var(--neg)' }}>
                     {formatRp(report.balance_sheet.net_worth)}
                   </h2>
                   <p className="text-[10px] mt-1.5 leading-relaxed" style={{ color: 'var(--text3)' }}>
@@ -427,10 +427,10 @@ export function FinancialReport() {
               </div>
 
               {/* Assets Section */}
-              <div className="rounded-[20px] p-4 flex flex-col gap-3.5" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+              <div className="rounded-[20px] p-4 flex flex-col gap-3.5" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                 <div className="flex justify-between items-center" style={{ borderBottom: '1px solid var(--sep)', paddingBottom: '8px' }}>
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#34C759' }}>🟢 ASET (ASSETS)</span>
-                  <span className="text-sm font-bold" style={{ color: '#34C759' }}>{formatRp(report.balance_sheet.assets.total + report.balance_sheet.assets.receivables)}</span>
+                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--pos)' }}>🟢 ASET (ASSETS)</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--pos)' }}>{formatRp(report.balance_sheet.assets.total + report.balance_sheet.assets.receivables)}</span>
                 </div>
 
                 <div className="flex flex-col gap-2.5 pl-1.5">
@@ -453,16 +453,16 @@ export function FinancialReport() {
               </div>
 
               {/* Liabilities Section */}
-              <div className="rounded-[20px] p-4 flex flex-col gap-3.5" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+              <div className="rounded-[20px] p-4 flex flex-col gap-3.5" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
                 <div className="flex justify-between items-center" style={{ borderBottom: '1px solid var(--sep)', paddingBottom: '8px' }}>
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#FF453A' }}>🔴 KEWAJIBAN / UTANG (LIABILITIES)</span>
-                  <span className="text-sm font-bold" style={{ color: '#FF453A' }}>{formatRp(report.balance_sheet.liabilities.total)}</span>
+                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--neg)' }}>🔴 KEWAJIBAN / UTANG (LIABILITIES)</span>
+                  <span className="text-sm font-bold" style={{ color: 'var(--neg)' }}>{formatRp(report.balance_sheet.liabilities.total)}</span>
                 </div>
 
                 <div className="flex flex-col gap-2.5 pl-1.5">
                   <div className="flex justify-between items-center text-xs">
                     <span style={{ color: 'var(--text2)' }}>Utang Belum Lunas</span>
-                    <span className="font-bold text-red-500">{formatRp(report.balance_sheet.liabilities.total)}</span>
+                    <span className="font-bold text-[var(--neg)]">{formatRp(report.balance_sheet.liabilities.total)}</span>
                   </div>
                 </div>
               </div>
@@ -477,7 +477,7 @@ export function FinancialReport() {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 pl-1">Daftar Utang & Piutang</h3>
                 <button
                   onClick={() => setShowDebtForm(s => !s)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-white"
+                  className="neu-cta px-3 py-1.5 rounded-lg text-xs font-bold text-white"
                   style={{ background: 'var(--accent)' }}
                 >
                   {showDebtForm ? 'Tutup Form' : '+ Catat Baru'}
@@ -489,7 +489,7 @@ export function FinancialReport() {
                 {showDebtForm && (
                   <motion.div
                     className="rounded-[18px] p-4"
-                    style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
@@ -502,7 +502,7 @@ export function FinancialReport() {
                           type="button"
                           className="flex-1 py-2 rounded-xl text-xs font-bold"
                           style={{
-                            background: debtType === 'debt' ? '#FF453A' : 'var(--track)',
+                            background: debtType === 'debt' ? 'var(--neg)' : 'var(--track)',
                             color: debtType === 'debt' ? 'white' : 'var(--text2)'
                           }}
                           onClick={() => setDebtType('debt')}
@@ -513,7 +513,7 @@ export function FinancialReport() {
                           type="button"
                           className="flex-1 py-2 rounded-xl text-xs font-bold"
                           style={{
-                            background: debtType === 'receivable' ? '#34C759' : 'var(--track)',
+                            background: debtType === 'receivable' ? 'var(--pos)' : 'var(--track)',
                             color: debtType === 'receivable' ? 'white' : 'var(--text2)'
                           }}
                           onClick={() => setDebtType('receivable')}
@@ -524,7 +524,7 @@ export function FinancialReport() {
 
                       <input
                         className="w-full px-3.5 py-2 rounded-xl text-xs outline-none"
-                        style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                         placeholder="Nama Orang (Pemberi Utang / Peminjam)"
                         value={personName}
                         onChange={e => setPersonName(e.target.value)}
@@ -532,7 +532,7 @@ export function FinancialReport() {
 
                       <input
                         className="w-full px-3.5 py-2 rounded-xl text-xs outline-none"
-                        style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                         placeholder="Jumlah (Rp)"
                         value={debtAmount}
                         onChange={e => setDebtAmount(e.target.value.replace(/\D/g, ''))}
@@ -544,7 +544,7 @@ export function FinancialReport() {
                         <input
                           type="date"
                           className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                          style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                          style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                           value={dueDate}
                           onChange={e => setDueDate(e.target.value)}
                         />
@@ -552,7 +552,7 @@ export function FinancialReport() {
 
                       <input
                         className="w-full px-3.5 py-2 rounded-xl text-xs outline-none"
-                        style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                         placeholder="Keterangan tambahan"
                         value={debtNote}
                         onChange={e => setDebtNote(e.target.value)}
@@ -561,7 +561,7 @@ export function FinancialReport() {
                       <button
                         onClick={handleAddDebt}
                         disabled={savingDebt}
-                        className="w-full py-2.5 rounded-xl text-xs font-bold text-white"
+                        className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
                         style={{ background: 'var(--accent)' }}
                       >
                         {savingDebt ? 'Menyimpan...' : 'Simpan Utang'}
@@ -576,7 +576,7 @@ export function FinancialReport() {
                 {selectedDebtId && (
                   <motion.div
                     className="rounded-[18px] p-4 bg-zinc-950/20"
-                    style={{ border: '1px solid var(--accent)', background: 'var(--surface)' }}
+                    style={{ border: '1px solid var(--accent)', background: 'var(--surface)', boxShadow: 'var(--neu-pressed)' }}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
@@ -588,7 +588,7 @@ export function FinancialReport() {
                     <div className="flex flex-col gap-2">
                       <input
                         className="w-full px-3.5 py-2 rounded-xl text-xs outline-none"
-                        style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                         placeholder="Jumlah Bayar (Rp)"
                         value={paymentAmount}
                         onChange={e => setPaymentAmount(e.target.value.replace(/\D/g, ''))}
@@ -597,13 +597,13 @@ export function FinancialReport() {
                       <input
                         type="date"
                         className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                        style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                         value={paymentDate}
                         onChange={e => setPaymentDate(e.target.value)}
                       />
                       <input
                         className="w-full px-3.5 py-2 rounded-xl text-xs outline-none"
-                        style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                         placeholder="Catatan pembayaran (contoh: Cicilan 1, Bayar Lunas)"
                         value={paymentNote}
                         onChange={e => setPaymentNote(e.target.value)}
@@ -611,7 +611,7 @@ export function FinancialReport() {
                       <button
                         onClick={handleAddPayment}
                         disabled={savingPayment}
-                        className="w-full py-2.5 rounded-xl text-xs font-bold text-white mt-1"
+                        className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white mt-1"
                         style={{ background: 'var(--accent)' }}
                       >
                         {savingPayment ? 'Menyimpan...' : 'Simpan Pembayaran'}
@@ -668,16 +668,16 @@ export function FinancialReport() {
                       <div
                         key={debt.id}
                         className="rounded-2xl p-4 flex flex-col gap-3 relative overflow-hidden"
-                        style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                        style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                       >
                         {/* Side Bar Indicator */}
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: isDebt ? '#FF453A' : '#34C759' }} />
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: isDebt ? 'var(--neg)' : 'var(--pos)' }} />
 
                         {/* Top Header */}
                         <div className="flex items-start justify-between pl-1">
                           <div>
                             <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full"
-                              style={{ background: isDebt ? 'rgba(255,69,58,0.12)' : 'rgba(52,199,89,0.12)', color: isDebt ? '#FF453A' : '#34C759' }}>
+                              style={{ background: isDebt ? 'rgba(255,69,58,0.12)' : 'rgba(52,199,89,0.12)', color: isDebt ? 'var(--neg)' : 'var(--pos)' }}>
                               {isDebt ? 'Utang Kita' : 'Piutang Orang'}
                             </span>
                             <h4 className="text-sm font-bold text-white mt-1.5" style={{ color: 'var(--text)' }}>
@@ -692,10 +692,10 @@ export function FinancialReport() {
                           </div>
 
                           <div className="text-right">
-                            <h4 className="text-sm font-extrabold" style={{ color: isDebt ? '#FF453A' : '#34C759' }}>
+                            <h4 className="text-sm font-extrabold" style={{ color: isDebt ? 'var(--neg)' : 'var(--pos)' }}>
                               {formatRp(debt.amount_idr)}
                             </h4>
-                            <span className="text-[10px] block mt-0.5 font-bold" style={{ color: debt.status === 'paid' ? '#34C759' : '#FF9F0A' }}>
+                            <span className="text-[10px] block mt-0.5 font-bold" style={{ color: debt.status === 'paid' ? 'var(--pos)' : 'var(--warn)' }}>
                               {debt.status === 'paid' ? 'LUNAS ✓' : 'BELUM LUNAS'}
                             </span>
                           </div>
@@ -712,7 +712,7 @@ export function FinancialReport() {
                               <div
                                 className="h-full rounded-full"
                                 style={{
-                                  background: isDebt ? '#FF453A' : '#34C759',
+                                  background: isDebt ? 'var(--neg)' : 'var(--pos)',
                                   width: `${Math.min(100, (paidAmount / debt.amount_idr) * 100)}%`
                                 }}
                               />
@@ -769,7 +769,7 @@ export function FinancialReport() {
                             onClick={() => handleDeleteDebt(debt.id)}
                             className="p-1.5 rounded-lg flex items-center justify-center bg-red-950/10 border border-red-500/20"
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                               <polyline points="3 6 5 6 21 6" />
                               <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                             </svg>

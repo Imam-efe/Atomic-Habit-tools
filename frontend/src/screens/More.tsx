@@ -298,7 +298,7 @@ export function More() {
 
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {accounts.map((account, i) => {
             const isActive = account.userId === session?.user.id;
@@ -338,7 +338,7 @@ export function More() {
                         animate={{ scale: 1 }}
                         exit={{ scale: 0 }}
                         transition={springs.bouncy}
-                        className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                        className="neu-cta w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
                         style={{ background: 'var(--accent)' }}
                       >
                         <svg
@@ -409,7 +409,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {[
             { label: 'Projects', id: 'projects', desc: 'Kelola tugas & project terkait goal' },
@@ -455,7 +455,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] p-4 flex flex-col gap-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {/* Theme toggler */}
           <div className="flex items-center justify-between">
@@ -483,9 +483,9 @@ export function More() {
               {(['violet', 'green', 'blue', 'orange'] as const).map(colorKey => {
                 const colors = {
                   violet: '#7C5CFF',
-                  green: '#34C759',
+                  green: 'var(--pos)',
                   blue: '#0A84FF',
-                  orange: '#FF9F0A'
+                  orange: 'var(--warn)'
                 };
                 const hex = colors[colorKey];
                 const isSelected = accent === colorKey;
@@ -517,7 +517,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] p-4 flex flex-col gap-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <div className="flex items-center justify-between">
             <div>
@@ -564,7 +564,7 @@ export function More() {
         </p>
         <div
           className="rounded-[18px] p-4 flex flex-col gap-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <div>
             <span style={{ color: 'var(--text)' }} className="font-semibold text-sm block">API Key Pintasan</span>
@@ -576,12 +576,12 @@ export function More() {
               type="text"
               readOnly
               className="flex-1 px-3 py-2.5 rounded-xl text-xs outline-none font-mono"
-              style={{ background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-inset)' }}
               value={loadingToken ? 'Memuat...' : (shortcutToken || 'Belum ada API Key')}
             />
             {shortcutToken && (
               <button
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-white flex-shrink-0"
+                className="neu-cta px-4 py-2.5 rounded-xl text-xs font-bold text-white flex-shrink-0"
                 style={{ background: 'var(--accent)' }}
                 onClick={handleCopyToken}
               >
@@ -600,7 +600,7 @@ export function More() {
           </button>
 
           {shortcutToken && (
-            <div className="rounded-xl p-3 text-xs leading-relaxed flex flex-col gap-2" style={{ background: 'var(--bg)', border: '1px solid var(--sep)' }}>
+            <div className="rounded-xl p-3 text-xs leading-relaxed flex flex-col gap-2" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
               <span className="font-bold text-orange-400">💡 Panduan Cepat iOS Shortcut:</span>
               <ol className="list-decimal pl-4 flex flex-col gap-1.5" style={{ color: 'var(--text2)' }}>
                 <li>Buka aplikasi <strong>Shortcuts</strong> di iPhone.</li>
@@ -647,7 +647,7 @@ export function More() {
           {showAddBank && (
             <motion.div
               className="rounded-[18px] p-4 mb-3"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
@@ -656,7 +656,7 @@ export function More() {
               <div className="flex flex-col gap-2.5">
                 <input
                   className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Nama Bank/E-Wallet (contoh: BCA, GoPay)"
                   value={newBankName}
                   onChange={e => setNewBankName(e.target.value)}
@@ -664,7 +664,7 @@ export function More() {
                 <div className="flex gap-2">
                   <select
                     className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     value={newBankType}
                     onChange={e => setNewBankType(e.target.value)}
                   >
@@ -674,7 +674,7 @@ export function More() {
                   </select>
                   <input
                     className="flex-1 px-3 py-2 rounded-xl text-xs outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     placeholder="Saldo Awal (Rp)"
                     value={newBankBalance}
                     onChange={e => setNewBankBalance(e.target.value.replace(/\D/g, ''))}
@@ -684,7 +684,7 @@ export function More() {
                 <button
                   onClick={handleAddBank}
                   disabled={savingBank}
-                  className="w-full py-2.5 rounded-xl text-xs font-bold text-white"
+                  className="neu-cta w-full py-2.5 rounded-xl text-xs font-bold text-white"
                   style={{ background: 'var(--accent)' }}
                 >
                   {savingBank ? 'Menyimpan...' : 'Simpan Rekening'}
@@ -697,7 +697,7 @@ export function More() {
         {/* Bank Accounts List */}
         <div
           className="rounded-[18px] overflow-hidden"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {loadingBanks ? (
             <div className="flex items-center justify-center py-4">
@@ -729,7 +729,7 @@ export function More() {
                       onClick={() => handleDeleteBank(bank.id)}
                       className="w-6 h-6 flex items-center justify-center bg-red-950/10 rounded-lg"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                       </svg>
@@ -752,7 +752,7 @@ export function More() {
         </p>
         <div className="flex gap-3">
           <motion.button
-            className="flex-1 py-3 rounded-xl text-xs font-bold text-white"
+            className="neu-cta flex-1 py-3 rounded-xl text-xs font-bold text-white"
             style={{ background: 'var(--accent)' }}
             disabled={exportingData}
             onClick={handleExportData}
@@ -777,7 +777,7 @@ export function More() {
       {/* Logout */}
       <motion.button
         className="w-full py-3 rounded-2xl font-semibold text-center"
-        style={{ background: 'rgba(255,69,58,0.12)', color: '#FF453A' }}
+        style={{ background: 'rgba(255,69,58,0.12)', color: 'var(--neg)' }}
         onClick={handleLogout}
         whileTap={{ scale: 0.97 }}
         transition={springs.snappy}

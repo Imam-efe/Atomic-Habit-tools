@@ -58,7 +58,10 @@ export function LoginScreen() {
         <div className="flex flex-col items-center gap-3">
           <div
             className="w-20 h-20 rounded-[22px] flex items-center justify-center text-white text-3xl font-bold"
-            style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))' }}
+            style={{
+              background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+              boxShadow: 'var(--neu-raised-lg)',
+            }}
           >
             F
           </div>
@@ -87,15 +90,15 @@ export function LoginScreen() {
             style={{
               background: 'var(--surface)',
               color: 'var(--text)',
-              border: '1px solid var(--sep)',
+              boxShadow: 'var(--neu-inset)',
             }}
             autoFocus
           />
           {error && (
-            <p className="text-sm" style={{ color: '#FF453A' }}>{error}</p>
+            <p className="text-sm" style={{ color: 'var(--neg)' }}>{error}</p>
           )}
           <motion.button
-            className="w-full py-4 rounded-2xl font-semibold text-base text-white"
+            className="neu-cta w-full py-4 rounded-2xl font-semibold text-base text-white"
             style={{ background: 'var(--accent)' }}
             whileTap={{ scale: 0.97 }}
             transition={springs.snappy}

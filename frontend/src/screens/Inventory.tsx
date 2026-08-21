@@ -189,7 +189,7 @@ export function Inventory() {
   };
 
   const getExpiryStatus = (expiryDateStr: string | null) => {
-    if (!expiryDateStr) return { label: 'Aman (Tanpa Ed)', color: '#34C759', status: 'Aman' as const };
+    if (!expiryDateStr) return { label: 'Aman (Tanpa Ed)', color: 'var(--pos)', status: 'Aman' as const };
     const expiry = new Date(expiryDateStr);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -199,11 +199,11 @@ export function Inventory() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      return { label: 'Kedaluwarsa', color: '#FF453A', status: 'Kedaluwarsa' as const, days: Math.abs(diffDays) };
+      return { label: 'Kedaluwarsa', color: 'var(--neg)', status: 'Kedaluwarsa' as const, days: Math.abs(diffDays) };
     } else if (diffDays <= 3) {
-      return { label: `Kedaluwarsa ${diffDays} hari`, color: '#FF9F0A', status: 'Masa Pakai Tipis' as const, days: diffDays };
+      return { label: `Kedaluwarsa ${diffDays} hari`, color: 'var(--warn)', status: 'Masa Pakai Tipis' as const, days: diffDays };
     } else {
-      return { label: `Sisa ${diffDays} hari`, color: '#34C759', status: 'Aman' as const, days: diffDays };
+      return { label: `Sisa ${diffDays} hari`, color: 'var(--pos)', status: 'Aman' as const, days: diffDays };
     }
   };
 
@@ -239,7 +239,7 @@ export function Inventory() {
         <button
           onClick={() => setSubScreen(null)}
           className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           <span style={{ color: 'var(--accent)' }} className="text-xl">‹</span>
         </button>
@@ -252,7 +252,7 @@ export function Inventory() {
           </p>
         </div>
         <motion.button
-          className="w-10 h-10 rounded-full flex items-center justify-center"
+          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
           style={{ background: 'var(--accent)' }}
           whileTap={{ scale: 0.9 }}
           transition={springs.snappy}
@@ -274,7 +274,7 @@ export function Inventory() {
       </div>
 
       {/* Tabs */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         <button
           onClick={() => { setActiveTab('stok'); setShowForm(false); }}
           className="py-2.5 rounded-lg text-xs font-bold text-center"
@@ -302,7 +302,7 @@ export function Inventory() {
         {showForm && (
           <motion.div
             className="rounded-[20px] p-4 mb-5"
-            style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -315,7 +315,7 @@ export function Inventory() {
             <div className="flex flex-col gap-2.5">
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Nama Barang (contoh: Susu UHT, Sabun Mandi)"
                 value={name}
                 onChange={e => setName(e.target.value)}
@@ -324,7 +324,7 @@ export function Inventory() {
               <div className="flex gap-2">
                 <input
                   className="flex-1 px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Jumlah"
                   value={quantity}
                   disabled={activeTab === 'belanja' && !editingId} // default 0 for new shopping item
@@ -334,7 +334,7 @@ export function Inventory() {
                 />
                 <select
                   className="w-28 px-3 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   value={unit}
                   onChange={e => setUnit(e.target.value)}
                 >
@@ -351,7 +351,7 @@ export function Inventory() {
                     <input
                       type="date"
                       className="w-full px-3 py-2.5 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={purchaseDate}
                       onChange={e => setPurchaseDate(e.target.value)}
                     />
@@ -363,7 +363,7 @@ export function Inventory() {
                     <input
                       type="date"
                       className="w-full px-3 py-2.5 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={expiryDate}
                       onChange={e => setExpiryDate(e.target.value)}
                     />
@@ -373,7 +373,7 @@ export function Inventory() {
 
               <select
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 value={category}
                 onChange={e => setCategory(e.target.value)}
               >
@@ -382,7 +382,7 @@ export function Inventory() {
 
               <input
                 className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none"
-                style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                 placeholder="Catatan / Posisi simpan (opsional)"
                 value={note}
                 onChange={e => setNote(e.target.value)}
@@ -401,7 +401,7 @@ export function Inventory() {
                 </motion.button>
                 <motion.button
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold"
-                  style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                  style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                   whileTap={{ scale: 0.97 }}
                   transition={springs.snappy}
                   onClick={resetForm}
@@ -425,7 +425,7 @@ export function Inventory() {
           >
             <motion.div
               className="w-full max-w-[360px] rounded-3xl p-5 flex flex-col gap-4 shadow-2xl"
-              style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -441,7 +441,7 @@ export function Inventory() {
               <div className="flex flex-col gap-3">
                 <input
                   className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                  style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                   placeholder="Total Harga Belanja (Rp)"
                   value={buyPrice}
                   onChange={e => setBuyPrice(e.target.value.replace(/\D/g, ''))}
@@ -454,7 +454,7 @@ export function Inventory() {
                     <input
                       type="number"
                       className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={buyQuantity}
                       onChange={e => setBuyQuantity(e.target.value)}
                     />
@@ -464,7 +464,7 @@ export function Inventory() {
                     <input
                       type="date"
                       className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                      style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                      style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={buyExpiryDate}
                       onChange={e => setBuyExpiryDate(e.target.value)}
                     />
@@ -475,7 +475,7 @@ export function Inventory() {
                   <label className="text-[9px] font-bold text-neutral-400 block uppercase">Potong Dari Bank/E-Wallet</label>
                   <select
                     className="w-full px-3 py-2 rounded-xl text-xs outline-none"
-                    style={{ background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+                    style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                     value={buyBankId}
                     onChange={e => setBuyBankId(e.target.value)}
                   >
@@ -492,7 +492,7 @@ export function Inventory() {
                   <button
                     onClick={handleConfirmPurchase}
                     disabled={savingPurchase}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
+                    className="neu-cta flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
                     style={{ background: 'var(--accent)' }}
                   >
                     {savingPurchase ? 'Menyimpan...' : 'Bayar & Update Stok'}
@@ -500,7 +500,7 @@ export function Inventory() {
                   <button
                     onClick={() => setBuyingItem(null)}
                     className="px-4 py-2.5 rounded-xl text-xs font-bold"
-                    style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                    style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                   >
                     Batal
                   </button>
@@ -517,7 +517,7 @@ export function Inventory() {
         <div className="relative">
           <input
             className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none"
-            style={{ background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--sep)' }}
+            style={{ background: 'var(--surface)', color: 'var(--text)', boxShadow: 'var(--neu-raised)' }}
             placeholder={activeTab === 'stok' ? 'Cari barang di stok...' : 'Cari di daftar belanja...'}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -537,7 +537,7 @@ export function Inventory() {
               style={{
                 background: selectedCategory === cat ? 'var(--accentSoft)' : 'var(--surface)',
                 color: selectedCategory === cat ? 'var(--accent)' : 'var(--text2)',
-                border: `1px solid ${selectedCategory === cat ? 'var(--accent)' : 'var(--sep)'}`,
+                boxShadow: selectedCategory === cat ? 'var(--neu-pressed)' : 'var(--neu-raised-sm)',
               }}
             >
               {cat}
@@ -547,7 +547,7 @@ export function Inventory() {
 
         {/* Expiry Status Filter Tab (Only shown in Stok view) */}
         {activeTab === 'stok' && (
-          <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
+          <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
             {(['Semua', 'Aman', 'Masa Pakai Tipis', 'Kedaluwarsa'] as const).map(status => (
               <button
                 key={status}
@@ -590,7 +590,12 @@ export function Inventory() {
                   className="rounded-[16px] p-3.5 flex flex-col gap-2.5 relative overflow-hidden"
                   style={{
                     background: 'var(--surface)',
-                    border: `1px solid ${exp.status === 'Kedaluwarsa' ? 'rgba(255,69,58,0.25)' : exp.status === 'Masa Pakai Tipis' ? 'rgba(255,159,10,0.25)' : 'var(--sep)'}`,
+                    boxShadow: 'var(--neu-raised)',
+                    border: exp.status === 'Kedaluwarsa'
+                      ? '1px solid rgba(255,69,58,0.35)'
+                      : exp.status === 'Masa Pakai Tipis'
+                        ? '1px solid var(--warnBorder)'
+                        : '1px solid transparent',
                   }}
                 >
                   <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: exp.color }} />
@@ -602,7 +607,7 @@ export function Inventory() {
                           {item.name}
                         </h3>
                         <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
-                          style={{ background: 'var(--track)', color: 'var(--text2)' }}>
+                          style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}>
                           {item.category}
                         </span>
                       </div>
@@ -651,7 +656,7 @@ export function Inventory() {
                           whileTap={{ scale: 0.85 }}
                           onClick={() => handleDelete(item.id)}
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                             <polyline points="3 6 5 6 21 6" />
                             <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                           </svg>
@@ -681,7 +686,7 @@ export function Inventory() {
                   key={item.id}
                   layout
                   className="rounded-[16px] p-4 flex items-center justify-between gap-3"
-                  style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}
+                  style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -691,7 +696,7 @@ export function Inventory() {
                       <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase"
                         style={{
                           background: isExpired ? 'rgba(255,69,58,0.12)' : 'rgba(255,159,10,0.12)',
-                          color: isExpired ? '#FF453A' : '#FF9F0A'
+                          color: isExpired ? 'var(--neg)' : 'var(--warn)'
                         }}>
                         {isExpired ? 'Kedaluwarsa 🚨' : 'Habis 📦'}
                       </span>
@@ -714,7 +719,7 @@ export function Inventory() {
                       onClick={() => handleDelete(item.id)}
                       className="p-2 rounded-xl bg-red-950/10"
                     >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FF453A" strokeWidth="2.5">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                       </svg>
