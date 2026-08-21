@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { HabitBundles } from '@/components/HabitBundles';
+import HabitStacks from '@/components/HabitStacks';
 
 interface Goal {
   id: string;
@@ -643,34 +644,18 @@ export function Habits() {
 
       {/* Temptation Bundling */}
       <HabitBundles habits={habits} onRefresh={load} />
+<<<<<<< HEAD
+=======
 
       {/* Habit Stacking chain */}
       {stackedHabits.length > 0 && (
         <div className="rounded-[22px] p-5 mb-5" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
           <h3 className="text-base font-bold text-white mb-0.5">Habit Stacking</h3>
           <p className="text-xs mb-4" style={{ color: 'var(--text2)' }}>Rantai rutinitas yang terhubung</p>
+>>>>>>> origin/main
 
-          <div className="flex flex-col gap-0.5">
-            {stackedHabits.map((h, idx) => (
-              <div key={h.id}>
-                <div className="flex items-center gap-3">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: h.color }}>
-                    {idx + 1}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>
-                      Setelah <span className="font-bold text-orange-400">{h.triggerCue}</span>, saya akan <span className="font-bold" style={{ color: h.color }}>{h.name}</span>
-                    </p>
-                  </div>
-                </div>
-                {idx < stackedHabits.length - 1 && (
-                  <div className="w-0.5 h-4 ml-2.5 my-1" style={{ background: 'var(--sep)' }} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Habit Stacking - Create and manage habit chains */}
+      <HabitStacks habits={habits} onRefresh={load} />
 
       {/* Habit Loop card for selected habit */}
       {loopHabit && (

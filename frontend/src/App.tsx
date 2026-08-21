@@ -20,6 +20,7 @@ import { FinancialReport } from '@/screens/FinancialReport';
 import { WeeklyReview } from '@/screens/WeeklyReview';
 import { HabitHeatmap } from '@/screens/HabitHeatmap';
 import { DebtPlanner } from '@/screens/DebtPlanner';
+import { NotificationCenter } from '@/screens/NotificationCenter';
 import { applyTheme } from '@/tokens/theme';
 import type { AccentName, ThemeName } from '@/types';
 
@@ -78,6 +79,7 @@ function AppShell() {
     'weekly-review': <WeeklyReview />,
     'habit-heatmap': <HabitHeatmap />,
     'debt-planner': <DebtPlanner />,
+    'notification-center': <NotificationCenter />,
   };
 
   const currentScreen = subScreen ? subScreens[subScreen] : screens[activeTab];
