@@ -1,6 +1,6 @@
 -- Notification Center: user-defined push reminders with flexible scheduling.
 -- All wall-clock fields (time_of_day, quiet_from, quiet_to) are Jakarta time (GMT+7).
-CREATE TABLE scheduled_notifications (
+CREATE TABLE IF NOT EXISTS scheduled_notifications (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
@@ -27,11 +27,11 @@ CREATE TABLE scheduled_notifications (
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE INDEX idx_scheduled_notifications_due ON scheduled_notifications(is_active, next_run_at);
-CREATE INDEX idx_scheduled_notifications_user ON scheduled_notifications(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_due ON scheduled_notifications(is_active, next_run_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_notifications_user ON scheduled_notifications(user_id, created_at);
 
 -- Delivery history, for the "Riwayat" list and for debugging silent notifications
-CREATE TABLE notification_deliveries (
+CREATE TABLE IF NOT EXISTS notification_deliveries (
   id TEXT PRIMARY KEY,
   notification_id TEXT REFERENCES scheduled_notifications(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -42,4 +42,4 @@ CREATE TABLE notification_deliveries (
   fired_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
-CREATE INDEX idx_notification_deliveries_user ON notification_deliveries(user_id, fired_at);
+CREATE INDEX IF NOT EXISTS idx_notification_deliveries_user ON notification_deliveries(user_id, fired_at);
