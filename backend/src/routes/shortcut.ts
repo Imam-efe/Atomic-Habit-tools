@@ -20,15 +20,19 @@ function getJakartaToday() {
 }
 
 // Middleware for token-based authentication (iOS Shortcuts calls)
+// Accepts "Authorization: Bearer <token>" header, or "?token=<token>" query
+// param so a Shortcut can work with a single Get Contents of URL action.
 async function requireShortcutToken(c: any, next: any) {
+  let token = '';
   const authHeader = c.req.header('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return c.json({ error: 'unauthorized' }, 401);
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.slice(7).trim();
+  } else {
+    token = (c.req.query('token') ?? '').trim();
   }
 
-  const token = authHeader.slice(7).trim();
   if (!token) {
-    return c.json({ error: 'invalid token format' }, 401);
+    return c.json({ error: 'unauthorized' }, 401);
   }
 
   const tokenRow = (await c.env.DB.prepare(
@@ -207,6 +211,51 @@ shortcut.post('/budget', requireShortcutToken, async (c) => {
   ).run();
 
   return c.json({ success: true, entryId: id, type, amount, category, date: today });
+});
+
+// GET /api/shortcut/notifications — Poll queued notification events via iOS Shortcut.
+// Returns unconsumed events and marks them consumed, so each event fires once.
+// Pass ?peek=1 to read without consuming.
+shortcut.get('/notifications', requireShortcutToken, async (c) => {
+  const user = c.get('shortcutUser');
+  const peek = c.req.query('peek') === '1';
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10) || 20, 50);
+
+  const events = await c.env.DB.prepare(`
+    SELECT id, type, title, body, payload, created_at
+    FROM notification_events
+    WHERE user_id = ?1 AND consumed = 0
+    ORDER BY created_at ASC
+    LIMIT ?2
+  `).bind(user.id, limit).all<{
+    id: string;
+    type: string;
+    title: string;
+    body: string;
+    payload: string | null;
+    created_at: number;
+  }>();
+
+  const rows = events.results ?? [];
+
+  if (!peek && rows.length > 0) {
+    const placeholders = rows.map((_, i) => `?${i + 1}`).join(',');
+    await c.env.DB.prepare(
+      `UPDATE notification_events SET consumed = 1 WHERE id IN (${placeholders})`
+    ).bind(...rows.map(r => r.id)).run();
+  }
+
+  return c.json({
+    count: rows.length,
+    notifications: rows.map(r => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      body: r.body,
+      payload: r.payload ? JSON.parse(r.payload) : null,
+      createdAt: r.created_at,
+    })),
+  });
 });
 
 export default shortcut;

@@ -20,6 +20,8 @@ import debts from './routes/debts';
 import financeReport from './routes/finance_report';
 import netWorth from './routes/net_worth';
 import weeklyReview from './routes/weekly_review';
+import exportRoute from './routes/export';
+import habitBundles from './routes/habit_bundles';
 import { buildPushPayload } from '@block65/webcrypto-web-push';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
@@ -69,8 +71,29 @@ app.route('/api/debts', debts);
 app.route('/api/finance-report', financeReport);
 app.route('/api/net-worth', netWorth);
 app.route('/api/weekly-review', weeklyReview);
+app.route('/api/export', exportRoute);
+app.route('/api/habit-bundles', habitBundles);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
+
+// Queue a notification event so external consumers (iOS Shortcuts) can poll it
+async function queueNotificationEvent(
+  env: Env,
+  userId: string,
+  type: string,
+  title: string,
+  body: string,
+  payload?: Record<string, unknown>
+) {
+  try {
+    await env.DB.prepare(`
+      INSERT INTO notification_events (id, user_id, type, title, body, payload)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+    `).bind(nanoid(), userId, type, title, body, payload ? JSON.stringify(payload) : null).run();
+  } catch (err) {
+    console.error('Failed to queue notification event', err);
+  }
+}
 
 // Trigger push notifications for habit reminders matching the current time (Jakarta GMT+7)
 async function triggerReminders(env: Env) {
@@ -105,6 +128,22 @@ async function triggerReminders(env: Env) {
     publicKey: env.VAPID_PUBLIC_KEY,
     privateKey: env.VAPID_PRIVATE_KEY,
   };
+
+  // Queue events for Shortcuts polling (dedupe per user+habit — subscriptions join can duplicate rows)
+  const queued = new Set<string>();
+  for (const row of habitsToRemind.results) {
+    const key = `${row.user_id}:${row.id}`;
+    if (queued.has(key)) continue;
+    queued.add(key);
+    await queueNotificationEvent(
+      env,
+      row.user_id,
+      'habit_reminder',
+      'Pengingat Kebiasaan',
+      `Ayo lakukan kebiasaanmu: ${row.name}! ✨`,
+      { habitId: row.id, habitName: row.name, url: '/kebiasaan' }
+    );
+  }
 
   const promises = habitsToRemind.results.map(async (row) => {
     const subscription = {
@@ -259,6 +298,11 @@ async function triggerExpiryAlerts(env: Env) {
       })
     };
 
+    await queueNotificationEvent(env, userId, 'expiry_alert', '⚠️ Stok Mau Kadaluarsa', body, {
+      items: userItems.map(i => ({ name: i.name, expiryDate: i.expiry_date })),
+      url: '/lainnya',
+    });
+
     for (const sub of subs.results) {
       try {
         const payload = await buildPushPayload(message, {
@@ -300,6 +344,10 @@ const handler = {
       triggerReminders(env),
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
+      // Purge notification events older than 7 days
+      env.DB.prepare(
+        "DELETE FROM notification_events WHERE created_at < unixepoch() - 7 * 86400"
+      ).run().catch((err) => console.error('Notification event cleanup failed', err)),
     ]));
   }
 };
