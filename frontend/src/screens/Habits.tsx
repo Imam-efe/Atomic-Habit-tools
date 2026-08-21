@@ -644,15 +644,6 @@ export function Habits() {
 
       {/* Temptation Bundling */}
       <HabitBundles habits={habits} onRefresh={load} />
-<<<<<<< HEAD
-=======
-
-      {/* Habit Stacking chain */}
-      {stackedHabits.length > 0 && (
-        <div className="rounded-[22px] p-5 mb-5" style={{ background: 'var(--surface)', border: '1px solid var(--sep)' }}>
-          <h3 className="text-base font-bold text-white mb-0.5">Habit Stacking</h3>
-          <p className="text-xs mb-4" style={{ color: 'var(--text2)' }}>Rantai rutinitas yang terhubung</p>
->>>>>>> origin/main
 
       {/* Habit Stacking - Create and manage habit chains */}
       <HabitStacks habits={habits} onRefresh={load} />
