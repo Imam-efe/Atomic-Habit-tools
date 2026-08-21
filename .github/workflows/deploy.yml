@@ -49,5 +49,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Frontend ready for Pages
-        run: echo "Frontend built at frontend/dist. Push to Cloudflare Pages manually or via dashboard."
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: frontend
+          command: pages deploy dist --project-name=fayolla --branch=main
