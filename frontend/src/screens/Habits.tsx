@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { HabitBundles } from '@/components/HabitBundles';
 
 interface Goal {
   id: string;
@@ -639,6 +640,9 @@ export function Habits() {
           </AnimatePresence>
         </div>
       )}
+
+      {/* Temptation Bundling */}
+      <HabitBundles habits={habits} onRefresh={load} />
 
       {/* Habit Stacking chain */}
       {stackedHabits.length > 0 && (
