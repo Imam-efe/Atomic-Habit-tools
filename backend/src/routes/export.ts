@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
-import { verifyAuth } from '../lib/auth';
+import { requireAuth, type AuthContext } from '../middleware/auth';
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<AuthContext>();
+
+app.use('/*', requireAuth);
 
 // Tables to export (exclude auth-related and internal tables)
 const exportTables = [
@@ -30,32 +31,24 @@ const exportTables = [
 
 // GET /api/export - Export all user data as JSON
 app.get('/', async (c) => {
-  const auth = await verifyAuth(c);
-  if (!auth) return c.json({ error: 'unauthorized' }, 401);
+  const userId = c.get('user').sub;
 
   try {
     const exportData: Record<string, unknown[]> = {};
 
     for (const table of exportTables) {
-      const result = await c.env.DB.prepare(
-        `SELECT * FROM ${table} WHERE user_id = ?1`
-      ).bind(auth.user_id).all();
-
-      // Handle users table specially (no user_id filter)
-      if (table === 'users') {
-        const userResult = await c.env.DB.prepare(
-          `SELECT * FROM users WHERE id = ?1`
-        ).bind(auth.user_id).all();
-        exportData[table] = userResult.results || [];
-      } else {
-        exportData[table] = result.results || [];
-      }
+      // users table keys on id, everything else on user_id
+      const query = table === 'users'
+        ? `SELECT * FROM users WHERE id = ?1`
+        : `SELECT * FROM ${table} WHERE user_id = ?1`;
+      const result = await c.env.DB.prepare(query).bind(userId).all();
+      exportData[table] = result.results || [];
     }
 
     return c.json({
       version: '1.0',
       exported_at: new Date().toISOString(),
-      user_id: auth.user_id,
+      user_id: userId,
       data: exportData,
     });
   } catch (error) {
@@ -66,8 +59,7 @@ app.get('/', async (c) => {
 
 // POST /api/import - Import user data from JSON
 app.post('/', async (c) => {
-  const auth = await verifyAuth(c);
-  if (!auth) return c.json({ error: 'unauthorized' }, 401);
+  const userId = c.get('user').sub;
 
   try {
     const payload = await c.req.json() as {
@@ -90,8 +82,12 @@ app.post('/', async (c) => {
       for (const row of rows) {
         const rowData = row as Record<string, unknown>;
 
-        // Security: verify user_id matches for all non-users table inserts
-        if (table !== 'users' && rowData.user_id !== auth.user_id) {
+        // Security: verify ownership — non-users rows must carry this user's id,
+        // and the users row may only be the user's own profile
+        if (table !== 'users' && rowData.user_id !== userId) {
+          continue;
+        }
+        if (table === 'users' && rowData.id !== userId) {
           continue;
         }
 

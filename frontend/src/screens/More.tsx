@@ -617,6 +617,7 @@ export function More() {
                     <li><strong>Tambah Tugas:</strong> Endpoint <code className="text-violet-400">/tasks</code><br />Body: <code className="text-neutral-400">{"{ \"projectName\": \"Inbox\", \"taskName\": \"Tugas baru\" }"}</code></li>
                     <li><strong>Centang Habit:</strong> Endpoint <code className="text-violet-400">/habits/toggle</code><br />Body: <code className="text-neutral-400">{"{ \"habitName\": \"Minum Air Putih\" }"}</code></li>
                     <li><strong>Catat Pengeluaran:</strong> Endpoint <code className="text-violet-400">/budget</code><br />Body: <code className="text-neutral-400">{"{ \"type\": \"expense\", \"amount\": 20000, \"category\": \"Makanan\", \"note\": \"Kopi\" }"}</code></li>
+                    <li><strong>Baca Notifikasi (polling):</strong> Endpoint <code className="text-violet-400">/notifications?token=&lt;API_KEY&gt;</code> dengan Method <strong>GET</strong> tanpa Headers.<br />Mengembalikan notifikasi sistem (pengingat habit, alert kadaluarsa) yang belum dibaca — cocok untuk Automation berkala. Panduan lengkap ada di <code className="bg-black/20 px-1 rounded">docs/shortcuts</code> repo.</li>
                   </ul>
                 </li>
               </ol>

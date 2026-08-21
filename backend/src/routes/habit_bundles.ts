@@ -9,7 +9,7 @@ app.use('/*', requireAuth);
 
 // GET /api/habit-bundles - List all bundles for user
 app.get('/', async (c) => {
-  const { user_id } = c.get('auth');
+  const user_id = c.get('user').sub;
   const db = c.env.DB;
 
   const bundles = await db.prepare(`
@@ -37,7 +37,7 @@ app.get('/', async (c) => {
 
 // POST /api/habit-bundles - Create new bundle
 app.post('/', async (c) => {
-  const { user_id } = c.get('auth');
+  const user_id = c.get('user').sub;
   const db = c.env.DB;
   const body = await c.req.json() as {
     required_habit_id: string;
@@ -71,7 +71,7 @@ app.post('/', async (c) => {
 
 // PUT /api/habit-bundles/:id - Update bundle
 app.put('/:id', async (c) => {
-  const { user_id } = c.get('auth');
+  const user_id = c.get('user').sub;
   const id = c.req.param('id');
   const db = c.env.DB;
   const body = await c.req.json() as {
@@ -113,7 +113,7 @@ app.put('/:id', async (c) => {
 
 // DELETE /api/habit-bundles/:id - Delete bundle
 app.delete('/:id', async (c) => {
-  const { user_id } = c.get('auth');
+  const user_id = c.get('user').sub;
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -131,7 +131,7 @@ app.delete('/:id', async (c) => {
 
 // GET /api/habit-bundles/:id/completions - Get bundle completion history
 app.get('/:id/completions', async (c) => {
-  const { user_id } = c.get('auth');
+  const user_id = c.get('user').sub;
   const id = c.req.param('id');
   const db = c.env.DB;
 
@@ -160,7 +160,7 @@ app.get('/:id/completions', async (c) => {
 
 // POST /api/habit-bundles/:id/check - Mark both habits completed today
 app.post('/:id/check', async (c) => {
-  const { user_id } = c.get('auth');
+  const user_id = c.get('user').sub;
   const id = c.req.param('id');
   const db = c.env.DB;
   const today = jakartaToday();
