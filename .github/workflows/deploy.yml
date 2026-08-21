@@ -49,5 +49,11 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Frontend build complete
-        run: echo "Frontend built. Deploy manually to Cloudflare Pages or via dashboard."
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 55f322d1725346acdc018b7197bd71f4
+          projectName: fayolla
+          directory: frontend/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
