@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { MotionConfig, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -104,29 +104,30 @@ function AppShell() {
   return (
     <div className="max-w-[430px] mx-auto relative min-h-screen overflow-hidden">
       {/*
-        Enter-only, like a UIKit tab switch: the outgoing screen unmounts in the
-        same commit the incoming one mounts, so no frame ever holds two live
-        screens. The earlier crossfade (AnimatePresence popLayout) kept both
-        mounted and compositing them against the tab bar's backdrop-filter made
-        iOS Safari repaint the outgoing screen at full opacity for a frame — a
-        visible flash of the previous tab mid-transition.
+        `mode="wait"` queues: old screen exits, then new screen enters. Both
+        happen at the same time visually (0ms gap), so no blink. No popLayout
+        overlap, so Safari's backdrop-filter doesn't repaint the old screen.
       */}
-      <motion.div
-        key={screenKey}
-        variants={screenVariants}
-        initial={firstPaint.current ? false : 'initial'}
-        animate="animate"
-        transition={{
-          duration: screenTransition.enter,
-          ease: screenTransition.ease,
-        }}
-        // No will-change here on purpose. Motion adds it for the values it is
-        // animating and drops it again afterwards; a permanent one would make
-        // this div a containing block and reparent the fixed modals the
-        // screens render inside it.
-      >
-        {currentScreen}
-      </motion.div>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={screenKey}
+          variants={screenVariants}
+          initial={firstPaint.current ? false : 'initial'}
+          animate="animate"
+          exit="exit"
+          transition={{
+            duration: screenTransition.enter,
+            ease: screenTransition.ease,
+            exit: { duration: screenTransition.exit, ease: screenTransition.ease },
+          }}
+          // No will-change here on purpose. Motion adds it for the values it is
+          // animating and drops it again afterwards; a permanent one would make
+          // this div a containing block and reparent the fixed modals the
+          // screens render inside it.
+        >
+          {currentScreen}
+        </motion.div>
+      </AnimatePresence>
       <TabBar />
     </div>
   );
