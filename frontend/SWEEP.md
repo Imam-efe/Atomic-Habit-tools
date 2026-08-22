@@ -16,8 +16,14 @@ Both exit non-zero on failure, so they can gate CI.
 
 ## sweep.js — contrast and render audit
 
-Walks all 17 screens and, for every text node, measures the WCAG contrast of its
-colour against whatever actually paints behind it.
+Walks all 18 screens plus the two root overlays (global search and quick-add)
+and, for every text node, measures the WCAG contrast of its colour against
+whatever actually paints behind it.
+
+The overlays need driving, not just opening: search shows nothing until a query
+is typed, and quick-add shows nothing until a parse returns. `OVERLAYS` in
+`sweep.js` carries the text to type and the button to press for each, so the
+states that actually render are the ones measured.
 
 Per screen it reports:
 

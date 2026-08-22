@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, press } from '@/tokens/motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
+import { useCommandStore } from '@/stores/commandStore';
 import { apiFetch } from '@/lib/api';
 import { formatRp } from '@/lib/currency';
 import { canShare, shareProgress } from '@/lib/share';
+import { isVoiceSupported } from '@/lib/voice';
 import { useAppBadge } from '@/hooks';
 
 interface DashboardData {
@@ -47,6 +49,10 @@ interface NetWorthData {
 export function Dashboard() {
   const { session } = useAuthStore();
   const { setTab } = useUIStore();
+  const { openSearch, openQuickAdd } = useCommandStore();
+  // Read once: the API either exists in this browser or it does not, and
+  // re-checking on every render would just churn.
+  const [voiceReady] = useState(isVoiceSupported);
   const [data, setData] = useState<DashboardData | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,8 +69,8 @@ export function Dashboard() {
     budgetText: string;
   } | null>(null);
   // Progressive enhancement: the rule-based texts above show instantly with
-  // zero network cost; this fills in a moment later only when the backend
-  // has ANTHROPIC_API_KEY configured, and stays null otherwise.
+  // zero network cost; this fills in a moment later from Workers AI, and stays
+  // null if that call fails, so the panel is never blocked on it.
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [loadingAiInsight, setLoadingAiInsight] = useState(false);
 
@@ -270,8 +276,44 @@ export function Dashboard() {
           </div>
         </div>
 
+        {/* Command bar — search and quick-add reach every module, so they live
+            on the home screen rather than buried in one tab. */}
+        <div className="flex items-center gap-2 mb-4">
+          <motion.button
+            whileTap={press.surface}
+            onClick={openSearch}
+            className="flex-1 min-w-0 flex items-center gap-2 rounded-2xl px-3.5 py-2.5 neu-inset"
+            style={{ background: 'var(--surface)' }}
+          >
+            <span className="text-[14px]" aria-hidden>🔍</span>
+            <span className="text-[13px] truncate" style={{ color: 'var(--text3)' }}>
+              Cari apa saja…
+            </span>
+          </motion.button>
+          <motion.button
+            whileTap={press.control}
+            onClick={() => openQuickAdd()}
+            aria-label="Catat cepat"
+            className="w-11 h-11 rounded-2xl neu-cta flex items-center justify-center text-[17px] flex-shrink-0"
+            style={{ background: 'var(--accentFill)', color: '#fff' }}
+          >
+            ⚡
+          </motion.button>
+          {voiceReady && (
+            <motion.button
+              whileTap={press.control}
+              onClick={() => openQuickAdd({ listen: true })}
+              aria-label="Catat dengan suara"
+              className="w-11 h-11 rounded-2xl neu-press flex items-center justify-center text-[17px] flex-shrink-0"
+              style={{ color: 'var(--text2)' }}
+            >
+              🎤
+            </motion.button>
+          )}
+        </div>
+
         {/* AI System Insights Banner */}
-        <div 
+        <div
           onClick={generateInsights}
           className="rounded-[18px] p-3.5 mb-4 flex items-center justify-between cursor-pointer transition-all border bg-zinc-900/10 dark:bg-white/5"
           style={{ borderColor: 'var(--sep)' }}

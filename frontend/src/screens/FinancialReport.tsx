@@ -36,6 +36,31 @@ interface ReportData {
   }[];
 }
 
+interface ForecastData {
+  month: string;
+  days_elapsed: number;
+  days_remaining: number;
+  days_in_month: number;
+  actual: { income: number; expense: number; net: number };
+  projected: {
+    income: number;
+    expense: number;
+    net: number;
+    daily_rate: number;
+    variable_remaining: number;
+  };
+  known_upcoming: { kind: string; type: string; label: string; amount: number; date: string }[];
+  assets: { current: number; projected: number };
+  category_pace: {
+    category: string;
+    limit: number;
+    spent: number;
+    projected: number;
+    over_by: number;
+    will_exceed: boolean;
+  }[];
+}
+
 interface Debt {
   id: string;
   type: 'debt' | 'receivable';
@@ -79,6 +104,8 @@ export function FinancialReport() {
   const { setSubScreen } = useUIStore();
   const [activeTab, setActiveTab] = useState<'pnl' | 'balance' | 'debt'>('pnl');
   const [report, setReport] = useState<ReportData | null>(null);
+  const [forecast, setForecast] = useState<ForecastData | null>(null);
+  const [showForecastDetail, setShowForecastDetail] = useState(false);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [loading, setLoading] = useState(true);
   const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
@@ -114,6 +141,14 @@ export function FinancialReport() {
   };
 
   useEffect(() => { loadReport(); }, [rangePreset, customFrom, customTo]);
+
+  // The forecast is always about the current calendar month, so it does not
+  // follow the range filter above and only needs fetching once.
+  useEffect(() => {
+    apiFetch<ForecastData>('/finance-report/forecast')
+      .then(setForecast)
+      .catch(() => {});
+  }, []);
 
   const handleAddDebt = async () => {
     const amt = parseInt(debtAmount.replace(/\D/g, ''));
@@ -334,6 +369,126 @@ export function FinancialReport() {
                   </div>
                 )}
               </div>
+
+              {/* Month-end projection. Everything else on this screen looks
+                  backwards; this is the only part that says where the month is
+                  heading while there is still time to change it. */}
+              {forecast && forecast.days_remaining > 0 && (
+                <div className="rounded-[20px] p-5 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold tracking-wider uppercase mb-1" style={{ color: 'var(--text3)' }}>
+                        PROYEKSI AKHIR BULAN
+                      </p>
+                      <h2
+                        className="text-2xl font-black"
+                        style={{ color: forecast.projected.net >= 0 ? 'var(--pos)' : 'var(--neg)' }}
+                      >
+                        {formatRp(forecast.projected.net)}
+                      </h2>
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--text2)' }}>
+                        sisa {forecast.days_remaining} hari · rata-rata {formatRp(forecast.projected.daily_rate)}/hari
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowForecastDetail(v => !v)}
+                      className="text-[10px] font-bold px-2 py-1 rounded-lg flex-shrink-0"
+                      style={{ background: 'var(--track)', color: 'var(--text2)' }}
+                    >
+                      {showForecastDetail ? 'Tutup' : 'Rincian'}
+                    </button>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px]" style={{ color: 'var(--text3)' }}>Pemasukan</p>
+                      <p className="text-sm font-bold truncate" style={{ color: 'var(--pos)' }}>
+                        {formatRp(forecast.projected.income)}
+                      </p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px]" style={{ color: 'var(--text3)' }}>Pengeluaran</p>
+                      <p className="text-sm font-bold truncate" style={{ color: 'var(--neg)' }}>
+                        {formatRp(forecast.projected.expense)}
+                      </p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px]" style={{ color: 'var(--text3)' }}>Saldo akhir</p>
+                      <p className="text-sm font-bold truncate" style={{ color: 'var(--text)' }}>
+                        {formatRp(forecast.assets.projected)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Inset rather than a --track fill: the red and amber text
+                      tokens are tuned against the page base, and --track is
+                      dark enough to drop them under 4.5:1. */}
+                  {forecast.category_pace.some(c => c.will_exceed) && (
+                    <div className="rounded-xl px-3 py-2 neu-inset">
+                      <p className="text-[10px] font-bold mb-1" style={{ color: 'var(--warn)' }}>
+                        ⚠️ Kategori melewati limit jika laju ini berlanjut
+                      </p>
+                      {forecast.category_pace.filter(c => c.will_exceed).slice(0, 3).map(c => (
+                        <div key={c.category} className="flex justify-between gap-2 text-[11px]">
+                          <span className="truncate" style={{ color: 'var(--text2)' }}>{c.category}</span>
+                          <span className="flex-shrink-0 font-semibold" style={{ color: 'var(--neg)' }}>
+                            +{formatRp(c.over_by)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {showForecastDetail && (
+                      <motion.div {...collapse} className="overflow-hidden">
+                        <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex justify-between text-[11px]">
+                            <span style={{ color: 'var(--text2)' }}>
+                              Sudah tercatat ({forecast.days_elapsed} hari)
+                            </span>
+                            <span style={{ color: 'var(--text)' }}>{formatRp(forecast.actual.expense)}</span>
+                          </div>
+                          <div className="flex justify-between text-[11px]">
+                            <span style={{ color: 'var(--text2)' }}>
+                              Perkiraan sisa bulan ({forecast.days_remaining} hari)
+                            </span>
+                            <span style={{ color: 'var(--text)' }}>
+                              {formatRp(forecast.projected.variable_remaining)}
+                            </span>
+                          </div>
+
+                          {forecast.known_upcoming.length > 0 && (
+                            <>
+                              <p className="text-[10px] font-bold uppercase tracking-wider mt-2" style={{ color: 'var(--text3)' }}>
+                                SUDAH TERJADWAL
+                              </p>
+                              {forecast.known_upcoming.map((u, i) => (
+                                <div key={`${u.label}-${i}`} className="flex justify-between gap-2 text-[11px]">
+                                  <span className="truncate" style={{ color: 'var(--text2)' }}>
+                                    {u.date.slice(8, 10)}/{u.date.slice(5, 7)} · {u.label}
+                                  </span>
+                                  <span
+                                    className="flex-shrink-0"
+                                    style={{ color: u.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}
+                                  >
+                                    {u.type === 'income' ? '+' : '−'}{formatRp(u.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </>
+                          )}
+
+                          <p className="text-[10px] leading-snug mt-2" style={{ color: 'var(--text3)' }}>
+                            Perkiraan sisa bulan memakai laju pengeluaran harian sejauh ini. Pemasukan
+                            tidak dirata-ratakan — hanya yang benar-benar terjadwal yang dihitung.
+                          </p>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
 
               {/* Summary Card */}
               <div className="rounded-[20px] p-5 flex flex-col gap-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>

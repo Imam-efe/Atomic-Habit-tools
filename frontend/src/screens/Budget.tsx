@@ -218,6 +218,11 @@ export function Budget() {
   const [ocrResult, setOcrResult] = useState<{ merchant: string; amount: number; category: string; date: string } | null>(null);
   const [ocrFileUploaded, setOcrFileUploaded] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  // Which engine produced the result on screen, and the line items only the
+  // vision model can see — Tesseract returns flat text with no structure.
+  const [ocrEngine, setOcrEngine] = useState<'ai' | 'local' | null>(null);
+  const [ocrItems, setOcrItems] = useState<{ name: string; quantity: number; unit: string }[]>([]);
+  const [savingItems, setSavingItems] = useState<'idle' | 'saving' | 'done'>('idle');
 
   // Budget Limit Form state
   const [selectedLimitCat, setSelectedLimitCat] = useState(EXPENSE_CATEGORIES[0]);
@@ -256,6 +261,16 @@ export function Budget() {
   };
 
   useEffect(() => { load(); }, [activeSubTab, rangePreset, customFrom, customTo]);
+
+  // The tab stays mounted between visits, and quick-add can post a transaction
+  // from any screen, so a re-show refetches to pick that up.
+  useEffect(() => {
+    const onShown = (e: Event) => {
+      if ((e as CustomEvent).detail === 'uang') load();
+    };
+    window.addEventListener('fayolla:tab-shown', onShown);
+    return () => window.removeEventListener('fayolla:tab-shown', onShown);
+  }, [rangePreset, customFrom, customTo, activeSubTab]);
 
   // Handle receipt image upload & compression
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -296,11 +311,22 @@ export function Budget() {
     reader.readAsDataURL(file);
   };
 
-  // OCR Real Scanner
-  const triggerOcrScan = async (fileOrMock: File | 'mock') => {
+  /**
+   * Two engines, in order of accuracy.
+   *
+   * The vision model reads a crumpled Indonesian receipt far better than
+   * Tesseract plus regex, and it is the only one that returns the line items.
+   * Tesseract stays as the fallback because it runs entirely in the browser:
+   * offline, or when the AI call fails, scanning still works rather than
+   * dropping the user back to typing.
+   */
+  const triggerOcrScan = async (fileOrMock: File | 'mock', dataUrl?: string) => {
     setOcrScanning(true);
     setOcrResult(null);
     setOcrError(null);
+    setOcrEngine(null);
+    setOcrItems([]);
+    setSavingItems('idle');
 
     if (fileOrMock === 'mock') {
       // Simulate 2.5 second scan laser animation
@@ -312,9 +338,36 @@ export function Budget() {
           category: randomTx.category,
           date: new Date().toISOString().slice(0, 10)
         });
+        setOcrEngine('local');
         setOcrScanning(false);
       }, 2000);
       return;
+    }
+
+    if (dataUrl && navigator.onLine) {
+      try {
+        const res = await apiFetch<{
+          entry: { type: string; amount: number; category: string; note: string; date: string };
+          items: { name: string; quantity: number; unit: string }[];
+        }>('/quickadd/receipt', {
+          method: 'POST',
+          body: JSON.stringify({ image: dataUrl }),
+        });
+
+        setOcrResult({
+          merchant: res.entry.note,
+          amount: res.entry.amount,
+          category: res.entry.category,
+          date: res.entry.date,
+        });
+        setOcrItems(res.items ?? []);
+        setOcrEngine('ai');
+        setOcrScanning(false);
+        return;
+      } catch (err) {
+        // Fall through to the local engine rather than failing the scan.
+        console.warn('AI receipt scan unavailable, falling back to Tesseract', err);
+      }
     }
 
     try {
@@ -328,6 +381,7 @@ export function Budget() {
 
       const parsed = parseOcrText(text);
       setOcrResult(parsed);
+      setOcrEngine('local');
     } catch (err: any) {
       console.error(err);
       setOcrError(err.message || "Gagal memproses struk. Silakan coba unggah foto yang lebih jelas.");
@@ -341,11 +395,10 @@ export function Budget() {
     if (!file) return;
 
     setOcrFileUploaded(true);
-    
-    // Run OCR on the original File for better accuracy
-    triggerOcrScan(file);
 
-    // Compress in parallel for storage
+    // Compression has to finish before the scan starts now: the AI engine
+    // sends the compressed data URL, and posting the raw camera JPEG would
+    // blow past the endpoint's size limit.
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -374,10 +427,33 @@ export function Budget() {
 
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
         setReceiptImg(compressedBase64);
+        // Tesseract still gets the original File — it reads sharper text.
+        triggerOcrScan(file, compressedBase64);
       };
+      // A file the browser cannot decode still deserves a scan attempt.
+      img.onerror = () => triggerOcrScan(file);
       img.src = event.target?.result as string;
     };
+    reader.onerror = () => triggerOcrScan(file);
     reader.readAsDataURL(file);
+  };
+
+  /** Push the receipt's line items into Inventory in one go. */
+  const addOcrItemsToInventory = async () => {
+    if (ocrItems.length === 0 || savingItems !== 'idle') return;
+    setSavingItems('saving');
+    try {
+      for (const item of ocrItems) {
+        await apiFetch('/inventory', {
+          method: 'POST',
+          body: JSON.stringify({ name: item.name, quantity: item.quantity, unit: item.unit }),
+        });
+      }
+      setSavingItems('done');
+    } catch {
+      setSavingItems('idle');
+      setOcrError('Gagal menambah barang ke stok.');
+    }
   };
 
   const applyOcrResult = () => {
@@ -390,6 +466,9 @@ export function Budget() {
     setOcrResult(null);
     setOcrFileUploaded(false);
     setOcrError(null);
+    setOcrEngine(null);
+    setOcrItems([]);
+    setSavingItems('idle');
   };
 
   const addEntry = async () => {
@@ -753,12 +832,21 @@ export function Budget() {
                 {ocrResult && !ocrScanning && (
                   <div className="w-full max-h-64 overflow-y-auto pr-1 flex flex-col gap-3 text-xs">
                     <div className="flex justify-between items-center border-b border-white/5 pb-1">
-                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">HASIL DETEKSI OCR ✓</span>
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                        {ocrEngine === 'ai' ? 'HASIL DETEKSI AI ✓' : 'HASIL DETEKSI OCR ✓'}
+                      </span>
                       {receiptImg && (
                         <img src={receiptImg} alt="Receipt preview" className="w-8 h-8 rounded object-cover border border-white/10" />
                       )}
                     </div>
-                    
+
+                    {ocrEngine === 'local' && (
+                      <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
+                        Dibaca lokal di perangkat. Periksa nominalnya — mode ini kurang akurat
+                        dibanding pemindaian AI.
+                      </p>
+                    )}
+
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] text-[var(--text2)] font-semibold">Nama Toko / Catatan</label>
                       <input
@@ -802,6 +890,39 @@ export function Budget() {
                         className="w-full bg-black/45 text-white rounded-xl p-2 border border-white/10 outline-none focus:border-violet-400 text-xs"
                       />
                     </div>
+
+                    {/* Line items — only the AI engine can see these. */}
+                    {ocrItems.length > 0 && (
+                      <div className="flex flex-col gap-1.5 border-t border-white/5 pt-2">
+                        <label className="text-[10px] text-[var(--text2)] font-semibold">
+                          {ocrItems.length} barang terbaca
+                        </label>
+                        <ul className="flex flex-col gap-0.5">
+                          {ocrItems.map((item, i) => (
+                            <li
+                              key={`${item.name}-${i}`}
+                              className="flex justify-between gap-2 text-[11px]"
+                              style={{ color: 'var(--text2)' }}
+                            >
+                              <span className="truncate">{item.name}</span>
+                              <span className="flex-shrink-0">{item.quantity} {item.unit}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <button
+                          onClick={addOcrItemsToInventory}
+                          disabled={savingItems !== 'idle'}
+                          className="mt-1 text-[11px] font-bold underline hover:opacity-80 transition-opacity disabled:no-underline disabled:opacity-60 self-start"
+                          style={{ color: savingItems === 'done' ? 'var(--pos)' : 'var(--accent)' }}
+                        >
+                          {savingItems === 'done'
+                            ? '✓ Ditambahkan ke Stok'
+                            : savingItems === 'saving'
+                              ? 'Menambahkan…'
+                              : 'Tambahkan semua ke Stok'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

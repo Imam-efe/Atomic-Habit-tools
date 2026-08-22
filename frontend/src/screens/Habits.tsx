@@ -24,6 +24,10 @@ interface Habit {
   twoMin: string | null;
   goalIds: string[];
   reminderTime?: string | null;
+  /** Streak freezes spent this calendar month, and what is left of the quota. */
+  freezesUsed?: number;
+  freezesLeft?: number;
+  lastFreezeDate?: string | null;
 }
 
 const COLORS = ['#7C5CFF', 'var(--pos)', '#0A84FF', 'var(--warn)', 'var(--neg)', '#FF2D55'];
@@ -549,6 +553,24 @@ export function Habits() {
         </div>
       ) : (
         <div className="flex flex-col gap-3 mb-6">
+          {/* Freezes are granted silently overnight, so without this the streak
+              simply looks unbroken and the user never learns the rule. */}
+          {habits.some(h => !!h.freezesUsed) && (
+            <div
+              className="rounded-[16px] px-3.5 py-2.5 flex items-start gap-2.5"
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised-sm)' }}
+            >
+              <span className="text-[15px] flex-shrink-0" aria-hidden>❄️</span>
+              <p className="text-[11px] leading-snug" style={{ color: 'var(--text2)' }}>
+                Streak diselamatkan{' '}
+                <span className="font-bold" style={{ color: 'var(--text)' }}>
+                  {habits.reduce((sum, h) => sum + (h.freezesUsed ?? 0), 0)}×
+                </span>{' '}
+                bulan ini. Setiap kebiasaan punya 2 jatah per bulan — satu hari terlewat
+                tidak langsung menghanguskan streak.
+              </p>
+            </div>
+          )}
           <AnimatePresence>
             {habits.map((habit) => {
               const isSelected = selectedHabitId === habit.id;
@@ -612,10 +634,22 @@ export function Habits() {
 
                     {/* Controls */}
                     <div className="flex items-center gap-2">
-                      {/* Streak display */}
+                      {/* Streak display. The snowflake marks a streak that only
+                          survived because a freeze bridged a missed day — worth
+                          showing, or the number looks like it was never broken. */}
                       {habit.streak > 0 && (
-                        <div className="flex items-center gap-0.5 flex-shrink-0 font-bold text-sm bg-orange-500/10 text-[var(--warn)] px-2 py-0.5 rounded-lg">
+                        <div
+                          className="flex items-center gap-0.5 flex-shrink-0 font-bold text-sm bg-orange-500/10 text-[var(--warn)] px-2 py-0.5 rounded-lg"
+                          title={
+                            habit.freezesUsed
+                              ? `${habit.freezesUsed} hari terlewat diselamatkan bulan ini · sisa ${habit.freezesLeft} jatah`
+                              : undefined
+                          }
+                        >
                           🔥 {habit.streak}
+                          {!!habit.freezesUsed && (
+                            <span className="text-[var(--info)] ml-0.5" aria-hidden>❄️</span>
+                          )}
                         </div>
                       )}
 

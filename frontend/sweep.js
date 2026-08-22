@@ -74,6 +74,14 @@ const SUBSCREENS = [
   'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian',
 ];
 
+/** Root-level overlays, opened from the Beranda command bar. */
+const OVERLAYS = [
+  { name: 'Pencarian Global', open: 'Cari apa saja', placeholder: 'Cari transaksi', type: 'beras' },
+  // `then` drives the parse so the editable proposal card is on screen — the
+  // empty state alone would leave most of this overlay's text unaudited.
+  { name: 'Catat Cepat', open: 'Catat cepat', placeholder: 'beli kopi', type: 'beli kopi 25rb', then: 'Baca' },
+];
+
 (async () => {
   const port = process.argv[2] || '4179';
   const theme = process.argv[3] || 'light';
@@ -145,6 +153,30 @@ const SUBSCREENS = [
       await check(tab);
     } catch (e) {
       report.push({ name: tab, blocked: e.message.split('\n')[0], newErrors: errors.slice(-3) });
+    }
+  }
+
+  // The two root overlays never appear on a plain screen walk — they open on
+  // tap and paint over whatever is underneath — so they were the only new UI
+  // the audit could not see. Each is driven to the state that actually renders
+  // text: search needs a query typed before it shows results, and quick-add
+  // needs a parse before it shows the editable proposal.
+  for (const overlay of OVERLAYS) {
+    try {
+      await home();
+      await page.getByRole('button', { name: overlay.open, exact: false }).first().click({ timeout: 8000 });
+      await page.waitForTimeout(700);
+      if (overlay.type) {
+        await page.locator(`input[placeholder*="${overlay.placeholder}"]`).first().fill(overlay.type);
+        await page.waitForTimeout(1200);
+      }
+      if (overlay.then) {
+        await page.getByRole('button', { name: overlay.then, exact: true }).first().click({ timeout: 8000 });
+        await page.waitForTimeout(900);
+      }
+      await check(overlay.name);
+    } catch (e) {
+      report.push({ name: overlay.name, blocked: e.message.split('\n')[0], newErrors: errors.slice(-3) });
     }
   }
 
