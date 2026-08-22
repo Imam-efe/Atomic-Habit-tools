@@ -80,6 +80,21 @@ const FIXTURES = {
     summary: { income: 12000000, expense: 7400000, balance: 4600000 },
   },
   '/api/budget/limits': [],
+  // Calendar reads a date range; the harness serves the same rows whatever the
+  // range, which is enough to render the grid, the dots and the day panel.
+  '/api/calendar': [
+    { id: 'c1', title: 'Rapat RT', note: null, kind: 'event', date: TODAY, event_date: TODAY,
+      event_time: '19:00', end_time: null, priority: 'normal', is_done: 0, repeat_rule: 'none', is_repeat: false },
+    { id: 'c2', title: 'Bayar listrik', note: 'Lewat mobile banking', kind: 'task', date: TODAY, event_date: TODAY,
+      event_time: null, end_time: null, priority: 'high', is_done: 0, repeat_rule: 'monthly', is_repeat: false },
+  ],
+  '/api/calendar/agenda': {
+    date: TODAY,
+    items: [
+      { source: 'habit', id: 'h1', title: 'Olahraga pagi', time: '06:00' },
+      { source: 'debt', id: 'dbt1', title: 'Bayar utang ke Andi', detail: 'Rp5.000.000' },
+    ],
+  },
   '/api/habit-heatmap': [{ habitId: 'h1', name: 'Olahraga pagi', color: '#5B41D6', days: [] }],
   // Shape mirrors GET /api/weekly-review.
   '/api/weekly-review': {

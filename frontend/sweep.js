@@ -131,7 +131,7 @@ const SUBSCREENS = [
   };
 
   await check('Beranda');
-  for (const tab of ['Kebiasaan', 'Goals', 'Uang', 'Lainnya']) {
+  for (const tab of ['Kebiasaan', 'Kalender', 'Goals', 'Uang', 'Lainnya']) {
     try {
       await home();
       await page.getByRole('button', { name: tab, exact: false }).first().click({ timeout: 8000 });

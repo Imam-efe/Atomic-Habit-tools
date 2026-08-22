@@ -16,7 +16,7 @@ Both exit non-zero on failure, so they can gate CI.
 
 ## sweep.js — contrast and render audit
 
-Walks all 16 screens and, for every text node, measures the WCAG contrast of its
+Walks all 17 screens and, for every text node, measures the WCAG contrast of its
 colour against whatever actually paints behind it.
 
 Per screen it reports:

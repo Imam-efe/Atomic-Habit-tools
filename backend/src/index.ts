@@ -27,7 +27,10 @@ import scheduledNotifications, {
   deliverScheduledNotification,
   type ScheduledNotificationRow,
 } from './routes/scheduled_notifications';
-import { sendPushToUser, queueNotificationEvent } from './lib/push';
+// queueNotificationEvent is declared locally below; importing it too shadowed
+// the local one and made the whole backend fail `tsc`.
+import { sendPushToUser } from './lib/push';
+import calendar from './routes/calendar';
 import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
@@ -81,6 +84,7 @@ app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
 app.route('/api/habit-stacks', habitStacks);
 app.route('/api/scheduled-notifications', scheduledNotifications);
+app.route('/api/calendar', calendar);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 

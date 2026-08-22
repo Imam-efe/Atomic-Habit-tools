@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:migrate": "wrangler d1 execute fayolla-db --file=./migrations/0001_initial.sql && wrangler d1 execute fayolla-db --file=./migrations/0011_temptation_bundling.sql && wrangler d1 execute fayolla-db --file=./migrations/0012_notification_events.sql && wrangler d1 execute fayolla-db --file=./migrations/0013_habit_stacking.sql && wrangler d1 execute fayolla-db --file=./migrations/0014_notification_center.sql",
-    "db:migrate:remote": "wrangler d1 execute fayolla-db --remote --file=./migrations/0001_initial.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0011_temptation_bundling.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0012_notification_events.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0013_habit_stacking.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0014_notification_center.sql"
+    "db:migrate": "wrangler d1 execute fayolla-db --file=./migrations/0001_initial.sql && wrangler d1 execute fayolla-db --file=./migrations/0011_temptation_bundling.sql && wrangler d1 execute fayolla-db --file=./migrations/0012_notification_events.sql && wrangler d1 execute fayolla-db --file=./migrations/0013_habit_stacking.sql && wrangler d1 execute fayolla-db --file=./migrations/0014_notification_center.sql && wrangler d1 execute fayolla-db --file=./migrations/0015_calendar.sql",
+    "db:migrate:remote": "wrangler d1 execute fayolla-db --remote --file=./migrations/0001_initial.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0011_temptation_bundling.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0012_notification_events.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0013_habit_stacking.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0014_notification_center.sql && wrangler d1 execute fayolla-db --remote --file=./migrations/0015_calendar.sql"
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "^1.0.2",

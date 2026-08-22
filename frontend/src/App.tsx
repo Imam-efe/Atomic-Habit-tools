@@ -10,6 +10,7 @@ import { Dashboard } from '@/screens/Dashboard';
 import { Habits } from '@/screens/Habits';
 import { Goals } from '@/screens/Goals';
 import { Budget } from '@/screens/Budget';
+import { Calendar } from '@/screens/Calendar';
 import { More } from '@/screens/More';
 import { Projects } from '@/screens/Projects';
 import { Activity } from '@/screens/Activity';
@@ -65,6 +66,7 @@ function AppShell() {
   const screens: Record<string, React.ReactNode> = {
     beranda: <Dashboard />,
     kebiasaan: <Habits />,
+    kalender: <Calendar />,
     goals: <Goals />,
     uang: <Budget />,
     lainnya: <More />,
