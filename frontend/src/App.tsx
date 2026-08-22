@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
+import { MotionConfig } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -24,16 +24,54 @@ import { HabitHeatmap } from '@/screens/HabitHeatmap';
 import { DebtPlanner } from '@/screens/DebtPlanner';
 import { NotificationCenter } from '@/screens/NotificationCenter';
 import { applyTheme } from '@/tokens/theme';
-import { screenTransition, screenVariants } from '@/tokens/motion';
 import type { AccentName, ThemeName } from '@/types';
 
-function AppShell() {
-  const { activeTab, subScreen, setSubScreen, goBack } = useUIStore();
+/**
+ * Keep-alive pane for a tab screen.
+ *
+ * The screen mounts on its first visit and never unmounts again; switching
+ * away only sets `display: none`. Coming back is therefore instant — state,
+ * fetched data and DOM are all still there, exactly like a UIKit tab bar
+ * controller keeps its child view controllers alive.
+ *
+ * The enter animation is pure CSS (`.screen-enter`): a CSS animation restarts
+ * automatically when an element goes from `display: none` to visible, so a
+ * re-shown tab replays the entrance with zero JavaScript on the tap's
+ * critical path.
+ */
+function TabPane({
+  id,
+  active,
+  animated,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  animated: boolean;
+  children: React.ReactNode;
+}) {
+  // Announce re-shows (not the first mount — the screen already fetches on
+  // mount) so screens showing cross-tab aggregates can refresh silently.
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (active && !wasActive.current) {
+      window.dispatchEvent(new CustomEvent('fayolla:tab-shown', { detail: id }));
+    }
+    wasActive.current = active;
+  }, [active, id]);
 
-  // An app that fades itself in on load reads as slow, so the very first
-  // screen paints without the enter animation; every later mount gets it.
-  const firstPaint = useRef(true);
-  useEffect(() => { firstPaint.current = false; }, []);
+  return (
+    <div
+      className={animated ? 'screen-enter' : undefined}
+      style={active ? undefined : { display: 'none' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function AppShell() {
+  const { activeTab, subScreen, goBack } = useUIStore();
 
   useEffect(() => {
     let startX = 0;
@@ -68,66 +106,93 @@ function AppShell() {
     };
   }, [goBack]);
 
-  const screens: Record<string, React.ReactNode> = {
-    beranda: <Dashboard />,
-    kebiasaan: <Habits />,
-    kalender: <Calendar />,
-    goals: <Goals />,
-    uang: <Budget />,
-    lainnya: <More />,
-  };
+  // Memoised so the elements keep their identity across renders: React then
+  // bails out of re-rendering the hidden screens entirely, which makes a tab
+  // switch re-render just the pane wrappers.
+  const screens = useMemo<Record<string, React.ReactNode>>(
+    () => ({
+      beranda: <Dashboard />,
+      kebiasaan: <Habits />,
+      kalender: <Calendar />,
+      goals: <Goals />,
+      uang: <Budget />,
+      lainnya: <More />,
+    }),
+    [],
+  );
 
-  const subScreens: Record<string, React.ReactNode> = {
-    projects: <Projects />,
-    activity: <Activity />,
-    nutrition: <Nutrition />,
-    menstrual: <Menstrual />,
-    inventory: <Inventory />,
-    'kids-schedule': <KidsSchedule />,
-    'financial-report': <FinancialReport />,
-    'weekly-review': <WeeklyReview />,
-    'habit-heatmap': <HabitHeatmap />,
-    'debt-planner': <DebtPlanner />,
-    'notification-center': <NotificationCenter />,
-  };
+  const subScreens = useMemo<Record<string, React.ReactNode>>(
+    () => ({
+      projects: <Projects />,
+      activity: <Activity />,
+      nutrition: <Nutrition />,
+      menstrual: <Menstrual />,
+      inventory: <Inventory />,
+      'kids-schedule': <KidsSchedule />,
+      'financial-report': <FinancialReport />,
+      'weekly-review': <WeeklyReview />,
+      'habit-heatmap': <HabitHeatmap />,
+      'debt-planner': <DebtPlanner />,
+      'notification-center': <NotificationCenter />,
+    }),
+    [],
+  );
 
   const screenKey = subScreen ?? activeTab;
-  const currentScreen = subScreen ? subScreens[subScreen] : screens[activeTab];
 
-  // The incoming screen starts at whatever scroll offset the outgoing one left
-  // behind, which makes a clean crossfade look like a jump. Reset before paint
-  // so the new screen is never seen at the wrong offset.
+  // Lazy keep-alive: a tab mounts the first time it is visited and stays
+  // mounted afterwards. Mutating the ref during render is deliberate — the
+  // new tab must mount in the same commit as the switch, or it would paint
+  // one frame late.
+  const visitedTabs = useRef(new Set<string>([activeTab]));
+  if (!subScreen) visitedTabs.current.add(activeTab);
+
+  // The very first paint skips the enter animation — an app that fades itself
+  // in on load reads as slow. The flag flips on the first navigation, in the
+  // same render, so the outgoing pane is already hidden when the class lands.
+  const initialKey = useRef(screenKey);
+  const hasNavigated = useRef(false);
+  if (screenKey !== initialKey.current) hasNavigated.current = true;
+
+  // Native tab bars remember each tab's scroll offset. Track it continuously
+  // (the window scroll position is shared), restore it before paint.
+  const scrollPositions = useRef<Record<string, number>>({});
+  const screenKeyRef = useRef(screenKey);
+  screenKeyRef.current = screenKey;
+  useEffect(() => {
+    const onScroll = () => {
+      scrollPositions.current[screenKeyRef.current] = window.scrollY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   useLayoutEffect(() => {
-    window.scrollTo(0, 0);
-  }, [screenKey]);
+    // Sub-screens are pushed fresh each time, so they always start at the top;
+    // tabs restore where the user left them.
+    window.scrollTo(0, subScreen ? 0 : scrollPositions.current[screenKey] ?? 0);
+  }, [screenKey, subScreen]);
 
   return (
     <div className="max-w-[430px] mx-auto relative min-h-screen overflow-hidden">
-      {/*
-        `mode="wait"` queues: old screen exits, then new screen enters. Both
-        happen at the same time visually (0ms gap), so no blink. No popLayout
-        overlap, so Safari's backdrop-filter doesn't repaint the old screen.
-      */}
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={screenKey}
-          variants={screenVariants}
-          initial={firstPaint.current ? false : 'initial'}
-          animate="animate"
-          exit="exit"
-          transition={{
-            duration: screenTransition.enter,
-            ease: screenTransition.ease,
-            exit: { duration: screenTransition.exit, ease: screenTransition.ease },
-          }}
-          // No will-change here on purpose. Motion adds it for the values it is
-          // animating and drops it again afterwards; a permanent one would make
-          // this div a containing block and reparent the fixed modals the
-          // screens render inside it.
-        >
-          {currentScreen}
-        </motion.div>
-      </AnimatePresence>
+      {Object.entries(screens).map(([key, node]) =>
+        visitedTabs.current.has(key) ? (
+          <TabPane
+            key={key}
+            id={key}
+            active={!subScreen && activeTab === key}
+            animated={hasNavigated.current}
+          >
+            {node}
+          </TabPane>
+        ) : null,
+      )}
+      {/* Sub-screens mount fresh per push (keyed) and animate in via CSS. */}
+      {subScreen && (
+        <div key={subScreen} className="screen-enter">
+          {subScreens[subScreen]}
+        </div>
+      )}
       <TabBar />
     </div>
   );
