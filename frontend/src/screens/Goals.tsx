@@ -150,7 +150,7 @@ export function Goals() {
   compoundArea += ` L ${svgW} ${svgH - 10} Z`;
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28 animate-[fyScreen_420ms_cubic-bezier(0.25,0.46,0.45,0.94)_both]" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>

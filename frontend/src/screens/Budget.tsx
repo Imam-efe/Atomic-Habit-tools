@@ -1394,7 +1394,7 @@ export function Budget() {
               onClick={() => { setViewEntry(null); setEditMode(false); }}
             />
             <motion.div
-              className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto rounded-t-[24px] p-5 pb-10"
+              className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto rounded-t-[24px] p-5 pb-28"
               style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)', maxHeight: '88vh', overflowY: 'auto' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}

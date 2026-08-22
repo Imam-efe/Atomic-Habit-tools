@@ -245,7 +245,7 @@ export function Habits() {
   const loopHabit = habits.find(h => h.id === selectedHabitId) || habits[0];
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28 relative animate-[fyScreen_420ms_cubic-bezier(0.25,0.46,0.45,0.94)_both]" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-28 relative" style={{ background: 'var(--bg)' }}>
       {/* Confetti canvas overlay */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-40" />
 

@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
+import { MotionConfig, motion } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
@@ -29,6 +29,11 @@ import type { AccentName, ThemeName } from '@/types';
 
 function AppShell() {
   const { activeTab, subScreen, setSubScreen, goBack } = useUIStore();
+
+  // An app that fades itself in on load reads as slow, so the very first
+  // screen paints without the enter animation; every later mount gets it.
+  const firstPaint = useRef(true);
+  useEffect(() => { firstPaint.current = false; }, []);
 
   useEffect(() => {
     let startX = 0;
@@ -99,31 +104,29 @@ function AppShell() {
   return (
     <div className="max-w-[430px] mx-auto relative min-h-screen overflow-hidden">
       {/*
-        `popLayout` takes the outgoing screen out of flow, so the two overlap
-        and genuinely crossfade instead of stacking and shoving the page down.
-        `initial={false}` skips the enter animation on first paint — an app that
-        fades itself in on load reads as slow.
+        Enter-only, like a UIKit tab switch: the outgoing screen unmounts in the
+        same commit the incoming one mounts, so no frame ever holds two live
+        screens. The earlier crossfade (AnimatePresence popLayout) kept both
+        mounted and compositing them against the tab bar's backdrop-filter made
+        iOS Safari repaint the outgoing screen at full opacity for a frame — a
+        visible flash of the previous tab mid-transition.
       */}
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.div
-          key={screenKey}
-          variants={screenVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={{
-            duration: screenTransition.enter,
-            ease: screenTransition.ease,
-            exit: { duration: screenTransition.exit, ease: screenTransition.ease },
-          }}
-          // No will-change here on purpose. Motion adds it for the values it is
-          // animating and drops it again afterwards; a permanent one would make
-          // this div a containing block and reparent the fixed modals the
-          // screens render inside it.
-        >
-          {currentScreen}
-        </motion.div>
-      </AnimatePresence>
+      <motion.div
+        key={screenKey}
+        variants={screenVariants}
+        initial={firstPaint.current ? false : 'initial'}
+        animate="animate"
+        transition={{
+          duration: screenTransition.enter,
+          ease: screenTransition.ease,
+        }}
+        // No will-change here on purpose. Motion adds it for the values it is
+        // animating and drops it again afterwards; a permanent one would make
+        // this div a containing block and reparent the fixed modals the
+        // screens render inside it.
+      >
+        {currentScreen}
+      </motion.div>
       <TabBar />
     </div>
   );
