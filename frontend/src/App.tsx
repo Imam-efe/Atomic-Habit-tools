@@ -12,6 +12,7 @@ import { Goals } from '@/screens/Goals';
 import { Budget } from '@/screens/Budget';
 import { Calendar } from '@/screens/Calendar';
 import { More } from '@/screens/More';
+import { useOnline } from '@/hooks/useOnline';
 import { applyTheme } from '@/tokens/theme';
 import type { AccentName, ThemeName } from '@/types';
 
@@ -74,6 +75,7 @@ function TabPane({
 
 function AppShell() {
   const { activeTab, subScreen, goBack } = useUIStore();
+  const isOnline = useOnline();
 
   useEffect(() => {
     let startX = 0;
@@ -177,6 +179,11 @@ function AppShell() {
 
   return (
     <div className="max-w-[430px] mx-auto relative min-h-screen overflow-hidden">
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 bg-warn text-white text-sm px-4 py-2 text-center z-50" style={{ background: 'var(--warn)', color: '#fff' }}>
+          Offline — cached data only
+        </div>
+      )}
       {Object.entries(screens).map(([key, node]) =>
         visitedTabs.current.has(key) ? (
           <TabPane
