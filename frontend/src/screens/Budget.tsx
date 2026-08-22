@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
 import { formatRp } from '@/lib/currency';
+import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
 
 interface BudgetEntry {
@@ -179,6 +180,7 @@ function parseOcrText(text: string): { merchant: string; amount: number; categor
 }
 
 export function Budget() {
+  const showUndoToast = useUndoToastStore(s => s.show);
   const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting'>('transaksi');
   const [data, setData] = useState<BudgetData | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -457,14 +459,16 @@ export function Budget() {
     setSaving(false);
   };
 
-  const deleteEntry = async (id: string) => {
+  const deleteEntry = (id: string) => {
     const prevData = data;
     const deletedEntry = data?.entries.find(e => e.id === id);
+    if (!deletedEntry) return;
+
+    const isIncome = deletedEntry.type === 'income';
 
     // Optimistically remove entry and update summary
     setData(d => {
-      if (!d || !deletedEntry) return d;
-      const isIncome = deletedEntry.type === 'income';
+      if (!d) return d;
       return {
         entries: d.entries.filter(e => e.id !== id),
         summary: {
@@ -475,12 +479,19 @@ export function Budget() {
       };
     });
 
-    try {
-      await apiFetch(`/budget/${id}`, { method: 'DELETE' });
-    } catch {
-      // Revert on error
-      setData(prevData);
-    }
+    // The API call itself is deferred until the undo window expires — an
+    // undo just restores the local snapshot, no request ever goes out.
+    showUndoToast(
+      `${deletedEntry.category} dihapus`,
+      () => setData(prevData),
+      async () => {
+        try {
+          await apiFetch(`/budget/${id}`, { method: 'DELETE' });
+        } catch {
+          setData(prevData);
+        }
+      },
+    );
   };
 
   const openSheet = useCallback((entry: BudgetEntry) => {

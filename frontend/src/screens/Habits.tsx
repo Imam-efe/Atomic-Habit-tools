@@ -5,6 +5,8 @@ import { apiFetch } from '@/lib/api';
 import { CONFETTI_COLORS } from '@/constants/colors';
 import { HabitBundles } from '@/components/HabitBundles';
 import HabitStacks from '@/components/HabitStacks';
+import { useUndoToastStore } from '@/stores/toastStore';
+import { buildHabitReminderIcs, downloadIcs } from '@/lib/ics';
 
 interface Goal {
   id: string;
@@ -27,6 +29,7 @@ interface Habit {
 const COLORS = ['#7C5CFF', 'var(--pos)', '#0A84FF', 'var(--warn)', 'var(--neg)', '#FF2D55'];
 
 export function Habits() {
+  const showUndoToast = useUndoToastStore(s => s.show);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -229,10 +232,21 @@ export function Habits() {
     setUpdating(false);
   };
 
-  const deleteHabit = async (id: string, e: React.MouseEvent) => {
+  const deleteHabit = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const removed = habits.find(h => h.id === id);
+    if (!removed) return;
+    const prevHabits = habits;
+
     setHabits(h => h.filter(x => x.id !== id));
-    await apiFetch(`/habits/${id}`, { method: 'DELETE' }).catch(() => load());
+
+    // Deferred like Budget's delete: the API call only fires once the undo
+    // window has passed, so tapping Undo never has to race an in-flight DELETE.
+    showUndoToast(
+      `${removed.name} dihapus`,
+      () => setHabits(prevHabits),
+      () => { apiFetch(`/habits/${id}`, { method: 'DELETE' }).catch(() => load()); },
+    );
   };
 
   const toggleGoalInAdd = (goalId: string) => {
@@ -245,6 +259,12 @@ export function Habits() {
     setEditGoalIds(prev =>
       prev.includes(goalId) ? prev.filter(id => id !== goalId) : [...prev, goalId]
     );
+  };
+
+  const exportToCalendar = () => {
+    const withReminders = habits.filter((h): h is Habit & { reminderTime: string } => !!h.reminderTime);
+    if (withReminders.length === 0) return;
+    downloadIcs(buildHabitReminderIcs(withReminders), 'fayolla-kebiasaan.ics');
   };
 
   const { done, total, stackedHabits, loopHabit } = useMemo(() => {
@@ -272,17 +292,30 @@ export function Habits() {
             </p>
           )}
         </div>
-        <motion.button
-          className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accentFill)' }}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          onClick={() => setShowAdd(s => !s)}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </motion.button>
+        <div className="flex items-center gap-2">
+          {habits.some(h => h.reminderTime) && (
+            <motion.button
+              className="neu-press w-10 h-10 rounded-full flex items-center justify-center text-base"
+              whileTap={{ scale: 0.9 }}
+              transition={springs.snappy}
+              onClick={exportToCalendar}
+              aria-label="Ekspor pengingat ke Kalender"
+            >
+              📅
+            </motion.button>
+          )}
+          <motion.button
+            className="neu-cta w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--accentFill)' }}
+            whileTap={{ scale: 0.9 }}
+            transition={springs.snappy}
+            onClick={() => setShowAdd(s => !s)}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </motion.button>
+        </div>
       </div>
 
       {/* Add Habit Modal */}

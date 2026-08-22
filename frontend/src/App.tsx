@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { TabBar } from '@/components/TabBar';
 import { InstallPrompt } from '@/components/InstallPrompt';
+import { UndoToast } from '@/components/UndoToast';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { Dashboard } from '@/screens/Dashboard';
 import { Habits } from '@/screens/Habits';
@@ -220,6 +221,7 @@ function AppShell() {
       )}
       <TabBar />
       <InstallPrompt />
+      <UndoToast />
     </div>
   );
 }
