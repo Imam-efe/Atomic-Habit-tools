@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { CONFETTI_COLORS } from '@/constants/colors';
 import { HabitBundles } from '@/components/HabitBundles';
@@ -283,7 +283,7 @@ export function Habits() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-semibold text-white">Tambah Kebiasaan Baru</p>
             <input
@@ -392,7 +392,7 @@ export function Habits() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-semibold text-white">Ubah Pengaturan Kebiasaan</p>
             <input
@@ -512,7 +512,7 @@ export function Habits() {
                 <motion.div
                   key={habit.id}
                   onClick={() => setSelectedHabitId(habit.id)}
-                  layout
+                  layout="position"
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -20 }}
@@ -618,7 +618,7 @@ export function Habits() {
                           ⚡ Rebound 2M
                         </button>
                       ) : habit.isTwoMinToday ? (
-                        <span className="px-2.5 py-1 rounded-lg font-bold text-[10px] text-emerald-400 bg-emerald-500/10 flex items-center gap-1">
+                        <span className="px-2.5 py-1 rounded-lg font-bold text-[10px] text-[var(--pos)] bg-emerald-500/10 flex items-center gap-1">
                           ✓ Rebound 2M
                         </span>
                       ) : (

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { TabName, AccentName, ThemeName } from '@/types';
 import { applyTheme } from '@/tokens/theme';
 
@@ -15,7 +16,14 @@ interface UIState {
   goBack: () => void;
 }
 
-export const useUIStore = create<UIState>((set, get) => ({
+/**
+ * Theme and accent persist; navigation state does not.
+ *
+ * Without this a reload dropped the user back to light mode, and restoring
+ * `subScreen` would reopen whatever sub-page they were last on, which is not
+ * what a fresh launch should do.
+ */
+export const useUIStore = create<UIState>()(persist((set, get) => ({
   activeTab: 'beranda',
   subScreen: null,
   tabHistory: [],
@@ -55,4 +63,8 @@ export const useUIStore = create<UIState>((set, get) => ({
     applyTheme(get().theme, accent);
     set({ accent });
   },
+}), {
+  name: 'fayolla_ui',
+  storage: createJSONStorage(() => localStorage),
+  partialize: (s) => ({ theme: s.theme, accent: s.accent }),
 }));

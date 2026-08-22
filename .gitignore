@@ -5,3 +5,7 @@ dist/
 .dev.vars
 *.env.local
 .DS_Store
+
+# Screenshot output from frontend/sweep.js
+frontend/sweep-light/
+frontend/sweep-dark/

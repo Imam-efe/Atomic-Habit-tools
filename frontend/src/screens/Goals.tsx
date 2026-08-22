@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { readableOn } from '@/lib/color';
+import { useUIStore } from '@/stores/uiStore';
 
 interface Habit {
   id: string;
@@ -29,6 +31,7 @@ interface ScoreData {
 const COLORS = ['#7C5CFF', 'var(--pos)', '#0A84FF', 'var(--warn)', 'var(--neg)', '#FF2D55'];
 
 export function Goals() {
+  const theme = useUIStore((s) => s.theme);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -268,7 +271,7 @@ export function Goals() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-semibold text-white">Tambah Goal Identitas</p>
             <p className="text-[11px] -mb-1" style={{ color: 'var(--text3)' }}>Saya adalah orang yang...</p>
@@ -350,7 +353,7 @@ export function Goals() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-semibold text-white">Edit Goal Identitas</p>
             <p className="text-[11px] -mb-1" style={{ color: 'var(--text3)' }}>Saya adalah orang yang...</p>
@@ -445,6 +448,8 @@ export function Goals() {
               return 'Master';
             };
             const rank = getRankName(level);
+            // Stored colour is tuned for the light base; as text on dark it lands ~2.3:1.
+            const inkColor = readableOn(goal.color, theme);
             
             return (
               <motion.div
@@ -460,15 +465,15 @@ export function Goals() {
                   setEditColor(goal.color);
                   setEditSelectedHabitIds(goal.habitIds);
                 }}
-                layout
+                layout="position"
               >
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-2xl flex-shrink-0 flex items-center justify-center text-xl"
-                    style={{ background: goal.color + '22', color: goal.color }}>
+                    style={{ background: goal.color + '22', color: inkColor }}>
                     🎯
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5" style={{ color: goal.color }}>
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5" style={{ color: inkColor }}>
                       <span>Lvl {level} {rank}</span>
                       <span className="w-1 h-1 rounded-full" style={{ background: goal.color }} />
                       <span>Identitas</span>
@@ -504,7 +509,7 @@ export function Goals() {
                     <div>
                       <div className="flex justify-between items-center text-[10px] font-semibold mb-1">
                         <span style={{ color: 'var(--text2)' }}>Kemajuan Hari Ini</span>
-                        <span style={{ color: goal.color }} className="font-extrabold">{goal.progress}%</span>
+                        <span style={{ color: inkColor }} className="font-extrabold">{goal.progress}%</span>
                       </div>
                       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--track)' }}>
                         <motion.div
@@ -521,7 +526,7 @@ export function Goals() {
                     <div>
                       <div className="flex justify-between items-center text-[10px] font-semibold mb-1">
                         <span style={{ color: 'var(--text2)' }}>Pertumbuhan EXP</span>
-                        <span style={{ color: goal.color }} className="font-extrabold">{goal.currentExp || 0}/{goal.nextLevelExp || 100} XP</span>
+                        <span style={{ color: inkColor }} className="font-extrabold">{goal.currentExp || 0}/{goal.nextLevelExp || 100} XP</span>
                       </div>
                       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--track)' }}>
                         <motion.div

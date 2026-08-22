@@ -399,7 +399,7 @@ export function Dashboard() {
                       <p className="text-[10px] flex items-center gap-2" style={{ color: 'var(--text3)' }}>
                         <span>🔥 {h.streak} hari streak</span>
                         {h.doneToday && h.isTwoMinToday && (
-                          <span className="text-emerald-400 font-bold">⚡ 2M</span>
+                          <span className="text-[var(--pos)] font-bold">⚡ 2M</span>
                         )}
                       </p>
                     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { NUTRITION_MACROS } from '@/constants/colors';
 
@@ -249,7 +249,7 @@ export function Nutrition() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Ubah Target Nutrisi Harian</p>
             <div className="grid grid-cols-2 gap-2">
@@ -335,7 +335,7 @@ export function Nutrition() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Log Makanan Baru</p>
             <input
@@ -556,7 +556,7 @@ export function Nutrition() {
                   return (
                     <motion.div
                       key={food.id}
-                      layout
+                      layout="position"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -20 }}

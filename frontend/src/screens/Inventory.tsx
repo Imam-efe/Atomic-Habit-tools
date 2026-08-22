@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 
@@ -306,7 +306,7 @@ export function Inventory() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-bold mb-3" style={{ color: 'var(--text)' }}>
               {editingId ? 'Edit Barang' : activeTab === 'belanja' ? 'Catat Rencana Belanja Baru' : 'Tambah Barang'}
@@ -586,7 +586,7 @@ export function Inventory() {
               return (
                 <motion.div
                   key={item.id}
-                  layout
+                  layout="position"
                   className="rounded-[16px] p-3.5 flex flex-col gap-2.5 relative overflow-hidden"
                   style={{
                     background: 'var(--surface)',
@@ -684,7 +684,7 @@ export function Inventory() {
               return (
                 <motion.div
                   key={item.id}
-                  layout
+                  layout="position"
                   className="rounded-[16px] p-4 flex items-center justify-between gap-3"
                   style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                 >

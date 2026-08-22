@@ -64,11 +64,14 @@ export function TabBar() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around px-2"
+      className="tab-bar-layer fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around px-2"
       style={{
         background: 'var(--blur)',
-        backdropFilter: 'blur(22px)',
-        WebkitBackdropFilter: 'blur(22px)',
+        // 22px cost noticeably more than it showed. The backdrop is re-sampled
+        // whenever content moves underneath, and the sample area grows with the
+        // radius, so this is the single cheapest frame-rate win on the screen.
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
         boxShadow: 'var(--neu-sheet)',
         paddingTop: '9px',
         paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
@@ -87,23 +90,24 @@ export function TabBar() {
           >
             {/*
               The active tab is a well the icon sits inside, rather than a tinted
-              pill. Box-shadow is transitioned in CSS — framer cannot interpolate
-              the multi-layer shadow these tokens expand to.
+              pill. Both the well and the colour change are CSS transitions:
+              driving them through Motion meant a main-thread tick per frame for
+              two paint properties, which is exactly the work a tab change
+              cannot afford while the screens are crossfading.
             */}
-            <motion.div
-              className="px-3.5 py-1.5 rounded-2xl"
-              style={{
-                boxShadow: isActive ? 'var(--neu-pressed)' : 'none',
-                transition: 'box-shadow 220ms var(--ease-depth)',
-              }}
-              animate={{ color: isActive ? 'var(--accent)' : 'var(--text3)' }}
-              transition={springs.gentle}
+            <div
+              className="tab-well px-3.5 py-1.5 rounded-2xl"
+              data-active={isActive}
+              style={{ color: isActive ? 'var(--accent)' : 'var(--text3)' }}
             >
               {tab.icon}
-            </motion.div>
+            </div>
             <span
               className="text-[10px] font-semibold"
-              style={{ color: isActive ? 'var(--accent)' : 'var(--text3)' }}
+              style={{
+                color: isActive ? 'var(--accent)' : 'var(--text3)',
+                transition: 'color 200ms var(--ease-depth)',
+              }}
             >
               {tab.label}
             </span>
