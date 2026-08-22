@@ -6,7 +6,8 @@ import {
   DAY_INITIALS, MONTH_NAMES, monthGrid, todayISO, fromISO, toISO,
   formatLong, formatShort, daysBetween, isWeekend, wetonOf, toHijri,
 } from '@/lib/calendar';
-import { holidayOn, holidaysInYear, hasOfficialData, nextHoliday } from '@/data/holidays';
+import { nextHoliday, resolveYear } from '@/data/holidays';
+import type { RemoteHoliday, ResolvedHoliday } from '@/data/holidays';
 import { observancesOn } from '@/data/observances';
 
 interface CalendarEvent {
@@ -22,6 +23,18 @@ interface CalendarEvent {
   is_done: number;
   repeat_rule: string;
   is_repeat: boolean;
+}
+
+interface HolidaySync {
+  source: { name: string; url: string };
+  sync: {
+    source_updated: string | null;
+    last_success_at: number | null;
+    status: string | null;
+    detail: string | null;
+    entry_count: number;
+  } | null;
+  holidays: RemoteHoliday[];
 }
 
 interface AgendaItem {
@@ -62,6 +75,11 @@ export function Calendar() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [agenda, setAgenda] = useState<AgendaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [remote, setRemote] = useState<RemoteHoliday[]>([]);
+  const [syncInfo, setSyncInfo] = useState<HolidaySync['sync']>(null);
+  const [sourceName, setSourceName] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [showSource, setShowSource] = useState(false);
 
   // Form state
   const [showAdd, setShowAdd] = useState(false);
@@ -93,8 +111,30 @@ export function Calendar() {
     } catch { setAgenda([]); }
   };
 
+  const loadRemote = async (year: number) => {
+    try {
+      const res = await apiFetch<HolidaySync>(`/holidays?year=${year}`);
+      setRemote(res?.holidays ?? []);
+      setSyncInfo(res?.sync ?? null);
+      setSourceName(res?.source?.name ?? null);
+    } catch {
+      // The bundled decree still renders the grid; the feed is an addition.
+      setRemote([]);
+    }
+  };
+
+  const runSync = async () => {
+    setSyncing(true);
+    try {
+      await apiFetch('/holidays/sync', { method: 'POST' });
+      await loadRemote(cursor.year);
+    } catch {}
+    setSyncing(false);
+  };
+
   useEffect(() => { loadEvents(); }, [rangeFrom, rangeTo]);
   useEffect(() => { loadAgenda(selected); }, [selected]);
+  useEffect(() => { loadRemote(cursor.year); }, [cursor.year]);
 
   /** Events keyed by date, so a grid cell is a map lookup rather than a filter. */
   const byDate = useMemo(() => {
@@ -107,14 +147,35 @@ export function Calendar() {
     return m;
   }, [events]);
 
+  /**
+   * A 42-cell grid can straddle two years (December leads into January), so
+   * resolve each year it touches rather than just the cursor's.
+   */
+  const resolved = useMemo(() => {
+    const years = [...new Set(grid.map((c) => Number(c.iso.slice(0, 4))))];
+    const map = new Map<string, ResolvedHoliday>();
+    let provenance = resolveYear(cursor.year, remote).provenance;
+    let drift: ReturnType<typeof resolveYear>['drift'] = [];
+    for (const y of years) {
+      const r = resolveYear(y, remote);
+      for (const h of r.holidays) map.set(h.date, h);
+      if (y === cursor.year) { provenance = r.provenance; drift = r.drift; }
+    }
+    return { map, provenance, drift };
+  }, [grid, cursor.year, remote]);
+
+  const holidayFor = (iso: string) => resolved.map.get(iso) ?? null;
+
   const monthHolidays = useMemo(
-    () => holidaysInYear(cursor.year).filter((h) => Number(h.date.slice(5, 7)) === cursor.month + 1),
-    [cursor]
+    () => [...resolved.map.values()].filter(
+      (h) => Number(h.date.slice(0, 4)) === cursor.year && Number(h.date.slice(5, 7)) === cursor.month + 1
+    ),
+    [resolved, cursor]
   );
 
   const upcoming = useMemo(() => nextHoliday(today), [today]);
 
-  const selectedHoliday = holidayOn(selected);
+  const selectedHoliday = holidayFor(selected);
   const selectedObservances = observancesOn(selected);
   const selectedEvents = byDate.get(selected) ?? [];
   const hijri = toHijri(selected);
@@ -244,7 +305,7 @@ export function Calendar() {
 
         <div className="grid grid-cols-7 gap-y-0.5">
           {grid.map((cell) => {
-            const hol = holidayOn(cell.iso);
+            const hol = holidayFor(cell.iso);
             const isLibur = hol?.kind === 'libur';
             const isCuti = hol?.kind === 'cuti';
             const sunday = fromISO(cell.iso).getDay() === 0;
@@ -321,20 +382,127 @@ export function Calendar() {
         </div>
       </div>
 
-      {!hasOfficialData(cursor.year) && (
+      {resolved.provenance === 'none' && (
         <div
           className="rounded-[14px] px-4 py-3 mb-4"
           style={{ background: 'var(--surface)', border: '1px solid var(--warnBorder)', boxShadow: 'var(--neu-raised-sm)' }}
         >
           <p className="text-xs font-semibold" style={{ color: 'var(--warn)' }}>
-            Belum ada data libur resmi untuk {cursor.year}
+            Belum ada data libur untuk {cursor.year}
           </p>
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--text2)' }}>
-            Tanggal merah ditetapkan lewat SKB 3 Menteri, biasanya terbit sekitar setahun sebelumnya. Tanggal
-            di bulan ini tidak ditandai agar tidak menyesatkan.
+            Tanggal merah ditetapkan lewat SKB 3 Menteri, biasanya terbit sekitar setahun sebelumnya, dan
+            sumber sinkronisasi juga belum memuatnya. Tanggal di bulan ini tidak ditandai agar tidak menyesatkan.
           </p>
         </div>
       )}
+
+      {resolved.provenance === 'upstream' && (
+        <div
+          className="rounded-[14px] px-4 py-3 mb-4"
+          style={{ background: 'var(--surface)', border: '1px solid var(--warnBorder)', boxShadow: 'var(--neu-raised-sm)' }}
+        >
+          <p className="text-xs font-semibold" style={{ color: 'var(--warn)' }}>
+            Data {cursor.year} dari sumber sinkronisasi, belum diverifikasi SKB
+          </p>
+          <p className="text-[11px] mt-0.5" style={{ color: 'var(--text2)' }}>
+            Tanggal ditandai berdasarkan feed komunitas. Pemisahan libur nasional dan cuti bersama pada sumber
+            ini kurang presisi, jadi pakai sebagai perkiraan sampai SKB resmi terbit.
+          </p>
+        </div>
+      )}
+
+      {resolved.drift.length > 0 && (
+        <div
+          className="rounded-[14px] px-4 py-3 mb-4"
+          style={{ background: 'var(--surface)', border: '1px solid var(--warnBorder)', boxShadow: 'var(--neu-raised-sm)' }}
+        >
+          <p className="text-xs font-semibold" style={{ color: 'var(--warn)' }}>
+            {resolved.drift.length} tanggal berbeda dengan sumber sinkronisasi
+          </p>
+          <p className="text-[11px] mt-0.5 mb-1.5" style={{ color: 'var(--text2)' }}>
+            Yang dipakai tetap SKB resmi. Perbedaan ditampilkan supaya perubahan nyata pada keputusan
+            pemerintah bisa dicek, bukan diam-diam mengubah tanggal merah.
+          </p>
+          {resolved.drift.slice(0, 5).map((d) => (
+            <p key={d.date} className="text-[11px]" style={{ color: 'var(--text3)' }}>
+              {formatShort(d.date)} · {d.bundled ? `SKB: ${d.bundled}` : 'tidak ada di SKB'} ·{' '}
+              {d.upstream ? `sumber: ${d.upstream}` : 'tidak ada di sumber'}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* Where the holiday data comes from, and when it was last confirmed. */}
+      <div className="rounded-[14px] px-4 py-3 mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised-sm)' }}>
+        <button
+          onClick={() => setShowSource((s) => !s)}
+          aria-expanded={showSource}
+          className="w-full flex items-center justify-between gap-2"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text3)' }}>
+            Sumber tanggal merah
+          </span>
+          <span className="text-[11px] font-bold" style={{ color: 'var(--accent)' }}>
+            {showSource ? 'Tutup' : 'Lihat'}
+          </span>
+        </button>
+
+        <p className="text-xs font-semibold mt-1 text-left" style={{ color: 'var(--text)' }}>
+          {resolved.provenance === 'skb'
+            ? `SKB 3 Menteri (${cursor.year})`
+            : resolved.provenance === 'upstream'
+              ? 'Feed sinkronisasi'
+              : 'Belum ada data'}
+        </p>
+
+        <AnimatePresence>
+          {showSource && (
+            <motion.div
+              className="overflow-hidden"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={collapse}
+            >
+              <p className="text-[11px] mt-2" style={{ color: 'var(--text2)' }}>
+                Tanggal merah yang ditampilkan diambil dari SKB 3 Menteri yang sudah disalin ke dalam aplikasi,
+                jadi kalender tetap benar tanpa koneksi. Feed hanya dipakai untuk mengisi tahun yang SKB-nya
+                belum terbit, dan untuk menandai kalau ada tanggal yang berbeda.
+              </p>
+
+              <div className="mt-2 flex flex-col gap-0.5">
+                <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+                  Feed: {sourceName ?? 'belum tersambung'}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+                  Diperbarui sumber: {syncInfo?.source_updated ?? '—'}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+                  Sinkron terakhir:{' '}
+                  {syncInfo?.last_success_at
+                    ? new Date(syncInfo.last_success_at * 1000).toLocaleString('id-ID')
+                    : 'belum pernah'}
+                </p>
+                <p className="text-[11px]" style={{ color: syncInfo?.status === 'error' ? 'var(--neg)' : 'var(--text3)' }}>
+                  Status: {syncInfo?.status ?? '—'}{syncInfo?.detail ? ` · ${syncInfo.detail}` : ''}
+                </p>
+              </div>
+
+              <motion.button
+                onClick={runSync}
+                disabled={syncing}
+                className="neu-cta w-full mt-3 py-2 rounded-xl text-xs font-bold text-white"
+                style={{ background: 'var(--accentFill)', opacity: syncing ? 0.6 : 1 }}
+                whileTap={press.surface}
+                transition={springs.snappy}
+              >
+                {syncing ? 'Menyinkronkan...' : 'Sinkronkan sekarang'}
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       {upcoming && (
         <div className="rounded-[14px] px-4 py-3 mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised-sm)' }}>

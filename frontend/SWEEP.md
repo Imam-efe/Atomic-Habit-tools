@@ -1,4 +1,4 @@
-# Regression tools
+# Regression tools and data sources
 
 Two headless harnesses that run against a production build. Both serve the app
 from `test-fixtures.js` so a run does not depend on a live backend.
@@ -83,3 +83,32 @@ caused every blank screen found so far — a guessed `/api/financial-report`
 against the real `/api/finance-report`, and a `/api/goals` entry missing
 `habitIds`, both of which crashed the screen while the audit reported a clean
 pass. Check `backend/src/routes/` when adding one.
+
+## Holiday data
+
+Red dates come from `src/data/holidays.ts` — the SKB 3 Menteri decree,
+transcribed per year. That file is authoritative and works offline.
+
+A weekly Worker cron also pulls
+[guangrei/APIHariLibur_V2](https://github.com/guangrei/APIHariLibur_V2) into
+`holiday_cache` and serves it at `GET /api/holidays?year=`. It is served from
+`raw.githubusercontent.com` rather than one of the Vercel-hosted Indonesian
+holiday APIs, which are hobby deployments that go cold; a static file on
+GitHub's CDN does not, and it carries an `info.updated` stamp.
+
+The feed never overwrites the decree. It agrees with the SKB on all 25 dates in
+2026, but is looser about what each one is: every entry is `holiday: true`, so
+cuti bersama are only identifiable by name — and 28 May 2026 arrives named as a
+second day of Idul Adha rather than the joint leave it is. Merging it in would
+collapse the two colours the grid draws. So `resolveYear()` gives it two jobs
+instead:
+
+- **cover years with no decree yet**, drawn with an "belum diverifikasi SKB" notice
+- **report date-level disagreement** on years both cover, so a real amendment
+  surfaces instead of silently repainting red dates
+
+Only added or removed *dates* count as drift. Name and kind differences are the
+feed's known imprecision and would fire on every sync.
+
+To add a year once its decree is published: append it to `holidays.ts` and to
+`COVERED_YEARS`.

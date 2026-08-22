@@ -116,3 +116,87 @@ export function nextHoliday(iso: string): Holiday | null {
     .sort((a, b) => a.date.localeCompare(b.date));
   return upcoming[0] ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Merging with the synced upstream feed
+// ---------------------------------------------------------------------------
+
+/** One entry as the backend cached it from upstream. */
+export interface RemoteHoliday {
+  date: string;
+  name: string;
+  kind: string;
+}
+
+export interface ResolvedHoliday extends Holiday {
+  /** True when this came from the transcribed decree rather than upstream. */
+  verified: boolean;
+}
+
+export type Provenance = 'skb' | 'upstream' | 'none';
+
+export interface ResolvedYear {
+  holidays: ResolvedHoliday[];
+  provenance: Provenance;
+  /** Dates where upstream and the decree disagree. Empty unless both cover the year. */
+  drift: { date: string; bundled: string | null; upstream: string | null }[];
+}
+
+/**
+ * Decides what a year's holidays actually are.
+ *
+ * The decree wins wherever it has been transcribed. Upstream agrees with it on
+ * every 2026 date but is looser about what each one is — it reports cuti bersama
+ * as ordinary holidays, and 28 May 2026 arrives named as a second day of Idul
+ * Adha rather than the joint leave it is. Letting it overwrite would collapse
+ * the two colours the grid draws into one.
+ *
+ * So upstream does two jobs instead: it covers years with no decree yet, marked
+ * unverified, and it reports disagreement on the years both cover, so a genuine
+ * amendment surfaces rather than silently repainting red dates.
+ */
+export function resolveYear(year: number, remote: RemoteHoliday[]): ResolvedYear {
+  const remoteForYear = remote.filter((r) => r.date.startsWith(String(year)));
+
+  if (hasOfficialData(year)) {
+    const bundled = holidaysInYear(year);
+    const bundledByDate = new Map(bundled.map((h) => [h.date, h]));
+    const remoteByDate = new Map(remoteForYear.map((r) => [r.date, r]));
+
+    const drift: ResolvedYear['drift'] = [];
+    // Only meaningful once upstream has actually been synced for this year.
+    if (remoteForYear.length > 0) {
+      const dates = new Set([...bundledByDate.keys(), ...remoteByDate.keys()]);
+      for (const date of [...dates].sort()) {
+        const b = bundledByDate.get(date);
+        const r = remoteByDate.get(date);
+        if (!b || !r) {
+          drift.push({ date, bundled: b?.name ?? null, upstream: r?.name ?? null });
+        }
+      }
+    }
+
+    return {
+      holidays: bundled.map((h) => ({ ...h, verified: true })),
+      provenance: 'skb',
+      drift,
+    };
+  }
+
+  if (remoteForYear.length === 0) {
+    return { holidays: [], provenance: 'none', drift: [] };
+  }
+
+  return {
+    holidays: remoteForYear
+      .map((r) => ({
+        date: r.date,
+        name: r.name,
+        kind: (r.kind === 'cuti' ? 'cuti' : 'libur') as HolidayKind,
+        verified: false,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    provenance: 'upstream',
+    drift: [],
+  };
+}
