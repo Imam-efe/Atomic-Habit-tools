@@ -1,14 +1,11 @@
 export interface Env {
   DB: D1Database;
+  AI: Ai;
   JWT_SECRET: string;
   FRONTEND_URL: string;
   VAPID_SUBJECT: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
-  // Optional: unset in environments where AI Insights hasn't been enabled yet
-  // (`wrangler secret put ANTHROPIC_API_KEY`) — the route falls back to the
-  // existing rule-based insight text when this is absent.
-  ANTHROPIC_API_KEY?: string;
 }
 
 export interface JWTPayload {

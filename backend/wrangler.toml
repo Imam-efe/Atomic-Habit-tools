@@ -8,6 +8,9 @@ binding = "DB"
 database_name = "fayolla-db"
 database_id = "08b47e41-719e-472e-9eed-639cef0e65b6"
 
+[ai]
+binding = "AI"
+
 [vars]
 FRONTEND_URL = "https://fayolla.pages.dev"
 VAPID_PUBLIC_KEY = "BPOZXYPVRv_DxSObMXImgYoCWH582IyoDQAqqVAbKaJgqEMa7go2RUgDRSwIYLhOKZuKSJgBsU7SFVWg72MMqnI"
@@ -19,4 +22,5 @@ crons = ["* * * * *"]
 # Secrets set via: wrangler secret put GOOGLE_CLIENT_ID
 # wrangler secret put GOOGLE_CLIENT_SECRET
 # wrangler secret put JWT_SECRET
-# wrangler secret put ANTHROPIC_API_KEY   (optional — enables AI Insights; app works without it)
+# AI Insights runs on the [ai] binding above (Cloudflare Workers AI) — no
+# secret needed, no separate account signup; 10,000 free neurons/day.
