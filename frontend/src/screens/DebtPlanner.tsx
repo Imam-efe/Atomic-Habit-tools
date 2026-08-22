@@ -151,7 +151,7 @@ export function DebtPlanner() {
 
   return (
     <div
-      className="min-h-screen px-5 pt-14 pb-28 animate-[fyScreen_420ms_cubic-bezier(0.25,0.46,0.45,0.94)_both]"
+      className="min-h-screen px-5 pt-14 pb-28"
       style={{ background: 'var(--bg)' }}
     >
       {/* Header */}

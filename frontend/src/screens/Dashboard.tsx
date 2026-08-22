@@ -197,7 +197,7 @@ export function Dashboard() {
   const goalsText = data ? `${data.goalsTotal}` : '–';
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28 animate-[fyScreen_420ms_cubic-bezier(0.25,0.46,0.45,0.94)_both]" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
       <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={springs.gentle}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
