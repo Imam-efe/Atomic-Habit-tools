@@ -4,6 +4,7 @@ import { springs } from '@/tokens/motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { apiFetch } from '@/lib/api';
+import { formatRp } from '@/lib/currency';
 
 interface DashboardData {
   habitsTotal: number;
@@ -39,10 +40,6 @@ interface NutritionData {
 interface NetWorthData {
   current: { assets: number; liabilities: number; net_worth: number; month: string };
   history: { month: string; assets: number; liabilities: number; net_worth: number }[];
-}
-
-function formatRp(n: number) {
-  return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 }
 
 export function Dashboard() {
@@ -178,8 +175,8 @@ export function Dashboard() {
   };
 
   const toggleHabit = async (id: string, isTwoMin?: boolean) => {
-    // Save previous state for rollback on error
-    const prevHabits = habits;
+    // Save deep copy of previous state for rollback on error
+    const prevHabits = habits.map(h => ({ ...h }));
 
     setHabits(prev => prev.map(h => {
       if (h.id === id) {

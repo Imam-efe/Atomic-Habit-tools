@@ -4,6 +4,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
+import { formatRp } from '@/lib/currency';
 import { BudgetEntryItem } from './BudgetEntryItem';
 
 interface BudgetEntry {
@@ -61,10 +62,6 @@ const MOCK_MERCHANTS = [
   { name: 'Superindo', amount: 320000, category: 'Belanja Bulanan' },
   { name: 'Solaria', amount: 185000, category: 'Makanan & Minuman' }
 ];
-
-function formatRp(n: number) {
-  return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-}
 
 type RangePreset = '7d' | '30d' | '3m' | 'custom';
 

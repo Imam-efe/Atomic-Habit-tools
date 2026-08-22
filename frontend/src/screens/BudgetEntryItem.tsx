@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { motion } from 'framer-motion';
+import { formatRp } from '@/lib/currency';
 
 interface BudgetEntry {
   id: string;
@@ -16,12 +17,6 @@ interface BudgetEntry {
 interface BudgetBank {
   id: string;
   name: string;
-  account_type: string;
-  balance: number;
-}
-
-function formatRp(n: number) {
-  return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 }
 
 interface Props {
