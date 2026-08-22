@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
+import { BudgetEntryItem } from './BudgetEntryItem';
 
 interface BudgetEntry {
   id: string;
@@ -485,7 +486,7 @@ export function Budget() {
     }
   };
 
-  const openSheet = (entry: BudgetEntry) => {
+  const openSheet = useCallback((entry: BudgetEntry) => {
     setViewEntry(entry);
     setEditMode(false);
     setEditType(entry.type);
@@ -494,7 +495,7 @@ export function Budget() {
     setEditNote(entry.note ?? '');
     setEditDate(entry.date);
     setEditBankAccountId(entry.bank_account_id ?? '');
-  };
+  }, []);
 
   const saveEdit = async () => {
     if (!viewEntry) return;
@@ -1178,52 +1179,13 @@ export function Budget() {
             <div className="flex flex-col gap-2">
               <AnimatePresence>
                 {data?.entries.map(entry => (
-                  <motion.div
+                  <BudgetEntryItem
                     key={entry.id}
-                    layout="position"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="rounded-[14px] px-4 py-3.5 flex items-center gap-3 relative overflow-hidden cursor-pointer"
-                    style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-                    onClick={() => openSheet(entry)}
-                  >
-                    <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-base"
-                      style={{ background: entry.type === 'income' ? 'rgba(52,199,89,0.15)' : 'rgba(255,69,58,0.12)' }}>
-                      {entry.type === 'income' ? '📈' : '📉'}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{entry.category}</p>
-                        <span className="text-[9px]" style={{ color: 'var(--text3)' }}>{entry.date}</span>
-                      </div>
-                      {entry.note && <p className="text-xs truncate" style={{ color: 'var(--text3)' }}>{entry.note}</p>}
-                      
-                      {/* Show allocated bank account */}
-                      {entry.bank_account_id && (() => {
-                        const matchedBank = bankAccounts.find(b => b.id === entry.bank_account_id);
-                        return matchedBank ? (
-                          <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/5 mt-1 text-[var(--text2)]">
-                            🏦 {matchedBank.name}
-                          </span>
-                        ) : null;
-                      })()}
-                    </div>
-
-                    {/* Receipt thumb if attached */}
-                    {entry.receipt_img && (
-                      <div className="w-8 h-8 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0">
-                        <img src={entry.receipt_img} className="w-full h-full object-cover" onClick={() => alert('Foto Struk terlampir')} />
-                      </div>
-                    )}
-
-                    <p className="text-sm font-bold flex-shrink-0"
-                      style={{ color: entry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
-                      {entry.type === 'income' ? '+' : '-'}{formatRp(entry.amount)}
-                    </p>
-
-                  </motion.div>
+                    entry={entry}
+                    bankAccounts={bankAccounts}
+                    onOpen={openSheet}
+                    animated
+                  />
                 ))}
               </AnimatePresence>
             </div>
@@ -1442,22 +1404,13 @@ export function Budget() {
                         </p>
                         <div className="flex flex-col gap-2">
                           {grouped[date].map(entry => (
-                            <div key={entry.id}
-                              className="rounded-[14px] px-4 py-3 flex items-center gap-3 cursor-pointer"
-                              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-                              onClick={() => { setDrillCategory(null); setTimeout(() => openSheet(entry), 300); }}>
-                              <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-sm"
-                                style={{ background: entry.type === 'income' ? 'rgba(52,199,89,0.15)' : 'rgba(255,69,58,0.12)' }}>
-                                {entry.type === 'income' ? '📈' : '📉'}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                {entry.note && <p className="text-xs truncate" style={{ color: 'var(--text3)' }}>{entry.note}</p>}
-                              </div>
-                              <p className="text-sm font-bold flex-shrink-0"
-                                style={{ color: entry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
-                                {entry.type === 'income' ? '+' : '-'}{formatRp(entry.amount)}
-                              </p>
-                            </div>
+                            <BudgetEntryItem
+                              key={entry.id}
+                              entry={entry}
+                              bankAccounts={bankAccounts}
+                              onOpen={() => { setDrillCategory(null); setTimeout(() => openSheet(entry), 300); }}
+                              animated={false}
+                            />
                           ))}
                         </div>
                       </div>
