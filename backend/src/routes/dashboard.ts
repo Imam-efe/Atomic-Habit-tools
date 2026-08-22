@@ -21,7 +21,14 @@ dashboard.get('/', async (c) => {
        FROM budget_entries WHERE user_id = ?1 AND entry_date >= ?2`
     ).bind(user.sub, `${month}-01`).first<{ income: number | null; expense: number | null }>(),
     c.env.DB.prepare('SELECT identity_statement FROM goals WHERE user_id = ?1 ORDER BY sort_order ASC, created_at ASC LIMIT 1').bind(user.sub).first<{ identity_statement: string }>(),
-    c.env.DB.prepare('SELECT id, name, last_completed_date FROM habits WHERE user_id = ?1').bind(user.sub).all<{ id: string; name: string; last_completed_date: string | null }>(),
+    // Weekly-frequency habits are left out here: they're joined and filtered
+    // below, since "missed yesterday" only means something for a daily habit.
+    c.env.DB.prepare(`
+      SELECT h.id, h.name, h.last_completed_date
+      FROM habits h
+      LEFT JOIN habit_frequency hf ON hf.habit_id = h.id
+      WHERE h.user_id = ?1 AND (hf.frequency_type IS NULL OR hf.frequency_type != 'weekly')
+    `).bind(user.sub).all<{ id: string; name: string; last_completed_date: string | null }>(),
     c.env.DB.prepare('SELECT habit_id FROM habit_completions WHERE user_id = ?1 AND completed_date = ?2').bind(user.sub, yesterday).all<{ habit_id: string }>(),
     c.env.DB.prepare('SELECT habit_id FROM habit_completions WHERE user_id = ?1 AND completed_date = ?2').bind(user.sub, today).all<{ habit_id: string }>()
   ]);

@@ -306,11 +306,15 @@ async function triggerStreakAtRisk(env: Env) {
 
   const today = jakartaToday();
 
+  // Weekly-frequency habits are excluded: "not done today" isn't a risk to
+  // a habit whose streak is measured in weeks, not days.
   const atRisk = await env.DB.prepare(`
     SELECT h.id, h.name, h.user_id, h.streak
     FROM habits h
     JOIN push_subscriptions s ON h.user_id = s.user_id
+    LEFT JOIN habit_frequency hf ON hf.habit_id = h.id
     WHERE h.streak > 0
+      AND (hf.frequency_type IS NULL OR hf.frequency_type != 'weekly')
       AND (h.last_completed_date IS NULL OR h.last_completed_date != ?1)
       AND (h.streak_alert_sent IS NULL OR h.streak_alert_sent != ?1)
   `).bind(today).all<{ id: string; name: string; user_id: string; streak: number }>();
@@ -367,21 +371,31 @@ async function triggerWeeklyRecap(env: Env) {
 
   for (const { id: userId } of users.results ?? []) {
     const habitStats = await env.DB.prepare(`
-      SELECT h.id, h.streak, COUNT(hc.id) as completions_this_week
+      SELECT h.id, h.streak, hf.frequency_type, hf.target_per_week,
+             COUNT(hc.id) as completions_this_week
       FROM habits h
+      LEFT JOIN habit_frequency hf ON hf.habit_id = h.id
       LEFT JOIN habit_completions hc
         ON hc.habit_id = h.id AND hc.completed_date BETWEEN ?2 AND ?3 AND hc.user_id = h.user_id
       WHERE h.user_id = ?1
       GROUP BY h.id
-    `).bind(userId, weekStart, today).all<{ id: string; streak: number; completions_this_week: number }>();
+    `).bind(userId, weekStart, today).all<{
+      id: string; streak: number; frequency_type: string | null; target_per_week: number | null;
+      completions_this_week: number;
+    }>();
 
     const habits = habitStats.results ?? [];
     // Nothing tracked yet — a recap of zero habits isn't worth a push, and
     // marking it sent would stop it from ever nudging the user once they add one.
     if (habits.length === 0) continue;
 
-    const totalCompletions = habits.reduce((s, h) => s + h.completions_this_week, 0);
-    const possibleCompletions = habits.length * 7;
+    // Each habit's own target is its possible max for the week — 7 for a
+    // daily habit, target_per_week for a weekly one — so a 3x/week habit
+    // doesn't drag the aggregate down for simply not being daily.
+    const possibleFor = (h: (typeof habits)[number]) =>
+      h.frequency_type === 'weekly' && h.target_per_week ? h.target_per_week : 7;
+    const totalCompletions = habits.reduce((s, h) => s + Math.min(h.completions_this_week, possibleFor(h)), 0);
+    const possibleCompletions = habits.reduce((s, h) => s + possibleFor(h), 0);
     const consistency = Math.round((totalCompletions / possibleCompletions) * 100);
     const longestStreak = Math.max(...habits.map(h => h.streak));
 

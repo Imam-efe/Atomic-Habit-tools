@@ -21,11 +21,26 @@ const FIXTURES = {
     history: [{ month: 'Jul 2026', assets: 200000000, liabilities: 48000000, net_worth: 152000000 }],
   },
   // h1 carries a spent streak freeze so the "streak diselamatkan" banner and
-  // the ❄️ marker on the streak chip are both in the audit's path.
+  // the ❄️ marker on the streak chip are both in the audit's path. h3 is
+  // weekly-frequency so the "X/Y× minggu ini" line and the "mgu" streak unit
+  // are in the audit's path too.
   '/api/habits': [
     { id: 'h1', name: 'Olahraga pagi', color: '#5B41D6', streak: 12, doneToday: true, triggerCue: 'bangun tidur', twoMin: 'Push up 5x', freezesUsed: 1, freezesLeft: 1, lastFreezeDate: '2026-08-14' },
     { id: 'h2', name: 'Baca 10 halaman', color: '#1B6E37', streak: 5, doneToday: false, freezesUsed: 0, freezesLeft: 2, lastFreezeDate: null },
+    { id: 'h3', name: 'Gym', color: '#0A84FF', streak: 4, doneToday: false, freezesUsed: 0, freezesLeft: 2, lastFreezeDate: null, frequencyType: 'weekly', targetPerWeek: 3, completionsThisWeek: 2 },
   ],
+  // Four Laws diagnostic — keyed literally on h1's diagnose path, since the
+  // fixture router matches full pathname, not a wildcard. Exercises the
+  // "diagnosed" panel (weakest-law highlight + reason/suggestion), the branch
+  // sweep.js drives by clicking the button before capturing the Kebiasaan screen.
+  '/api/habits/h1/diagnose': {
+    verdict: 'diagnosed',
+    consistency: 42,
+    weakestLaw: 'obvious',
+    weakestLawLabel: 'Jadikan Terlihat (Obvious)',
+    reason: 'Belum ada waktu pengingat spesifik, jadi mudah terlupa di tengah kesibukan pagi.',
+    suggestion: 'Tambahkan waktu pengingat tetap, misalnya 06:00, agar muncul notifikasi setiap hari.',
+  },
   '/api/habit-stacks': [{
     id: 's1', name: 'Rutinitas pagi', description: 'Urutan pagi', is_active: 1,
     habits: [{ id: 'i1', habit_id: 'h1', position: 1, habit_name: 'Olahraga pagi', habit_color: '#5B41D6', habit_icon: '', habit_action_time: '06:00' }],

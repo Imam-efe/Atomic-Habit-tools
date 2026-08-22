@@ -6,7 +6,9 @@ import { CONFETTI_COLORS } from '@/constants/colors';
 import { HabitBundles } from '@/components/HabitBundles';
 import HabitStacks from '@/components/HabitStacks';
 import { useUndoToastStore } from '@/stores/toastStore';
+import { useUIStore } from '@/stores/uiStore';
 import { buildHabitReminderIcs, downloadIcs } from '@/lib/ics';
+import { bestForegroundFor } from '@/lib/color';
 
 interface Goal {
   id: string;
@@ -28,12 +30,105 @@ interface Habit {
   freezesUsed?: number;
   freezesLeft?: number;
   lastFreezeDate?: string | null;
+  /** 'daily' (default) or 'weekly' — an N-times-per-week target instead of every day. */
+  frequencyType?: 'daily' | 'weekly';
+  targetPerWeek?: number | null;
+  /** Only present for weekly habits — completions logged since this Monday. */
+  completionsThisWeek?: number | null;
 }
 
 const COLORS = ['#7C5CFF', 'var(--pos)', '#0A84FF', 'var(--warn)', 'var(--neg)', '#FF2D55'];
 
+/**
+ * Resolved per-theme hex for the three semantic swatches above — needed to
+ * pick a readable button foreground, since `bestForegroundFor` computes
+ * contrast against an actual pixel colour, not a CSS custom property.
+ *
+ * Every one of the six swatches turns out to read under 4.5:1 for hardcoded
+ * white text in at least one theme (the two literal-hex ones — purple and
+ * blue — fail in both, since they were tuned as accents against the page,
+ * not as a solid fill behind white type), which is what the Simpan/Perbarui
+ * buttons below were doing before this.
+ */
+const SWATCH_HEX: Record<'light' | 'dark', Record<string, string>> = {
+  light: { 'var(--pos)': '#1B6E37', 'var(--warn)': '#8A5300', 'var(--neg)': '#C0281A' },
+  dark: { 'var(--pos)': '#34C759', 'var(--warn)': '#FF9F0A', 'var(--neg)': '#FF453A' },
+};
+
+function swatchTextColor(swatch: string, theme: 'light' | 'dark'): string {
+  const hex = SWATCH_HEX[theme][swatch] ?? swatch;
+  return bestForegroundFor(hex);
+}
+
+const LAW_LABELS: Record<string, string> = {
+  obvious: 'Petunjuk (Cue)',
+  attractive: 'Gairah (Craving)',
+  easy: 'Tanggapan (Response)',
+  satisfying: 'Penghargaan (Reward)',
+};
+
+/** Daily/weekly segmented toggle + a 1-6 stepper, shared by the add and edit forms. */
+function FrequencyPicker({
+  frequencyType,
+  targetPerWeek,
+  onFrequencyType,
+  onTargetPerWeek,
+}: {
+  frequencyType: 'daily' | 'weekly';
+  targetPerWeek: number;
+  onFrequencyType: (t: 'daily' | 'weekly') => void;
+  onTargetPerWeek: (n: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10px] font-bold text-[var(--text2)] uppercase px-1">Frekuensi</label>
+      <div className="flex gap-1.5">
+        {(['daily', 'weekly'] as const).map(t => (
+          <button
+            key={t}
+            type="button"
+            className="flex-1 py-2 rounded-xl text-xs font-bold"
+            style={{
+              background: frequencyType === t ? 'var(--accentFill)' : 'var(--bg)',
+              color: frequencyType === t ? '#fff' : 'var(--text2)',
+              boxShadow: frequencyType === t ? 'none' : 'var(--neu-inset)',
+            }}
+            onClick={() => onFrequencyType(t)}
+          >
+            {t === 'daily' ? 'Setiap hari' : 'X kali/minggu'}
+          </button>
+        ))}
+      </div>
+      {frequencyType === 'weekly' && (
+        <div className="flex items-center gap-3 mt-1 px-1">
+          <button
+            type="button"
+            className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm neu-press"
+            style={{ color: 'var(--text)' }}
+            onClick={() => onTargetPerWeek(Math.max(1, targetPerWeek - 1))}
+          >
+            −
+          </button>
+          <span className="text-sm font-bold flex-1 text-center" style={{ color: 'var(--text)' }}>
+            {targetPerWeek}× per minggu
+          </span>
+          <button
+            type="button"
+            className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm neu-press"
+            style={{ color: 'var(--text)' }}
+            onClick={() => onTargetPerWeek(Math.min(6, targetPerWeek + 1))}
+          >
+            +
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Habits() {
   const showUndoToast = useUndoToastStore(s => s.show);
+  const theme = useUIStore(s => s.theme) as 'light' | 'dark';
   const [habits, setHabits] = useState<Habit[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +141,8 @@ export function Habits() {
   const [newColor, setNewColor] = useState('var(--pos)');
   const [newGoalIds, setNewGoalIds] = useState<string[]>([]);
   const [newReminderTime, setNewReminderTime] = useState('');
+  const [newFrequencyType, setNewFrequencyType] = useState<'daily' | 'weekly'>('daily');
+  const [newTargetPerWeek, setNewTargetPerWeek] = useState(3);
   const [saving, setSaving] = useState(false);
 
   // Edit Form State
@@ -56,10 +153,34 @@ export function Habits() {
   const [editColor, setEditColor] = useState('var(--pos)');
   const [editGoalIds, setEditGoalIds] = useState<string[]>([]);
   const [editReminderTime, setEditReminderTime] = useState('');
+  const [editFrequencyType, setEditFrequencyType] = useState<'daily' | 'weekly'>('daily');
+  const [editTargetPerWeek, setEditTargetPerWeek] = useState(3);
   const [updating, setUpdating] = useState(false);
 
   // Selected Habit for Loop Detail
   const [selectedHabitId, setSelectedHabitId] = useState<string | null>(null);
+
+  // Identity flash — a brief "you just acted like X" card on completion, from
+  // the linked goal the toggle response resolves server-side. Auto-dismisses;
+  // never fires on un-completing (see the toggle handler below).
+  const [identityFlash, setIdentityFlash] = useState<{ habitName: string; statement: string } | null>(null);
+  useEffect(() => {
+    if (!identityFlash) return;
+    const t = setTimeout(() => setIdentityFlash(null), 3200);
+    return () => clearTimeout(t);
+  }, [identityFlash]);
+
+  // Four Laws diagnosis — per habit, so switching selection doesn't leak a
+  // stale diagnosis from a different habit onto the newly selected one.
+  const [diagnosis, setDiagnosis] = useState<{
+    habitId: string;
+    verdict: 'too_new' | 'healthy' | 'diagnosed' | 'error';
+    consistency?: number;
+    weakestLaw?: string;
+    reason?: string;
+    suggestion?: string;
+  } | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
 
   // Canvas Ref for Confetti
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -173,7 +294,7 @@ export function Habits() {
     }));
 
     try {
-      const res = await apiFetch<{ doneToday: boolean; streak: number; isTwoMinToday: boolean }>(`/habits/${id}/toggle`, {
+      const res = await apiFetch<{ doneToday: boolean; streak: number; isTwoMinToday: boolean; identityStatement?: string | null }>(`/habits/${id}/toggle`, {
         method: 'POST',
         body: JSON.stringify({ isTwoMin }),
       });
@@ -183,6 +304,11 @@ export function Habits() {
         // Trigger Confetti!
         const isMilestone = res.streak > 0 && res.streak % 7 === 0;
         triggerConfetti(isMilestone);
+
+        if (res.identityStatement) {
+          const habitName = habits.find(h => h.id === id)?.name ?? '';
+          setIdentityFlash({ habitName, statement: res.identityStatement });
+        }
       }
     } catch {
       setHabits(prev);
@@ -202,6 +328,8 @@ export function Habits() {
           color: newColor,
           goalIds: newGoalIds,
           reminderTime: newReminderTime.trim() || undefined,
+          frequencyType: newFrequencyType,
+          targetPerWeek: newFrequencyType === 'weekly' ? newTargetPerWeek : undefined,
         }),
       });
       load();
@@ -210,6 +338,8 @@ export function Habits() {
       setNewTwoMin('');
       setNewGoalIds([]);
       setNewReminderTime('');
+      setNewFrequencyType('daily');
+      setNewTargetPerWeek(3);
       setShowAdd(false);
     } catch {}
     setSaving(false);
@@ -228,12 +358,34 @@ export function Habits() {
           color: editColor,
           goalIds: editGoalIds,
           reminderTime: editReminderTime.trim() || undefined,
+          frequencyType: editFrequencyType,
+          targetPerWeek: editFrequencyType === 'weekly' ? editTargetPerWeek : undefined,
         }),
       });
       load();
       setEditingHabit(null);
     } catch {}
     setUpdating(false);
+  };
+
+  /** POST /habits/:id/diagnose — which of the Four Laws is weakest right now. */
+  const diagnoseHabit = async (habitId: string) => {
+    if (diagnosing) return;
+    setDiagnosing(true);
+    setDiagnosis(null);
+    try {
+      const res = await apiFetch<{
+        verdict: 'too_new' | 'healthy' | 'diagnosed';
+        consistency?: number;
+        weakestLaw?: string;
+        reason?: string;
+        suggestion?: string;
+      }>(`/habits/${habitId}/diagnose`, { method: 'POST' });
+      setDiagnosis({ habitId, ...res });
+    } catch {
+      setDiagnosis({ habitId, verdict: 'error' });
+    }
+    setDiagnosing(false);
   };
 
   const deleteHabit = (id: string, e: React.MouseEvent) => {
@@ -284,6 +436,33 @@ export function Habits() {
       {/* Confetti canvas overlay */}
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-40" />
 
+      {/* Identity flash — "you just acted like X", from the habit's linked
+          goal. Fires only on a fresh completion (see toggle()), auto-dismisses. */}
+      <AnimatePresence>
+        {identityFlash && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={springs.gentle}
+            className="fixed left-4 right-4 z-50 rounded-2xl px-4 py-3"
+            style={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+              background: 'var(--accentFill)',
+              boxShadow: 'var(--neu-raised-lg)',
+              maxWidth: 400,
+              margin: '0 auto',
+            }}
+          >
+            <p className="text-[13px] leading-snug text-white">
+              <span aria-hidden>✨ </span>
+              Kamu baru saja bertindak sebagai orang yang{' '}
+              <span className="font-bold">{identityFlash.statement}</span>.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
@@ -314,6 +493,7 @@ export function Habits() {
             whileTap={{ scale: 0.9 }}
             transition={springs.snappy}
             onClick={() => setShowAdd(s => !s)}
+            aria-label="Tambah kebiasaan baru"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
               <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -333,7 +513,7 @@ export function Habits() {
             exit={{ opacity: 0, height: 0 }}
             transition={collapse}
           >
-            <p className="text-sm font-semibold text-white">Tambah Kebiasaan Baru</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Tambah Kebiasaan Baru</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
               style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
@@ -368,6 +548,13 @@ export function Habits() {
                 onChange={e => setNewReminderTime(e.target.value)}
               />
             </div>
+
+            <FrequencyPicker
+              frequencyType={newFrequencyType}
+              targetPerWeek={newTargetPerWeek}
+              onFrequencyType={setNewFrequencyType}
+              onTargetPerWeek={setNewTargetPerWeek}
+            />
 
             {/* Accent Color picker */}
             <div className="flex gap-2 justify-between px-1">
@@ -411,8 +598,8 @@ export function Habits() {
 
             <div className="flex gap-2 mt-1">
               <motion.button
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: newColor, opacity: saving ? 0.6 : 1 }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: newColor, color: swatchTextColor(newColor, theme), opacity: saving ? 0.6 : 1 }}
                 onClick={addHabit}
                 disabled={saving}
                 whileTap={{ scale: 0.97 }}
@@ -422,7 +609,7 @@ export function Habits() {
               <button
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
                 style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
-                onClick={() => { setShowAdd(false); setNewName(''); setNewCue(''); setNewTwoMin(''); setNewGoalIds([]); }}
+                onClick={() => { setShowAdd(false); setNewName(''); setNewCue(''); setNewTwoMin(''); setNewGoalIds([]); setNewFrequencyType('daily'); setNewTargetPerWeek(3); }}
               >
                 Batal
               </button>
@@ -442,7 +629,7 @@ export function Habits() {
             exit={{ opacity: 0, height: 0 }}
             transition={collapse}
           >
-            <p className="text-sm font-semibold text-white">Ubah Pengaturan Kebiasaan</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Ubah Pengaturan Kebiasaan</p>
             <input
               className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
               style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
@@ -476,6 +663,13 @@ export function Habits() {
                 onChange={e => setEditReminderTime(e.target.value)}
               />
             </div>
+
+            <FrequencyPicker
+              frequencyType={editFrequencyType}
+              targetPerWeek={editTargetPerWeek}
+              onFrequencyType={setEditFrequencyType}
+              onTargetPerWeek={setEditTargetPerWeek}
+            />
 
             {/* Accent Color picker */}
             <div className="flex gap-2 justify-between px-1">
@@ -519,8 +713,8 @@ export function Habits() {
 
             <div className="flex gap-2 mt-1">
               <motion.button
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
-                style={{ background: editColor, opacity: updating ? 0.6 : 1 }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: editColor, color: swatchTextColor(editColor, theme), opacity: updating ? 0.6 : 1 }}
                 onClick={updateHabit}
                 disabled={updating}
                 whileTap={{ scale: 0.97 }}
@@ -630,24 +824,37 @@ export function Habits() {
                           ⏰ Pengingat: {habit.reminderTime}
                         </p>
                       )}
+                      {habit.frequencyType === 'weekly' && (
+                        // --info, not --accentFill2: the accent is a user-chosen
+                        // brand color with no guaranteed contrast on --surface at
+                        // this size, where the semantic tokens are pre-tuned for.
+                        <p className="text-[11px] mt-0.5 font-semibold" style={{ color: 'var(--info)' }}>
+                          {habit.completionsThisWeek ?? 0}/{habit.targetPerWeek}× minggu ini
+                        </p>
+                      )}
                     </div>
 
                     {/* Controls */}
                     <div className="flex items-center gap-2">
-                      {/* Streak display. The snowflake marks a streak that only
-                          survived because a freeze bridged a missed day — worth
-                          showing, or the number looks like it was never broken. */}
+                      {/* Streak display. Unit differs by frequency — a weekly
+                          habit's streak counts consecutive WEEKS meeting target,
+                          not days, so the label says so to avoid reading it as a
+                          much bigger daily streak than it is. The snowflake marks
+                          a daily streak that only survived because a freeze
+                          bridged a missed day. */}
                       {habit.streak > 0 && (
                         <div
                           className="flex items-center gap-0.5 flex-shrink-0 font-bold text-sm bg-orange-500/10 text-[var(--warn)] px-2 py-0.5 rounded-lg"
                           title={
-                            habit.freezesUsed
-                              ? `${habit.freezesUsed} hari terlewat diselamatkan bulan ini · sisa ${habit.freezesLeft} jatah`
-                              : undefined
+                            habit.frequencyType === 'weekly'
+                              ? `${habit.streak} minggu berturut-turut memenuhi target`
+                              : habit.freezesUsed
+                                ? `${habit.freezesUsed} hari terlewat diselamatkan bulan ini · sisa ${habit.freezesLeft} jatah`
+                                : undefined
                           }
                         >
-                          🔥 {habit.streak}
-                          {!!habit.freezesUsed && (
+                          🔥 {habit.streak}{habit.frequencyType === 'weekly' ? ' mgu' : ''}
+                          {!!habit.freezesUsed && habit.frequencyType !== 'weekly' && (
                             <span className="text-[var(--info)] ml-0.5" aria-hidden>❄️</span>
                           )}
                         </div>
@@ -665,6 +872,8 @@ export function Habits() {
                           setEditColor(habit.color);
                           setEditGoalIds(habit.goalIds ?? []);
                           setEditReminderTime(habit.reminderTime ?? '');
+                          setEditFrequencyType(habit.frequencyType ?? 'daily');
+                          setEditTargetPerWeek(habit.targetPerWeek ?? 3);
                         }}
                       >
                         ✏️
@@ -740,35 +949,104 @@ export function Habits() {
           <h3 className="text-base font-bold mb-0.5" style={{ color: 'var(--text)' }}>Habit Loop · {loopHabit.name}</h3>
           <p className="text-xs mb-4" style={{ color: 'var(--text2)' }}>Membangun kebiasaan melalui 4 hukum psikologi</p>
 
-          <div className="grid grid-cols-2 gap-3.5">
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--info)]">1. Cue (Petunjuk)</span>
-              <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
-                {loopHabit.triggerCue ? `Setelah ${loopHabit.triggerCue}` : 'Set alarm pagi / rutinitas tetap'}
-              </p>
-            </div>
+          {(() => {
+            const active = diagnosis?.habitId === loopHabit.id ? diagnosis : null;
+            const weakCellStyle = (law: string) =>
+              active?.verdict === 'diagnosed' && active.weakestLaw === law
+                ? { background: 'var(--bg)', boxShadow: 'var(--neu-inset)', border: '1.5px solid var(--neg)' }
+                : { background: 'var(--bg)', boxShadow: 'var(--neu-inset)' };
+            const isWeak = (law: string) => active?.verdict === 'diagnosed' && active.weakestLaw === law;
 
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--warn)]">2. Craving (Gairah)</span>
-              <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
-                Membangun kebiasaan 1% lebih konsisten
-              </p>
-            </div>
+            return (
+              <>
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="rounded-xl p-3 flex flex-col justify-between" style={weakCellStyle('obvious')}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--info)] flex items-center gap-1">
+                      1. Cue (Petunjuk) {isWeak('obvious') && '⚠️'}
+                    </span>
+                    <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
+                      {loopHabit.triggerCue ? `Setelah ${loopHabit.triggerCue}` : 'Set alarm pagi / rutinitas tetap'}
+                    </p>
+                  </div>
 
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--pos)]">3. Response (Tanggapan)</span>
-              <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
-                {loopHabit.twoMin ? `Versi 2-menit: ${loopHabit.twoMin}` : `Mulai lakukan ${loopHabit.name}`}
-              </p>
-            </div>
+                  <div className="rounded-xl p-3 flex flex-col justify-between" style={weakCellStyle('attractive')}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--warn)] flex items-center gap-1">
+                      2. Craving (Gairah) {isWeak('attractive') && '⚠️'}
+                    </span>
+                    <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
+                      Membangun kebiasaan 1% lebih konsisten
+                    </p>
+                  </div>
 
-            <div className="rounded-xl p-3 flex flex-col justify-between" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)]">4. Reward (Penghargaan)</span>
-              <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
-                Streak bertambah & merasa bangga!
-              </p>
-            </div>
-          </div>
+                  <div className="rounded-xl p-3 flex flex-col justify-between" style={weakCellStyle('easy')}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--pos)] flex items-center gap-1">
+                      3. Response (Tanggapan) {isWeak('easy') && '⚠️'}
+                    </span>
+                    <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
+                      {loopHabit.twoMin ? `Versi 2-menit: ${loopHabit.twoMin}` : `Mulai lakukan ${loopHabit.name}`}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl p-3 flex flex-col justify-between" style={weakCellStyle('satisfying')}>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--accent)] flex items-center gap-1">
+                      4. Reward (Penghargaan) {isWeak('satisfying') && '⚠️'}
+                    </span>
+                    <p className="text-xs font-semibold leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
+                      Streak bertambah & merasa bangga!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Four Laws diagnostic — AI names the weakest cell above from
+                    this habit's actual data, rather than the user guessing. */}
+                <div className="mt-3.5 pt-3.5 border-t" style={{ borderColor: 'var(--sep)' }}>
+                  {!active && (
+                    <button
+                      onClick={() => diagnoseHabit(loopHabit.id)}
+                      disabled={diagnosing}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold neu-press disabled:opacity-60"
+                      style={{ color: 'var(--accentFill2)' }}
+                    >
+                      {diagnosing ? 'Menganalisis…' : '🔍 Diagnosa 4 Hukum (AI)'}
+                    </button>
+                  )}
+
+                  {active?.verdict === 'too_new' && (
+                    <p className="text-[11px] text-center" style={{ color: 'var(--text3)' }}>
+                      Masih terlalu baru untuk didiagnosis — butuh minimal 7 hari riwayat.
+                    </p>
+                  )}
+                  {active?.verdict === 'healthy' && (
+                    <p className="text-[11px] text-center" style={{ color: 'var(--pos)' }}>
+                      ✓ Konsistensi {active.consistency}% — sudah cukup baik, belum perlu diagnosis.
+                    </p>
+                  )}
+                  {active?.verdict === 'error' && (
+                    <button
+                      onClick={() => diagnoseHabit(loopHabit.id)}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold neu-press"
+                      style={{ color: 'var(--neg)' }}
+                    >
+                      Diagnosis gagal — coba lagi
+                    </button>
+                  )}
+                  {active?.verdict === 'diagnosed' && (
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-[11px] font-bold" style={{ color: 'var(--neg)' }}>
+                        Hukum terlemah: {LAW_LABELS[active.weakestLaw ?? ''] ?? active.weakestLaw}
+                      </p>
+                      <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                        {active.reason}
+                      </p>
+                      <p className="text-xs leading-relaxed font-semibold" style={{ color: 'var(--text)' }}>
+                        💡 {active.suggestion}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </motion.div>
       )}
     </div>
