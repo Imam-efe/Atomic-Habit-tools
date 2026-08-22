@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
@@ -247,14 +247,13 @@ export function Habits() {
     );
   };
 
-  const done = habits.filter(h => h.doneToday).length;
-  const total = habits.length;
-
-  // Stacking chain filters
-  const stackedHabits = habits.filter(h => h.triggerCue?.trim());
-
-  // Loop Selected Habit Details
-  const loopHabit = habits.find(h => h.id === selectedHabitId) || habits[0];
+  const { done, total, stackedHabits, loopHabit } = useMemo(() => {
+    const d = habits.filter(h => h.doneToday).length;
+    const t = habits.length;
+    const stacked = habits.filter(h => h.triggerCue?.trim());
+    const loop = habits.find(h => h.id === selectedHabitId) || habits[0];
+    return { done: d, total: t, stackedHabits: stacked, loopHabit: loop };
+  }, [habits, selectedHabitId]);
 
   return (
     <div className="min-h-screen px-5 pt-16 pb-28 relative" style={{ background: 'var(--bg)' }}>
