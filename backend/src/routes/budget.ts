@@ -8,7 +8,10 @@ const budget = new Hono<AuthContext>();
 
 budget.use('/*', requireAuth);
 
-const EXPENSE_CATEGORIES = [
+// Exported so quick-add and receipt OCR constrain the model to the same
+// categories the manual form offers — a category invented by the AI would
+// never line up with the budget limits screen.
+export const EXPENSE_CATEGORIES = [
   'Makanan & Minuman',
   'Transportasi & Bensin',
   'Kebutuhan Rumah Tangga',
@@ -21,6 +24,8 @@ const EXPENSE_CATEGORIES = [
   'Investasi & Tabungan',
   'Lainnya'
 ];
+
+export const INCOME_CATEGORIES = ['Gaji', 'Freelance', 'Investasi', 'Bisnis', 'Lainnya'];
 
 // GET /api/budget?from=YYYY-MM-DD&to=YYYY-MM-DD  (or legacy ?month=YYYY-MM)
 budget.get('/', async (c) => {

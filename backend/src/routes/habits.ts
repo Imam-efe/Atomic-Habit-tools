@@ -48,13 +48,22 @@ function getAdjacentDate(dateStr: string, offset: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-async function updateHabitStreak(db: D1Database, habitId: string, today: string): Promise<number> {
-  const completions = await db.prepare(
-    'SELECT completed_date, is_two_min FROM habit_completions WHERE habit_id = ?1 ORDER BY completed_date DESC'
-  ).bind(habitId).all<{ completed_date: string; is_two_min: number }>();
+/** How many days a single habit may freeze per calendar month. */
+export const FREEZE_QUOTA_PER_MONTH = 2;
+
+export async function updateHabitStreak(db: D1Database, habitId: string, today: string): Promise<number> {
+  const [completions, freezes] = await Promise.all([
+    db.prepare(
+      'SELECT completed_date, is_two_min FROM habit_completions WHERE habit_id = ?1 ORDER BY completed_date DESC'
+    ).bind(habitId).all<{ completed_date: string; is_two_min: number }>(),
+    db.prepare(
+      'SELECT freeze_date FROM habit_streak_freezes WHERE habit_id = ?1'
+    ).bind(habitId).all<{ freeze_date: string }>(),
+  ]);
 
   const completionsList = completions.results ?? [];
   const dateMap = new Map(completionsList.map(c => [c.completed_date, c.is_two_min === 1]));
+  const freezeSet = new Set((freezes.results ?? []).map(f => f.freeze_date));
 
   let streak = 0;
   let lastCompletedDate: string | null = null;
@@ -63,48 +72,40 @@ async function updateHabitStreak(db: D1Database, habitId: string, today: string)
     lastCompletedDate = completionsList[0].completed_date;
   }
 
-  if (dateMap.has(today)) {
-    let checkDate = today;
-    while (true) {
+  // Both branches walk backwards day by day; the only difference is whether
+  // today itself is part of the run. Every path either moves checkDate back or
+  // breaks, and completions and freezes are both finite, so this terminates —
+  // the iteration cap is belt-and-braces against a runaway CPU burn in the
+  // Worker rather than a reachable case.
+  const walk = (from: string): number => {
+    let count = 0;
+    let checkDate = from;
+    for (let guard = 0; guard < 4000; guard++) {
       if (dateMap.has(checkDate)) {
-        streak++;
+        count++;
         checkDate = getAdjacentDate(checkDate, -1);
-      } else {
-        const nextDateStr = getAdjacentDate(checkDate, 1);
-        if (dateMap.get(nextDateStr) === true) {
-          checkDate = getAdjacentDate(checkDate, -1);
-          if (dateMap.has(checkDate)) {
-            continue;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
+        continue;
       }
-    }
-  } else {
-    const yesterday = getAdjacentDate(today, -1);
-    let checkDate = yesterday;
-    while (true) {
-      if (dateMap.has(checkDate)) {
-        streak++;
+
+      // A freeze bridges this missed day. The streak survives, but the frozen
+      // day is not a completion, so it adds nothing to the count.
+      if (freezeSet.has(checkDate)) {
         checkDate = getAdjacentDate(checkDate, -1);
-      } else {
-        const nextDateStr = getAdjacentDate(checkDate, 1);
-        if (dateMap.get(nextDateStr) === true) {
-          checkDate = getAdjacentDate(checkDate, -1);
-          if (dateMap.has(checkDate)) {
-            continue;
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
+        continue;
       }
+
+      const nextDateStr = getAdjacentDate(checkDate, 1);
+      if (dateMap.get(nextDateStr) === true) {
+        checkDate = getAdjacentDate(checkDate, -1);
+        if (dateMap.has(checkDate)) continue;
+        break;
+      }
+      break;
     }
-  }
+    return count;
+  };
+
+  streak = dateMap.has(today) ? walk(today) : walk(getAdjacentDate(today, -1));
 
   await db.prepare('UPDATE habits SET streak = ?1, last_completed_date = ?2 WHERE id = ?3')
     .bind(streak, lastCompletedDate, habitId).run();
@@ -121,28 +122,132 @@ habits.get('/', async (c) => {
     'SELECT * FROM habits WHERE user_id = ?1 ORDER BY sort_order ASC, created_at ASC'
   ).bind(user.sub).all<HabitRow>();
 
-  const completions = await c.env.DB.prepare(
-    'SELECT habit_id, is_two_min FROM habit_completions WHERE user_id = ?1 AND completed_date = ?2'
-  ).bind(user.sub, today).all<{ habit_id: string; is_two_min: number }>();
+  const [completions, freezes] = await Promise.all([
+    c.env.DB.prepare(
+      'SELECT habit_id, is_two_min FROM habit_completions WHERE user_id = ?1 AND completed_date = ?2'
+    ).bind(user.sub, today).all<{ habit_id: string; is_two_min: number }>(),
+    c.env.DB.prepare(
+      `SELECT habit_id, freeze_date FROM habit_streak_freezes
+       WHERE user_id = ?1 AND freeze_date LIKE ?2 ORDER BY freeze_date DESC`
+    ).bind(user.sub, `${today.slice(0, 7)}%`).all<{ habit_id: string; freeze_date: string }>(),
+  ]);
 
   const completionsMap = new Map(completions.results.map(r => [r.habit_id, r.is_two_min === 1]));
 
-  const result = (rows.results ?? []).map(h => ({
-    id: h.id,
-    name: h.name,
-    color: h.color,
-    icon: h.icon,
-    triggerCue: h.trigger_cue,
-    twoMin: h.two_min,
-    streak: h.streak,
-    milestone: h.milestone,
-    goalIds: JSON.parse(h.goal_ids ?? '[]'),
-    doneToday: completionsMap.has(h.id),
-    isTwoMinToday: completionsMap.get(h.id) ?? false,
-    reminderTime: h.action_time,
-  }));
+  const freezesByHabit = new Map<string, string[]>();
+  for (const f of freezes.results ?? []) {
+    if (!freezesByHabit.has(f.habit_id)) freezesByHabit.set(f.habit_id, []);
+    freezesByHabit.get(f.habit_id)!.push(f.freeze_date);
+  }
+
+  const result = (rows.results ?? []).map(h => {
+    const used = freezesByHabit.get(h.id) ?? [];
+    return {
+      id: h.id,
+      name: h.name,
+      color: h.color,
+      icon: h.icon,
+      triggerCue: h.trigger_cue,
+      twoMin: h.two_min,
+      streak: h.streak,
+      milestone: h.milestone,
+      goalIds: JSON.parse(h.goal_ids ?? '[]'),
+      doneToday: completionsMap.has(h.id),
+      isTwoMinToday: completionsMap.get(h.id) ?? false,
+      reminderTime: h.action_time,
+      freezesUsed: used.length,
+      freezesLeft: Math.max(0, FREEZE_QUOTA_PER_MONTH - used.length),
+      lastFreezeDate: used[0] ?? null,
+    };
+  });
 
   return c.json(result);
+});
+
+/**
+ * Grant a freeze to every habit that quietly lost its streak yesterday.
+ *
+ * Runs from the cron just after Jakarta midnight, once the day is genuinely
+ * over. Automatic rather than a button, because a user who forgets the habit
+ * also forgets to spend the freeze — and by the time they open the app the
+ * streak is already gone.
+ *
+ * The unique index on (habit_id, freeze_date) makes a repeat tick a no-op, so
+ * a slow run overlapping the next minute cannot hand out two freezes.
+ */
+export async function grantStreakFreezes(db: D1Database, today: string): Promise<number> {
+  const yesterday = getAdjacentDate(today, -1);
+  const monthPrefix = `${yesterday.slice(0, 7)}%`;
+
+  const candidates = await db.prepare(`
+    SELECT h.id, h.user_id,
+           (SELECT COUNT(*) FROM habit_streak_freezes f
+             WHERE f.habit_id = h.id AND f.freeze_date LIKE ?2) AS used
+    FROM habits h
+    WHERE h.streak > 0
+      AND NOT EXISTS (
+        SELECT 1 FROM habit_completions hc
+        WHERE hc.habit_id = h.id AND hc.completed_date = ?1
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM habit_streak_freezes f
+        WHERE f.habit_id = h.id AND f.freeze_date = ?1
+      )
+  `).bind(yesterday, monthPrefix).all<{ id: string; user_id: string; used: number }>();
+
+  let granted = 0;
+  for (const habit of candidates.results ?? []) {
+    if (habit.used >= FREEZE_QUOTA_PER_MONTH) continue;
+
+    try {
+      await db.prepare(
+        'INSERT INTO habit_streak_freezes (id, habit_id, user_id, freeze_date) VALUES (?1, ?2, ?3, ?4)'
+      ).bind(nanoid(), habit.id, habit.user_id, yesterday).run();
+    } catch {
+      // Lost the race with an overlapping tick — the unique index held.
+      continue;
+    }
+
+    // Recompute so habits.streak reflects the bridge straight away, rather
+    // than waiting for the user to next toggle the habit.
+    await updateHabitStreak(db, habit.id, today);
+    granted++;
+  }
+
+  return granted;
+}
+
+// GET /api/habits/freezes — this month's quota and what it was spent on
+habits.get('/freezes', async (c) => {
+  const user = c.get('user');
+  const month = jakartaToday().slice(0, 7);
+
+  const rows = await c.env.DB.prepare(`
+    SELECT f.habit_id, f.freeze_date, h.name, h.color
+    FROM habit_streak_freezes f
+    JOIN habits h ON h.id = f.habit_id
+    WHERE f.user_id = ?1 AND f.freeze_date LIKE ?2
+    ORDER BY f.freeze_date DESC
+  `).bind(user.sub, `${month}%`).all<{
+    habit_id: string; freeze_date: string; name: string; color: string;
+  }>();
+
+  const usedByHabit = new Map<string, number>();
+  for (const r of rows.results ?? []) {
+    usedByHabit.set(r.habit_id, (usedByHabit.get(r.habit_id) ?? 0) + 1);
+  }
+
+  return c.json({
+    month,
+    quotaPerHabit: FREEZE_QUOTA_PER_MONTH,
+    freezes: (rows.results ?? []).map(r => ({
+      habitId: r.habit_id,
+      habitName: r.name,
+      color: r.color,
+      date: r.freeze_date,
+    })),
+    usedByHabit: Object.fromEntries(usedByHabit),
+  });
 });
 
 // POST /api/habits — create habit

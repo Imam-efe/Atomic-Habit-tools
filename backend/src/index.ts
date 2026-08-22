@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import type { Env } from './types';
 import health from './routes/health';
 import auth from './routes/auth';
-import habits from './routes/habits';
+import habits, { grantStreakFreezes } from './routes/habits';
 import goals from './routes/goals';
 import budget from './routes/budget';
 import dashboard from './routes/dashboard';
@@ -22,6 +22,8 @@ import netWorth from './routes/net_worth';
 import weeklyReview, { getMondayOf } from './routes/weekly_review';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
+import quickadd from './routes/quickadd';
+import search from './routes/search';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -92,6 +94,8 @@ app.route('/api/calendar', calendar);
 app.route('/api/holidays', holidays);
 app.route('/api/achievements', achievements);
 app.route('/api/insights', insights);
+app.route('/api/quickadd', quickadd);
+app.route('/api/search', search);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -399,6 +403,16 @@ async function triggerWeeklyRecap(env: Env) {
   }
 }
 
+// Hand out streak freezes for yesterday, just after Jakarta midnight. The day
+// has to be genuinely over before a miss counts as a miss — running this at
+// 23:00 would burn a freeze on a habit the user was still about to do.
+async function processStreakFreezes(env: Env) {
+  const jakarta = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  if (jakarta.getUTCHours() !== 0 || jakarta.getUTCMinutes() !== 5) return;
+
+  await grantStreakFreezes(env.DB, jakartaToday());
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -411,6 +425,7 @@ const handler = {
       triggerExpiryAlerts(env),
       triggerStreakAtRisk(env),
       triggerWeeklyRecap(env),
+      processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       // Holiday feed. Sunday only — the decree changes once a year, so a daily
       // pull would be noise. A failure leaves the previous cache in place.
       (new Date().getUTCDay() === 0

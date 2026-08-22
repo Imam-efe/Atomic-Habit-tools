@@ -20,9 +20,11 @@ const FIXTURES = {
     current: { assets: 210000000, liabilities: 45000000, net_worth: 165000000, month: 'Ags 2026' },
     history: [{ month: 'Jul 2026', assets: 200000000, liabilities: 48000000, net_worth: 152000000 }],
   },
+  // h1 carries a spent streak freeze so the "streak diselamatkan" banner and
+  // the ❄️ marker on the streak chip are both in the audit's path.
   '/api/habits': [
-    { id: 'h1', name: 'Olahraga pagi', color: '#5B41D6', streak: 12, doneToday: true, triggerCue: 'bangun tidur', twoMin: 'Push up 5x' },
-    { id: 'h2', name: 'Baca 10 halaman', color: '#1B6E37', streak: 5, doneToday: false },
+    { id: 'h1', name: 'Olahraga pagi', color: '#5B41D6', streak: 12, doneToday: true, triggerCue: 'bangun tidur', twoMin: 'Push up 5x', freezesUsed: 1, freezesLeft: 1, lastFreezeDate: '2026-08-14' },
+    { id: 'h2', name: 'Baca 10 halaman', color: '#1B6E37', streak: 5, doneToday: false, freezesUsed: 0, freezesLeft: 2, lastFreezeDate: null },
   ],
   '/api/habit-stacks': [{
     id: 's1', name: 'Rutinitas pagi', description: 'Urutan pagi', is_active: 1,
@@ -160,6 +162,46 @@ const FIXTURES = {
       id: 'up1', debt_id: 'dbt1', amount: 1500000, date: '2026-09-01',
       status: 'unpaid', note: null, person_name: 'Andi', debt_type: 'debt',
     }],
+  },
+  // Global search overlay. Covers a dated hit and an undated one, since the
+  // two render different subtitle rows.
+  '/api/search': {
+    query: 'beras',
+    hits: [
+      { type: 'inventory', label: 'Stok', id: 'iv1', title: 'Beras', subtitle: '5 kg · Bahan Makanan', date: '2026-09-10', subScreen: 'inventory' },
+      { type: 'budget', label: 'Pengeluaran', id: 'be1', title: 'Beras 5kg', subtitle: 'Rp70.000 · Belanja Bulanan', date: TODAY, tab: 'uang' },
+      { type: 'habit', label: 'Kebiasaan', id: 'h1', title: 'Olahraga pagi', subtitle: 'Streak 12 hari', date: null, tab: 'kebiasaan' },
+    ],
+  },
+  // Quick-add proposal card. An expense keeps the richest layout on screen:
+  // amount, category select and note are all editable before saving.
+  '/api/quickadd/parse': {
+    intent: 'expense',
+    text: 'beli kopi 25rb',
+    entry: {
+      type: 'expense', amount: 25000, category: 'Makanan & Minuman',
+      note: 'Kopi', date: TODAY, bank_account_id: 'b1', bank_name: 'BCA',
+    },
+  },
+  // Month-end projection card. `days_remaining` must stay above zero or the
+  // card hides itself and the audit never measures it. `category_pace` carries
+  // one over-limit row so the warning block renders too.
+  '/api/finance-report/forecast': {
+    month: '2026-08', as_of: TODAY, days_elapsed: 22, days_remaining: 9, days_in_month: 31,
+    actual: { income: 12000000, expense: 7400000, net: 4600000 },
+    projected: {
+      income: 12000000, expense: 10427000, net: 1573000,
+      daily_rate: 336364, variable_remaining: 3027000,
+    },
+    known_upcoming: [
+      { kind: 'recurring', type: 'expense', label: 'Langganan internet', amount: 350000, date: '2026-08-25' },
+      { kind: 'debt_payment', type: 'expense', label: 'Cicilan Andi', amount: 1500000, date: '2026-08-28' },
+    ],
+    assets: { current: 25000000, projected: 21973000 },
+    category_pace: [
+      { category: 'Makanan & Minuman', limit: 4000000, spent: 3200000, projected: 4509000, over_by: 509000, will_exceed: true },
+      { category: 'Transportasi & Bensin', limit: 2500000, spent: 1400000, projected: 1972000, over_by: 0, will_exceed: false },
+    ],
   },
   '/api/achievements': {
     badges: [

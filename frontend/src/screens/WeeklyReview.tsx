@@ -52,6 +52,8 @@ export function WeeklyReview() {
   const [adjustment, setAdjustment] = useState('');
   const [identityAffirmation, setIdentityAffirmation] = useState('');
   const [rating, setRating] = useState(3);
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -83,6 +85,43 @@ export function WeeklyReview() {
       load();
     } catch {}
     setSaving(false);
+  };
+
+  /**
+   * Fill the four reflection boxes from this week's own numbers.
+   *
+   * The boxes are the part of this screen people skip, so they sit empty and
+   * the review loses its point. The draft lands in the same editable fields
+   * and is not saved until the user presses Simpan, so nothing is recorded
+   * that they have not read.
+   */
+  const generateDraft = async () => {
+    const hasText = [habitReflection, obstacle, adjustment, identityAffirmation].some(v => v.trim());
+    if (hasText && !confirm('Ganti isian yang sudah ada dengan draft AI?')) return;
+
+    setDrafting(true);
+    setDraftError(null);
+    try {
+      const res = await apiFetch<{
+        habitReflection: string;
+        obstacle: string;
+        adjustment: string;
+        identityAffirmation: string;
+      }>('/weekly-review/draft', { method: 'POST', body: JSON.stringify({}) });
+
+      setHabitReflection(res.habitReflection);
+      setObstacle(res.obstacle);
+      setAdjustment(res.adjustment);
+      setIdentityAffirmation(res.identityAffirmation);
+    } catch (err) {
+      setDraftError(
+        err instanceof Error && err.message.includes('kebiasaan')
+          ? 'Belum ada kebiasaan untuk direfleksikan.'
+          : 'Gagal membuat draft. Tulis manual atau coba lagi nanti.'
+      );
+    } finally {
+      setDrafting(false);
+    }
   };
 
   const consistencyColor = (pct: number) =>
@@ -212,6 +251,34 @@ export function WeeklyReview() {
                 </motion.button>
               ))}
             </div>
+          </motion.div>
+
+          <motion.div
+            className="rounded-[20px] p-4 flex items-center gap-3"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...springs.gentle, delay: 0.11 }}
+          >
+            <span className="text-xl flex-shrink-0" aria-hidden>✨</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+                Draft otomatis
+              </p>
+              <p className="text-[10px] leading-snug" style={{ color: 'var(--text2)' }}>
+                {draftError ?? 'Isi keempat kolom di bawah dari data minggu ini. Bisa diedit sebelum disimpan.'}
+              </p>
+            </div>
+            <motion.button
+              onClick={generateDraft}
+              disabled={drafting}
+              whileTap={{ scale: 0.94 }}
+              transition={springs.snappy}
+              className="neu-cta text-[10px] font-bold px-2.5 py-1.5 rounded-lg text-white flex-shrink-0"
+              style={{ background: 'var(--accentFill)', opacity: drafting ? 0.6 : 1 }}
+            >
+              {drafting ? 'Menulis…' : 'Buatkan'}
+            </motion.button>
           </motion.div>
 
           {[

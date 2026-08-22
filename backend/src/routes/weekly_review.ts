@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
+import { runJson } from '../lib/ai';
 
 const weeklyReview = new Hono<AuthContext>();
 weeklyReview.use('/*', requireAuth);
@@ -135,6 +136,115 @@ weeklyReview.post('/', async (c) => {
   ).run();
 
   return c.json({ id, weekStart }, 201);
+});
+
+interface RawDraft {
+  habit_reflection?: string;
+  obstacle?: string;
+  adjustment?: string;
+  identity_affirmation?: string;
+}
+
+const DRAFT_SCHEMA = {
+  type: 'object',
+  properties: {
+    habit_reflection: { type: 'string', description: 'Refleksi kebiasaan minggu ini, 2-3 kalimat' },
+    obstacle: { type: 'string', description: 'Hambatan yang paling mungkin terjadi berdasarkan data, 1-2 kalimat' },
+    adjustment: { type: 'string', description: 'Satu penyesuaian konkret untuk minggu depan, 1-2 kalimat' },
+    identity_affirmation: { type: 'string', description: 'Afirmasi identitas, satu kalimat, diawali "Saya adalah..."' },
+  },
+  required: ['habit_reflection', 'obstacle', 'adjustment', 'identity_affirmation'],
+} as const;
+
+// POST /api/weekly-review/draft — AI first pass at the four reflection fields
+//
+// The form has four free-text boxes the user has to fill from memory every
+// week, so in practice they stay empty. This drafts them from the week's own
+// numbers; the frontend drops the text into the editable inputs and the user
+// still has to press save, so nothing is stored without a human reading it.
+weeklyReview.post('/draft', async (c) => {
+  const user = c.get('user');
+  const body = await c.req.json<{ weekStart?: string }>().catch(() => null);
+  const today = jakartaToday();
+  const weekStart = getMondayOf(body?.weekStart || today);
+  const weekEnd = (() => {
+    const parts = weekStart.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    d.setDate(d.getDate() + 6);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const [habitStats, goalRow] = await Promise.all([
+    c.env.DB.prepare(`
+      SELECT h.name, h.streak, COUNT(hc.id) as completions_this_week
+      FROM habits h
+      LEFT JOIN habit_completions hc
+        ON hc.habit_id = h.id
+        AND hc.completed_date BETWEEN ?2 AND ?3
+        AND hc.user_id = h.user_id
+      WHERE h.user_id = ?1
+      GROUP BY h.id
+    `).bind(user.sub, weekStart, weekEnd).all<{
+      name: string; streak: number; completions_this_week: number;
+    }>(),
+    c.env.DB.prepare(
+      'SELECT identity_statement FROM goals WHERE user_id = ?1 ORDER BY sort_order ASC, created_at ASC LIMIT 1'
+    ).bind(user.sub).first<{ identity_statement: string }>(),
+  ]);
+
+  const habits = habitStats.results ?? [];
+  if (habits.length === 0) {
+    return c.json({ error: 'Belum ada kebiasaan untuk direfleksikan' }, 422);
+  }
+
+  const cappedEnd = today < weekEnd ? today : weekEnd;
+  const startDate = new Date(weekStart);
+  const daysElapsed = Math.max(
+    1,
+    Math.round((new Date(cappedEnd).getTime() - startDate.getTime()) / 86400000) + 1
+  );
+  const possible = Math.min(daysElapsed, 7);
+
+  const lines = habits
+    .map(h => `- ${h.name}: ${h.completions_this_week}/${possible} hari, streak ${h.streak} hari`)
+    .join('\n');
+
+  let draft: RawDraft | null = null;
+  try {
+    draft = await runJson<RawDraft>(
+      c.env,
+      [
+        {
+          role: 'system',
+          content: 'Kamu membantu pengguna menulis draft review mingguan Atomic Habits dalam Bahasa Indonesia. Tulis dari sudut pandang pengguna (aku/saya), suportif tapi jujur pada data, dan spesifik pada angka yang diberikan. Hindari markdown dan daftar.',
+        },
+        {
+          role: 'user',
+          content: [
+            `Minggu ${weekStart} sampai ${weekEnd} (${daysElapsed} hari berjalan).`,
+            goalRow?.identity_statement ? `Identitas yang sedang dibangun: ${goalRow.identity_statement}.` : '',
+            'Kebiasaan minggu ini:',
+            lines,
+          ].filter(Boolean).join('\n'),
+        },
+      ],
+      DRAFT_SCHEMA as unknown as Record<string, unknown>,
+      { maxTokens: 700 }
+    );
+  } catch (err) {
+    console.error('Weekly review draft failed', err);
+    return c.json({ error: 'Draft generation failed' }, 502);
+  }
+
+  if (!draft) return c.json({ error: 'Draft generation failed' }, 502);
+
+  return c.json({
+    weekStart,
+    habitReflection: draft.habit_reflection ?? '',
+    obstacle: draft.obstacle ?? '',
+    adjustment: draft.adjustment ?? '',
+    identityAffirmation: draft.identity_affirmation ?? '',
+  });
 });
 
 export default weeklyReview;
