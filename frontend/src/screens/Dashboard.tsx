@@ -5,6 +5,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { apiFetch } from '@/lib/api';
 import { formatRp } from '@/lib/currency';
+import { canShare, shareProgress } from '@/lib/share';
+import { useAppBadge } from '@/hooks';
 
 interface DashboardData {
   habitsTotal: number;
@@ -93,6 +95,9 @@ export function Dashboard() {
     window.addEventListener('fayolla:tab-shown', onShown);
     return () => window.removeEventListener('fayolla:tab-shown', onShown);
   }, []);
+
+  // Home Screen icon badge mirrors habits still open today.
+  useAppBadge(data ? Math.max(0, data.habitsTotal - data.habitsDone) : 0);
 
   const generateInsights = async () => {
     setLoadingInsights(true);
@@ -210,6 +215,13 @@ export function Dashboard() {
   const habitsText = data ? `${data.habitsDone}/${data.habitsTotal}` : '–/–';
   const streakText = data ? `${data.streak}` : '–';
   const goalsText = data ? `${data.goalsTotal}` : '–';
+
+  const handleShare = () => {
+    if (!data) return;
+    shareProgress(
+      `🔥 Streak ${data.streak} hari! ${data.habitsDone}/${data.habitsTotal} kebiasaan selesai hari ini. 1% lebih baik setiap hari dengan Fayolla.`
+    );
+  };
 
   return (
     <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
@@ -333,12 +345,24 @@ export function Dashboard() {
         </AnimatePresence>
 
         {/* Identity Hero Card */}
-        <motion.div className="rounded-[24px] p-5 mb-4"
+        <motion.div className="rounded-[24px] p-5 mb-4 relative"
           style={{ background: 'linear-gradient(135deg, var(--accentFill), var(--accentFill2))', boxShadow: 'var(--neu-raised-lg)' }}
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springs.gentle, delay: 0.06 }}>
-          <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-            IDENTITY HARI INI
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              IDENTITY HARI INI
+            </p>
+            {canShare() && (
+              <button
+                onClick={handleShare}
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm"
+                style={{ background: 'rgba(255,255,255,0.16)' }}
+                aria-label="Bagikan progres"
+              >
+                📤
+              </button>
+            )}
+          </div>
           <p className="text-lg font-bold text-white leading-snug">
             {data?.identityStatement ?? 'Saya adalah orang yang terus berkembang 1% setiap hari.'}
           </p>

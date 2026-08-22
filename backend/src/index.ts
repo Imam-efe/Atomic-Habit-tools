@@ -286,6 +286,57 @@ async function triggerExpiryAlerts(env: Env) {
   }
 }
 
+// Evening nudge for habits with an active streak not yet done today — the
+// same day-scoped dedup flag as expiry alerts (streak_alert_sent = today)
+// absorbs the once-a-minute cron tick so each habit fires once per day.
+async function triggerStreakAtRisk(env: Env) {
+  // Only run at 20:00 Jakarta time — late enough to be a real "about to lose it"
+  // nudge, early enough that there's still time to act before midnight.
+  const now = new Date();
+  const jakartaHour = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCHours();
+  if (jakartaHour !== 20) return;
+
+  const today = jakartaToday();
+
+  const atRisk = await env.DB.prepare(`
+    SELECT h.id, h.name, h.user_id, h.streak
+    FROM habits h
+    JOIN push_subscriptions s ON h.user_id = s.user_id
+    WHERE h.streak > 0
+      AND (h.last_completed_date IS NULL OR h.last_completed_date != ?1)
+      AND (h.streak_alert_sent IS NULL OR h.streak_alert_sent != ?1)
+  `).bind(today).all<{ id: string; name: string; user_id: string; streak: number }>();
+
+  const rows = atRisk.results ?? [];
+  if (rows.length === 0) return;
+
+  const byUser = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
+    byUser.get(row.user_id)!.push(row);
+  }
+
+  for (const [userId, habits] of byUser.entries()) {
+    const title = habits.length === 1 ? '🔥 Streak Terancam!' : `🔥 ${habits.length} Streak Terancam!`;
+    const body = habits.length === 1
+      ? `${habits[0].name}: streak ${habits[0].streak} hari akan putus kalau belum selesai hari ini!`
+      : `${habits.map(h => `${h.name} (${h.streak} hari)`).join(', ')} — selesaikan sebelum tengah malam!`;
+
+    await queueNotificationEvent(env, userId, 'streak_at_risk', title, body, {
+      habits: habits.map(h => ({ id: h.id, name: h.name, streak: h.streak })),
+      url: '/kebiasaan',
+    });
+
+    const pushResult = await sendPushToUser(env, userId, { title, body, url: '/kebiasaan' });
+    if (pushResult.subscriptions === 0) continue;
+
+    const placeholders = habits.map((_, i) => `?${i + 2}`).join(',');
+    await env.DB.prepare(
+      `UPDATE habits SET streak_alert_sent = ?1 WHERE id IN (${placeholders})`
+    ).bind(today, ...habits.map(h => h.id)).run();
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -296,6 +347,7 @@ const handler = {
       processScheduledNotifications(env),
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
+      triggerStreakAtRisk(env),
       // Holiday feed. Sunday only — the decree changes once a year, so a daily
       // pull would be noise. A failure leaves the previous cache in place.
       (new Date().getUTCDay() === 0

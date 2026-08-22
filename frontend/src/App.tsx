@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { TabBar } from '@/components/TabBar';
+import { InstallPrompt } from '@/components/InstallPrompt';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { Dashboard } from '@/screens/Dashboard';
 import { Habits } from '@/screens/Habits';
@@ -14,7 +15,7 @@ import { Calendar } from '@/screens/Calendar';
 import { More } from '@/screens/More';
 import { useOnline } from '@/hooks/useOnline';
 import { applyTheme } from '@/tokens/theme';
-import type { AccentName, ThemeName } from '@/types';
+import type { AccentName, ThemeName, TabName } from '@/types';
 
 // Code-split sub-screens: lazy-load when user navigates to "More" menu
 const Projects = lazy(() => import('@/screens/Projects').then(m => ({ default: m.Projects })));
@@ -73,9 +74,22 @@ function TabPane({
   );
 }
 
+const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'goals', 'uang', 'lainnya']);
+
 function AppShell() {
-  const { activeTab, subScreen, goBack } = useUIStore();
+  const { activeTab, subScreen, goBack, setTab } = useUIStore();
   const isOnline = useOnline();
+
+  // Lands a Home Screen shortcut (manifest.json `shortcuts`) on its target tab.
+  // Runs once on mount; the param is stripped right after so back/refresh don't replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab && VALID_TABS.has(tab)) {
+      setTab(tab as TabName);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     let startX = 0;
@@ -205,6 +219,7 @@ function AppShell() {
         </Suspense>
       )}
       <TabBar />
+      <InstallPrompt />
     </div>
   );
 }
