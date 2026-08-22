@@ -4,6 +4,9 @@ import { springs } from '@/tokens/motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { apiFetch } from '@/lib/api';
+import { formatRp } from '@/lib/currency';
+import { canShare, shareProgress } from '@/lib/share';
+import { useAppBadge } from '@/hooks';
 
 interface DashboardData {
   habitsTotal: number;
@@ -41,10 +44,6 @@ interface NetWorthData {
   history: { month: string; assets: number; liabilities: number; net_worth: number }[];
 }
 
-function formatRp(n: number) {
-  return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-}
-
 export function Dashboard() {
   const { session } = useAuthStore();
   const { setTab } = useUIStore();
@@ -63,6 +62,11 @@ export function Dashboard() {
     nutritionText: string;
     budgetText: string;
   } | null>(null);
+  // Progressive enhancement: the rule-based texts above show instantly with
+  // zero network cost; this fills in a moment later only when the backend
+  // has ANTHROPIC_API_KEY configured, and stays null otherwise.
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [loadingAiInsight, setLoadingAiInsight] = useState(false);
 
   const now = new Date();
   const hour = now.getHours();
@@ -96,6 +100,9 @@ export function Dashboard() {
     window.addEventListener('fayolla:tab-shown', onShown);
     return () => window.removeEventListener('fayolla:tab-shown', onShown);
   }, []);
+
+  // Home Screen icon badge mirrors habits still open today.
+  useAppBadge(data ? Math.max(0, data.habitsTotal - data.habitsDone) : 0);
 
   const generateInsights = async () => {
     setLoadingInsights(true);
@@ -173,11 +180,37 @@ export function Dashboard() {
         nutritionText,
         budgetText
       });
-    } catch {}
-    setLoadingInsights(false);
+      setLoadingInsights(false);
+
+      // Fire-and-forget enhancement: the rule-based texts above are already
+      // on screen, so a slow or missing AI backend never blocks anything.
+      setAiInsight(null);
+      setLoadingAiInsight(true);
+      apiFetch<{ text: string }>('/insights/ai', {
+        method: 'POST',
+        body: JSON.stringify({
+          habitScore,
+          doneHabs,
+          totalHabs,
+          deepWorkHours,
+          protein: consumedProt,
+          proteinTarget: targetProt,
+          income: monthlyIncome,
+          expense: monthlySpent,
+        }),
+      })
+        .then((res) => setAiInsight(res.text))
+        .catch(() => {})
+        .finally(() => setLoadingAiInsight(false));
+    } catch {
+      setLoadingInsights(false);
+    }
   };
 
   const toggleHabit = async (id: string, isTwoMin?: boolean) => {
+    // Save deep copy of previous state for rollback on error
+    const prevHabits = habits.map(h => ({ ...h }));
+
     setHabits(prev => prev.map(h => {
       if (h.id === id) {
         const done = !h.doneToday;
@@ -196,10 +229,13 @@ export function Dashboard() {
         method: 'POST',
         body: JSON.stringify({ isTwoMin }),
       });
+      // Verify server response, update if different from optimistic
       setHabits(prev => prev.map(h => h.id === id ? { ...h, doneToday: res.doneToday, streak: res.streak, isTwoMinToday: res.isTwoMinToday } : h));
+      // Silently refresh dashboard data in background
       apiFetch<DashboardData>('/dashboard').then(setData).catch(() => {});
     } catch {
-      loadData();
+      // Revert to previous state instead of full reload
+      setHabits(prevHabits);
     }
   };
 
@@ -207,6 +243,13 @@ export function Dashboard() {
   const habitsText = data ? `${data.habitsDone}/${data.habitsTotal}` : '–/–';
   const streakText = data ? `${data.streak}` : '–';
   const goalsText = data ? `${data.goalsTotal}` : '–';
+
+  const handleShare = () => {
+    if (!data) return;
+    shareProgress(
+      `🔥 Streak ${data.streak} hari! ${data.habitsDone}/${data.habitsTotal} kebiasaan selesai hari ini. 1% lebih baik setiap hari dengan Fayolla.`
+    );
+  };
 
   return (
     <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
@@ -320,6 +363,24 @@ export function Dashboard() {
                         {insights.budgetText}
                       </p>
                     </div>
+
+                    {/* AI-generated insight — only appears if the backend has
+                        ANTHROPIC_API_KEY configured; silently absent otherwise. */}
+                    {(loadingAiInsight || aiInsight) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-3.5 rounded-2xl border"
+                        style={{ background: 'var(--accentSoft)', borderColor: 'var(--accent)' }}
+                      >
+                        <span className="text-xs font-bold block mb-1.5" style={{ color: 'var(--accent)' }}>✨ AI Insight</span>
+                        {loadingAiInsight ? (
+                          <p className="text-xs" style={{ color: 'var(--text3)' }}>Menganalisis pola harianmu...</p>
+                        ) : (
+                          <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>{aiInsight}</p>
+                        )}
+                      </motion.div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-center py-10" style={{ color: 'var(--text3)' }}>Gagal memuat rekap harian</p>
@@ -330,12 +391,24 @@ export function Dashboard() {
         </AnimatePresence>
 
         {/* Identity Hero Card */}
-        <motion.div className="rounded-[24px] p-5 mb-4"
+        <motion.div className="rounded-[24px] p-5 mb-4 relative"
           style={{ background: 'linear-gradient(135deg, var(--accentFill), var(--accentFill2))', boxShadow: 'var(--neu-raised-lg)' }}
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...springs.gentle, delay: 0.06 }}>
-          <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-            IDENTITY HARI INI
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              IDENTITY HARI INI
+            </p>
+            {canShare() && (
+              <button
+                onClick={handleShare}
+                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm"
+                style={{ background: 'rgba(255,255,255,0.16)' }}
+                aria-label="Bagikan progres"
+              >
+                📤
+              </button>
+            )}
+          </div>
           <p className="text-lg font-bold text-white leading-snug">
             {data?.identityStatement ?? 'Saya adalah orang yang terus berkembang 1% setiap hari.'}
           </p>

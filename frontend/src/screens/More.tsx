@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { isAppLockEnabled, isBiometricAvailable, enableAppLock, disableAppLock } from '@/lib/appLock';
 
 const VAPID_PUBLIC_KEY = 'BPOZXYPVRv_DxSObMXImgYoCWH582IyoDQAqqVAbKaJgqEMa7go2RUgDRSwIYLhOKZuKSJgBsU7SFVWg72MMqnI';
 
@@ -37,7 +38,32 @@ export function More() {
   const [loadingToken, setLoadingToken] = useState(false);
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [appLockOn, setAppLockOn] = useState(false);
+  const [appLockAvailable, setAppLockAvailable] = useState(true);
+  const [appLockBusy, setAppLockBusy] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setAppLockOn(isAppLockEnabled());
+    isBiometricAvailable().then(setAppLockAvailable);
+  }, []);
+
+  const handleToggleAppLock = async () => {
+    if (appLockBusy) return;
+    setAppLockBusy(true);
+    if (appLockOn) {
+      disableAppLock();
+      setAppLockOn(false);
+    } else {
+      const ok = await enableAppLock();
+      if (ok) {
+        setAppLockOn(true);
+      } else {
+        alert('Gagal mengaktifkan Face ID/Touch ID. Pastikan perangkat Anda mendukung dan coba lagi.');
+      }
+    }
+    setAppLockBusy(false);
+  };
 
   // Bank accounts state
   const [bankAccounts, setBankAccounts] = useState<{ id: string; name: string; account_type: string; balance: number }[]>([]);
@@ -428,6 +454,7 @@ export function More() {
             { label: 'Heatmap Kebiasaan', id: 'habit-heatmap', desc: 'Visualisasi 52 minggu konsistensi kebiasaan' },
             { label: 'Pelunasan Utang', id: 'debt-planner', desc: 'Kalkulator snowball & avalanche payoff' },
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas' },
+            { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang' },
           ].map((item, i) => (
             <div key={item.id}>
               {i > 0 && (
@@ -511,6 +538,42 @@ export function More() {
           </div>
         </div>
       </section>
+
+      {/* App Lock Section */}
+      {appLockAvailable && (
+        <section className="mb-6">
+          <p
+            className="text-xs font-bold uppercase tracking-widest mb-3"
+            style={{ color: 'var(--text3)' }}
+          >
+            PRIVASI
+          </p>
+          <div
+            className="rounded-[18px] p-4 flex items-center justify-between"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+          >
+            <div>
+              <span style={{ color: 'var(--text)' }} className="font-semibold text-sm block">Kunci Aplikasi</span>
+              <span className="text-[11px] block mt-0.5" style={{ color: 'var(--text2)' }}>
+                Verifikasi Face ID / Touch ID setiap kembali ke aplikasi
+              </span>
+            </div>
+            <button
+              className="w-12 h-7 rounded-full p-1 transition-colors relative flex-shrink-0"
+              style={{ background: appLockOn ? 'var(--accentFill)' : 'var(--track)' }}
+              onClick={handleToggleAppLock}
+              disabled={appLockBusy}
+            >
+              <motion.div
+                className="w-5 h-5 bg-white rounded-full"
+                layout="position"
+                transition={springs.snappy}
+                style={{ marginLeft: appLockOn ? 'auto' : '0' }}
+              />
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Push Notifications Section */}
       <section className="mb-6">

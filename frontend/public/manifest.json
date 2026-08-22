@@ -20,5 +20,21 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Kebiasaan",
+      "short_name": "Kebiasaan",
+      "description": "Lihat dan centang kebiasaan hari ini",
+      "url": "/?tab=kebiasaan",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Keuangan",
+      "short_name": "Uang",
+      "description": "Catat transaksi dan lihat budget",
+      "url": "/?tab=uang",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { AppLockGate } from '@/components/AppLockGate';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useAuthStore();
@@ -17,5 +18,5 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <AppLockGate>{children}</AppLockGate>;
 }

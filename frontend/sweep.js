@@ -71,7 +71,7 @@ const AUDIT = () => {
 const SUBSCREENS = [
   'Projects', 'Aktivitas', 'Nutrisi', 'Kalender Haid', 'Stok & Inventaris',
   'Jadwal Anak', 'Laporan Keuangan', 'Review Mingguan', 'Heatmap Kebiasaan',
-  'Pelunasan Utang', 'Pusat Notifikasi',
+  'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian',
 ];
 
 (async () => {

@@ -1,5 +1,6 @@
 export interface Env {
   DB: D1Database;
+  AI: Ai;
   JWT_SECRET: string;
   FRONTEND_URL: string;
   VAPID_SUBJECT: string;

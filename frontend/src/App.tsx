@@ -1,10 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { TabBar } from '@/components/TabBar';
+import { InstallPrompt } from '@/components/InstallPrompt';
+import { UndoToast } from '@/components/UndoToast';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { Dashboard } from '@/screens/Dashboard';
 import { Habits } from '@/screens/Habits';
@@ -12,19 +14,23 @@ import { Goals } from '@/screens/Goals';
 import { Budget } from '@/screens/Budget';
 import { Calendar } from '@/screens/Calendar';
 import { More } from '@/screens/More';
-import { Projects } from '@/screens/Projects';
-import { Activity } from '@/screens/Activity';
-import { Nutrition } from '@/screens/Nutrition';
-import { Menstrual } from '@/screens/Menstrual';
-import { Inventory } from '@/screens/Inventory';
-import { KidsSchedule } from '@/screens/KidsSchedule';
-import { FinancialReport } from '@/screens/FinancialReport';
-import { WeeklyReview } from '@/screens/WeeklyReview';
-import { HabitHeatmap } from '@/screens/HabitHeatmap';
-import { DebtPlanner } from '@/screens/DebtPlanner';
-import { NotificationCenter } from '@/screens/NotificationCenter';
+import { useOnline } from '@/hooks/useOnline';
 import { applyTheme } from '@/tokens/theme';
-import type { AccentName, ThemeName } from '@/types';
+import type { AccentName, ThemeName, TabName } from '@/types';
+
+// Code-split sub-screens: lazy-load when user navigates to "More" menu
+const Projects = lazy(() => import('@/screens/Projects').then(m => ({ default: m.Projects })));
+const Activity = lazy(() => import('@/screens/Activity').then(m => ({ default: m.Activity })));
+const Nutrition = lazy(() => import('@/screens/Nutrition').then(m => ({ default: m.Nutrition })));
+const Menstrual = lazy(() => import('@/screens/Menstrual').then(m => ({ default: m.Menstrual })));
+const Inventory = lazy(() => import('@/screens/Inventory').then(m => ({ default: m.Inventory })));
+const KidsSchedule = lazy(() => import('@/screens/KidsSchedule').then(m => ({ default: m.KidsSchedule })));
+const FinancialReport = lazy(() => import('@/screens/FinancialReport').then(m => ({ default: m.FinancialReport })));
+const WeeklyReview = lazy(() => import('@/screens/WeeklyReview').then(m => ({ default: m.WeeklyReview })));
+const HabitHeatmap = lazy(() => import('@/screens/HabitHeatmap').then(m => ({ default: m.HabitHeatmap })));
+const DebtPlanner = lazy(() => import('@/screens/DebtPlanner').then(m => ({ default: m.DebtPlanner })));
+const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
+const Achievements = lazy(() => import('@/screens/Achievements').then(m => ({ default: m.Achievements })));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -70,8 +76,22 @@ function TabPane({
   );
 }
 
+const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'goals', 'uang', 'lainnya']);
+
 function AppShell() {
-  const { activeTab, subScreen, goBack } = useUIStore();
+  const { activeTab, subScreen, goBack, setTab } = useUIStore();
+  const isOnline = useOnline();
+
+  // Lands a Home Screen shortcut (manifest.json `shortcuts`) on its target tab.
+  // Runs once on mount; the param is stripped right after so back/refresh don't replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab && VALID_TABS.has(tab)) {
+      setTab(tab as TabName);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     let startX = 0;
@@ -134,6 +154,7 @@ function AppShell() {
       'habit-heatmap': <HabitHeatmap />,
       'debt-planner': <DebtPlanner />,
       'notification-center': <NotificationCenter />,
+      'achievements': <Achievements />,
     }),
     [],
   );
@@ -175,6 +196,11 @@ function AppShell() {
 
   return (
     <div className="max-w-[430px] mx-auto relative min-h-screen overflow-hidden">
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 bg-warn text-white text-sm px-4 py-2 text-center z-50" style={{ background: 'var(--warn)', color: '#fff' }}>
+          Offline — cached data only
+        </div>
+      )}
       {Object.entries(screens).map(([key, node]) =>
         visitedTabs.current.has(key) ? (
           <TabPane
@@ -189,11 +215,15 @@ function AppShell() {
       )}
       {/* Sub-screens mount fresh per push (keyed) and animate in via CSS. */}
       {subScreen && (
-        <div key={subScreen} className="screen-enter">
-          {subScreens[subScreen]}
-        </div>
+        <Suspense fallback={<div className="screen-enter flex items-center justify-center min-h-screen" />}>
+          <div key={subScreen} className="screen-enter">
+            {subScreens[subScreen]}
+          </div>
+        </Suspense>
       )}
       <TabBar />
+      <InstallPrompt />
+      <UndoToast />
     </div>
   );
 }

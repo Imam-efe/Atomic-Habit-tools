@@ -1,9 +1,12 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
+import { formatRp } from '@/lib/currency';
+import { useUndoToastStore } from '@/stores/toastStore';
+import { BudgetEntryItem } from './BudgetEntryItem';
 
 interface BudgetEntry {
   id: string;
@@ -60,10 +63,6 @@ const MOCK_MERCHANTS = [
   { name: 'Superindo', amount: 320000, category: 'Belanja Bulanan' },
   { name: 'Solaria', amount: 185000, category: 'Makanan & Minuman' }
 ];
-
-function formatRp(n: number) {
-  return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-}
 
 type RangePreset = '7d' | '30d' | '3m' | 'custom';
 
@@ -181,6 +180,7 @@ function parseOcrText(text: string): { merchant: string; amount: number; categor
 }
 
 export function Budget() {
+  const showUndoToast = useUndoToastStore(s => s.show);
   const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting'>('transaksi');
   const [data, setData] = useState<BudgetData | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -396,8 +396,38 @@ export function Budget() {
     const amt = parseInt(amount.replace(/\D/g, ''));
     if (!amt || amt <= 0) return;
     setSaving(true);
+
+    const tempId = `temp-${Date.now()}`;
+    const optimisticEntry: BudgetEntry = {
+      id: tempId,
+      type: type as 'income' | 'expense',
+      amount: amt,
+      category,
+      note: note.trim() || null,
+      date,
+      bank_account_id: bankAccountId || null,
+      receipt_img: receiptImg || null,
+      recurrence: recurrence || null,
+    };
+
+    // Optimistically add entry and update summary
+    setData(d => d ? {
+      entries: [optimisticEntry, ...d.entries],
+      summary: {
+        ...d.summary,
+        [type === 'income' ? 'income' : 'expense']: d.summary[type === 'income' ? 'income' : 'expense'] + amt,
+        balance: d.summary.balance + (type === 'income' ? amt : -amt),
+      }
+    } : d);
+
+    setAmount('');
+    setNote('');
+    setReceiptImg(null);
+    setRecurrence('');
+    setShowAdd(false);
+
     try {
-      await apiFetch<BudgetEntry>('/budget', {
+      const newEntry = await apiFetch<BudgetEntry>('/budget', {
         method: 'POST',
         body: JSON.stringify({
           type,
@@ -410,31 +440,61 @@ export function Budget() {
           recurrence: recurrence || undefined,
         }),
       });
-      load();
-      setAmount('');
-      setNote('');
-      setReceiptImg(null);
-      setRecurrence('');
-      setShowAdd(false);
-    } catch {}
+      // Replace temp ID with real ID
+      setData(d => d ? {
+        ...d,
+        entries: d.entries.map(e => e.id === tempId ? newEntry : e)
+      } : d);
+    } catch {
+      // Revert optimistic entry on error
+      setData(d => d ? {
+        entries: d.entries.filter(e => e.id !== tempId),
+        summary: {
+          ...d.summary,
+          [type === 'income' ? 'income' : 'expense']: d.summary[type === 'income' ? 'income' : 'expense'] - amt,
+          balance: d.summary.balance - (type === 'income' ? amt : -amt),
+        }
+      } : d);
+    }
     setSaving(false);
   };
 
-  const deleteEntry = async (id: string) => {
-    setData(d => d ? {
-      ...d,
-      entries: d.entries.filter(e => e.id !== id)
-    } : d);
+  const deleteEntry = (id: string) => {
+    const prevData = data;
+    const deletedEntry = data?.entries.find(e => e.id === id);
+    if (!deletedEntry) return;
 
-    try {
-      await apiFetch(`/budget/${id}`, { method: 'DELETE' });
-      load();
-    } catch {
-      load();
-    }
+    const isIncome = deletedEntry.type === 'income';
+
+    // Optimistically remove entry and update summary
+    setData(d => {
+      if (!d) return d;
+      return {
+        entries: d.entries.filter(e => e.id !== id),
+        summary: {
+          ...d.summary,
+          [isIncome ? 'income' : 'expense']: d.summary[isIncome ? 'income' : 'expense'] - deletedEntry.amount,
+          balance: d.summary.balance - (isIncome ? deletedEntry.amount : -deletedEntry.amount),
+        }
+      };
+    });
+
+    // The API call itself is deferred until the undo window expires — an
+    // undo just restores the local snapshot, no request ever goes out.
+    showUndoToast(
+      `${deletedEntry.category} dihapus`,
+      () => setData(prevData),
+      async () => {
+        try {
+          await apiFetch(`/budget/${id}`, { method: 'DELETE' });
+        } catch {
+          setData(prevData);
+        }
+      },
+    );
   };
 
-  const openSheet = (entry: BudgetEntry) => {
+  const openSheet = useCallback((entry: BudgetEntry) => {
     setViewEntry(entry);
     setEditMode(false);
     setEditType(entry.type);
@@ -443,13 +503,49 @@ export function Budget() {
     setEditNote(entry.note ?? '');
     setEditDate(entry.date);
     setEditBankAccountId(entry.bank_account_id ?? '');
-  };
+  }, []);
 
   const saveEdit = async () => {
     if (!viewEntry) return;
     const amt = parseInt(editAmount.replace(/\D/g, ''));
     if (!amt || amt <= 0) return;
     setSavingEdit(true);
+
+    const prevData = data;
+    const oldEntry = viewEntry;
+    const amountDiff = amt - oldEntry.amount;
+    const typeChanged = editType !== oldEntry.type;
+
+    // Optimistically update entry and summary
+    setData(d => d ? {
+      entries: d.entries.map(e => e.id === viewEntry.id ? {
+        ...e,
+        type: editType as 'income' | 'expense',
+        amount: amt,
+        category: editCategory,
+        note: editNote.trim() || null,
+        date: editDate,
+        bank_account_id: editBankAccountId || null,
+      } : e),
+      summary: (() => {
+        const newSummary = { ...d.summary };
+        if (typeChanged) {
+          // Type changed: remove old, add new
+          newSummary[oldEntry.type === 'income' ? 'income' : 'expense'] -= oldEntry.amount;
+          newSummary[editType === 'income' ? 'income' : 'expense'] += amt;
+          newSummary.balance = newSummary.income - newSummary.expense;
+        } else {
+          // Same type: adjust amount
+          newSummary[editType === 'income' ? 'income' : 'expense'] += amountDiff;
+          newSummary.balance += (editType === 'income' ? amountDiff : -amountDiff);
+        }
+        return newSummary;
+      })()
+    } : d);
+
+    setViewEntry(null);
+    setEditMode(false);
+
     try {
       await apiFetch(`/budget/${viewEntry.id}`, {
         method: 'PUT',
@@ -462,10 +558,12 @@ export function Budget() {
           bank_account_id: editBankAccountId || undefined,
         }),
       });
-      setViewEntry(null);
-      setEditMode(false);
-      load();
-    } catch {}
+    } catch {
+      // Revert on error
+      setData(prevData);
+      setViewEntry(oldEntry);
+      setEditMode(true);
+    }
     setSavingEdit(false);
   };
 
@@ -1089,52 +1187,13 @@ export function Budget() {
             <div className="flex flex-col gap-2">
               <AnimatePresence>
                 {data?.entries.map(entry => (
-                  <motion.div
+                  <BudgetEntryItem
                     key={entry.id}
-                    layout="position"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="rounded-[14px] px-4 py-3.5 flex items-center gap-3 relative overflow-hidden cursor-pointer"
-                    style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-                    onClick={() => openSheet(entry)}
-                  >
-                    <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-base"
-                      style={{ background: entry.type === 'income' ? 'rgba(52,199,89,0.15)' : 'rgba(255,69,58,0.12)' }}>
-                      {entry.type === 'income' ? '📈' : '📉'}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{entry.category}</p>
-                        <span className="text-[9px]" style={{ color: 'var(--text3)' }}>{entry.date}</span>
-                      </div>
-                      {entry.note && <p className="text-xs truncate" style={{ color: 'var(--text3)' }}>{entry.note}</p>}
-                      
-                      {/* Show allocated bank account */}
-                      {entry.bank_account_id && (() => {
-                        const matchedBank = bankAccounts.find(b => b.id === entry.bank_account_id);
-                        return matchedBank ? (
-                          <span className="inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/5 mt-1 text-[var(--text2)]">
-                            🏦 {matchedBank.name}
-                          </span>
-                        ) : null;
-                      })()}
-                    </div>
-
-                    {/* Receipt thumb if attached */}
-                    {entry.receipt_img && (
-                      <div className="w-8 h-8 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0">
-                        <img src={entry.receipt_img} className="w-full h-full object-cover" onClick={() => alert('Foto Struk terlampir')} />
-                      </div>
-                    )}
-
-                    <p className="text-sm font-bold flex-shrink-0"
-                      style={{ color: entry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
-                      {entry.type === 'income' ? '+' : '-'}{formatRp(entry.amount)}
-                    </p>
-
-                  </motion.div>
+                    entry={entry}
+                    bankAccounts={bankAccounts}
+                    onOpen={openSheet}
+                    animated
+                  />
                 ))}
               </AnimatePresence>
             </div>
@@ -1353,22 +1412,13 @@ export function Budget() {
                         </p>
                         <div className="flex flex-col gap-2">
                           {grouped[date].map(entry => (
-                            <div key={entry.id}
-                              className="rounded-[14px] px-4 py-3 flex items-center gap-3 cursor-pointer"
-                              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-                              onClick={() => { setDrillCategory(null); setTimeout(() => openSheet(entry), 300); }}>
-                              <div className="w-8 h-8 rounded-xl flex-shrink-0 flex items-center justify-center text-sm"
-                                style={{ background: entry.type === 'income' ? 'rgba(52,199,89,0.15)' : 'rgba(255,69,58,0.12)' }}>
-                                {entry.type === 'income' ? '📈' : '📉'}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                {entry.note && <p className="text-xs truncate" style={{ color: 'var(--text3)' }}>{entry.note}</p>}
-                              </div>
-                              <p className="text-sm font-bold flex-shrink-0"
-                                style={{ color: entry.type === 'income' ? 'var(--pos)' : 'var(--neg)' }}>
-                                {entry.type === 'income' ? '+' : '-'}{formatRp(entry.amount)}
-                              </p>
-                            </div>
+                            <BudgetEntryItem
+                              key={entry.id}
+                              entry={entry}
+                              bankAccounts={bankAccounts}
+                              onOpen={() => { setDrillCategory(null); setTimeout(() => openSheet(entry), 300); }}
+                              animated={false}
+                            />
                           ))}
                         </div>
                       </div>

@@ -161,6 +161,14 @@ const FIXTURES = {
       status: 'unpaid', note: null, person_name: 'Andi', debt_type: 'debt',
     }],
   },
+  '/api/achievements': {
+    badges: [
+      { id: 'streak-7', name: 'Seminggu Penuh', description: 'Streak 7 hari pada satu kebiasaan', icon: '🔥', earned: true, progress: 100, currentValue: 7, targetValue: 7 },
+      { id: 'streak-30', name: 'Sebulan Konsisten', description: 'Streak 30 hari pada satu kebiasaan', icon: '🏆', earned: false, progress: 40, currentValue: 12, targetValue: 30 },
+    ],
+    earnedCount: 1,
+    totalCount: 2,
+  },
 };
 
 /** Serves every /api/** call from FIXTURES, falling back to an empty list. */
