@@ -217,6 +217,17 @@ textarea::placeholder {
   }
 }
 
+/*
+ * Screen entrance for the keep-alive tab panes. A CSS animation restarts
+ * whenever the element goes from `display: none` back to visible, so a
+ * re-shown tab replays this without any JavaScript — the tap's critical path
+ * is a single style toggle. The compositor runs opacity/transform off the
+ * main thread even while React is busy.
+ */
+.screen-enter {
+  animation: fyScreen 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* Card entrance — the shadow grows in, so the card appears to rise. */
 @keyframes fyRise {
   from {

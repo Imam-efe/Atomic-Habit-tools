@@ -57,8 +57,10 @@ export function Habits() {
   // Canvas Ref for Confetti
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  // `silent` refreshes in place without flashing the loading skeleton — used
+  // when the kept-alive tab is re-shown and already has data on screen.
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [habsData, goalsData] = await Promise.all([
         apiFetch<Habit[]>('/habits'),
@@ -74,6 +76,16 @@ export function Habits() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // The tab stays mounted between visits; habits can be toggled from the
+  // Dashboard tab, so re-shows refresh silently to pick that up.
+  useEffect(() => {
+    const onShown = (e: Event) => {
+      if ((e as CustomEvent).detail === 'kebiasaan') load(true);
+    };
+    window.addEventListener('fayolla:tab-shown', onShown);
+    return () => window.removeEventListener('fayolla:tab-shown', onShown);
+  }, []);
 
   const triggerConfetti = (isMilestone: boolean) => {
     const cv = canvasRef.current;

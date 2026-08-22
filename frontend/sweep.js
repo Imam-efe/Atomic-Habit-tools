@@ -137,7 +137,9 @@ const SUBSCREENS = [
       await page.getByRole('button', { name: tab, exact: false }).first().click({ timeout: 8000 });
       await page.waitForTimeout(1100);
       if (tab === 'Kebiasaan') {
-        const h = page.getByText('Olahraga pagi').first();
+        // The shell keeps visited tabs mounted (display:none), so the same
+        // text exists in hidden panes too — match only the visible one.
+        const h = page.locator('text=Olahraga pagi >> visible=true').first();
         if (await h.count()) { await h.click(); await page.waitForTimeout(600); }
       }
       await check(tab);
@@ -151,7 +153,7 @@ const SUBSCREENS = [
       await home();
       await page.getByRole('button', { name: 'Lainnya', exact: false }).first().click({ timeout: 8000 });
       await page.waitForTimeout(800);
-      const entry = page.getByText(label, { exact: true }).first();
+      const entry = page.locator(`text="${label}" >> visible=true`).first();
       if (!(await entry.count())) { report.push({ name: label, missing: true }); continue; }
       await entry.click({ timeout: 8000 });
       await page.waitForTimeout(1300);

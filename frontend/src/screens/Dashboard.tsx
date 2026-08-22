@@ -68,8 +68,10 @@ export function Dashboard() {
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Selamat pagi' : hour < 17 ? 'Selamat siang' : 'Selamat malam';
 
-  const loadData = async () => {
-    setLoading(true);
+  // `silent` refreshes in place without flashing the loading skeleton — used
+  // when the kept-alive tab is re-shown and already has data on screen.
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [dash, habs, nw] = await Promise.all([
         apiFetch<DashboardData>('/dashboard'),
@@ -84,6 +86,16 @@ export function Dashboard() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // The tab stays mounted between visits; aggregates edited on other tabs
+  // (habits, budget) refresh silently each time the user comes back.
+  useEffect(() => {
+    const onShown = (e: Event) => {
+      if ((e as CustomEvent).detail === 'beranda') loadData(true);
+    };
+    window.addEventListener('fayolla:tab-shown', onShown);
+    return () => window.removeEventListener('fayolla:tab-shown', onShown);
+  }, []);
 
   const generateInsights = async () => {
     setLoadingInsights(true);
