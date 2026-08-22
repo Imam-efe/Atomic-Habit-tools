@@ -7,7 +7,7 @@ const weeklyReview = new Hono<AuthContext>();
 weeklyReview.use('/*', requireAuth);
 
 // Helper: get Monday of the week containing a given YYYY-MM-DD
-function getMondayOf(dateStr: string): string {
+export function getMondayOf(dateStr: string): string {
   const parts = dateStr.split('-');
   const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
   const day = d.getDay(); // 0=Sun, 1=Mon...

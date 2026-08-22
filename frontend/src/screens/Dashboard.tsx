@@ -62,6 +62,11 @@ export function Dashboard() {
     nutritionText: string;
     budgetText: string;
   } | null>(null);
+  // Progressive enhancement: the rule-based texts above show instantly with
+  // zero network cost; this fills in a moment later only when the backend
+  // has ANTHROPIC_API_KEY configured, and stays null otherwise.
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [loadingAiInsight, setLoadingAiInsight] = useState(false);
 
   const now = new Date();
   const hour = now.getHours();
@@ -175,8 +180,31 @@ export function Dashboard() {
         nutritionText,
         budgetText
       });
-    } catch {}
-    setLoadingInsights(false);
+      setLoadingInsights(false);
+
+      // Fire-and-forget enhancement: the rule-based texts above are already
+      // on screen, so a slow or missing AI backend never blocks anything.
+      setAiInsight(null);
+      setLoadingAiInsight(true);
+      apiFetch<{ text: string }>('/insights/ai', {
+        method: 'POST',
+        body: JSON.stringify({
+          habitScore,
+          doneHabs,
+          totalHabs,
+          deepWorkHours,
+          protein: consumedProt,
+          proteinTarget: targetProt,
+          income: monthlyIncome,
+          expense: monthlySpent,
+        }),
+      })
+        .then((res) => setAiInsight(res.text))
+        .catch(() => {})
+        .finally(() => setLoadingAiInsight(false));
+    } catch {
+      setLoadingInsights(false);
+    }
   };
 
   const toggleHabit = async (id: string, isTwoMin?: boolean) => {
@@ -335,6 +363,24 @@ export function Dashboard() {
                         {insights.budgetText}
                       </p>
                     </div>
+
+                    {/* AI-generated insight — only appears if the backend has
+                        ANTHROPIC_API_KEY configured; silently absent otherwise. */}
+                    {(loadingAiInsight || aiInsight) && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-3.5 rounded-2xl border"
+                        style={{ background: 'var(--accentSoft)', borderColor: 'var(--accent)' }}
+                      >
+                        <span className="text-xs font-bold block mb-1.5" style={{ color: 'var(--accent)' }}>✨ AI Insight</span>
+                        {loadingAiInsight ? (
+                          <p className="text-xs" style={{ color: 'var(--text3)' }}>Menganalisis pola harianmu...</p>
+                        ) : (
+                          <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>{aiInsight}</p>
+                        )}
+                      </motion.div>
+                    )}
                   </div>
                 ) : (
                   <p className="text-xs text-center py-10" style={{ color: 'var(--text3)' }}>Gagal memuat rekap harian</p>

@@ -19,7 +19,9 @@ import kidsSchedule from './routes/kids_schedule';
 import debts from './routes/debts';
 import financeReport from './routes/finance_report';
 import netWorth from './routes/net_worth';
-import weeklyReview from './routes/weekly_review';
+import weeklyReview, { getMondayOf } from './routes/weekly_review';
+import achievements from './routes/achievements';
+import insights from './routes/insights';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -88,6 +90,8 @@ app.route('/api/habit-stacks', habitStacks);
 app.route('/api/scheduled-notifications', scheduledNotifications);
 app.route('/api/calendar', calendar);
 app.route('/api/holidays', holidays);
+app.route('/api/achievements', achievements);
+app.route('/api/insights', insights);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -337,6 +341,64 @@ async function triggerStreakAtRisk(env: Env) {
   }
 }
 
+// Sunday-evening summary push: habit consistency for the week just ending.
+// Dedup via users.last_weekly_recap_sent (the Monday date of the recapped
+// week) — same idea as streak_alert_sent, but user-scoped since this is one
+// aggregate push per user rather than one per row.
+async function triggerWeeklyRecap(env: Env) {
+  const now = new Date();
+  const jakartaHour = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCHours();
+  const jakartaDay = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCDay(); // 0 = Sunday
+  if (jakartaHour !== 20 || jakartaDay !== 0) return;
+
+  const today = jakartaToday();
+  const weekStart = getMondayOf(today);
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT u.id
+    FROM users u
+    JOIN push_subscriptions s ON u.id = s.user_id
+    WHERE u.last_weekly_recap_sent IS NULL OR u.last_weekly_recap_sent != ?1
+  `).bind(weekStart).all<{ id: string }>();
+
+  for (const { id: userId } of users.results ?? []) {
+    const habitStats = await env.DB.prepare(`
+      SELECT h.id, h.streak, COUNT(hc.id) as completions_this_week
+      FROM habits h
+      LEFT JOIN habit_completions hc
+        ON hc.habit_id = h.id AND hc.completed_date BETWEEN ?2 AND ?3 AND hc.user_id = h.user_id
+      WHERE h.user_id = ?1
+      GROUP BY h.id
+    `).bind(userId, weekStart, today).all<{ id: string; streak: number; completions_this_week: number }>();
+
+    const habits = habitStats.results ?? [];
+    // Nothing tracked yet — a recap of zero habits isn't worth a push, and
+    // marking it sent would stop it from ever nudging the user once they add one.
+    if (habits.length === 0) continue;
+
+    const totalCompletions = habits.reduce((s, h) => s + h.completions_this_week, 0);
+    const possibleCompletions = habits.length * 7;
+    const consistency = Math.round((totalCompletions / possibleCompletions) * 100);
+    const longestStreak = Math.max(...habits.map(h => h.streak));
+
+    const title = '📊 Rekap Mingguanmu';
+    const body = `Konsistensi ${consistency}% minggu ini · Streak terpanjang ${longestStreak} hari. Lihat detailnya di Review Mingguan!`;
+
+    await queueNotificationEvent(env, userId, 'weekly_recap', title, body, {
+      weekStart,
+      consistency,
+      longestStreak,
+      url: '/lainnya',
+    });
+
+    await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
+
+    await env.DB.prepare(
+      'UPDATE users SET last_weekly_recap_sent = ?1 WHERE id = ?2'
+    ).bind(weekStart, userId).run();
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -348,6 +410,7 @@ const handler = {
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
       triggerStreakAtRisk(env),
+      triggerWeeklyRecap(env),
       // Holiday feed. Sunday only — the decree changes once a year, so a daily
       // pull would be noise. A failure leaves the previous cache in place.
       (new Date().getUTCDay() === 0

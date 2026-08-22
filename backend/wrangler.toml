@@ -19,3 +19,4 @@ crons = ["* * * * *"]
 # Secrets set via: wrangler secret put GOOGLE_CLIENT_ID
 # wrangler secret put GOOGLE_CLIENT_SECRET
 # wrangler secret put JWT_SECRET
+# wrangler secret put ANTHROPIC_API_KEY   (optional — enables AI Insights; app works without it)
