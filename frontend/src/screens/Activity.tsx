@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { ACTIVITY_COLORS } from '@/constants/colors';
 
@@ -264,7 +264,7 @@ export function Activity() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <div>
               <span className="text-[10px] font-black text-[var(--accent)] block uppercase tracking-widest">⏱️ FOCUS TRACKER</span>
@@ -374,7 +374,7 @@ export function Activity() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Log Alokasi Waktu</p>
             <select
@@ -546,7 +546,7 @@ export function Activity() {
             {logs.map(log => (
               <motion.div
                 key={log.id}
-                layout
+                layout="position"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -20 }}

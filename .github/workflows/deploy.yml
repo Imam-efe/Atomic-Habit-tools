@@ -19,17 +19,22 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Deploy Worker
-        working-directory: backend
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npm run deploy
-
+      # Migrations run first. The other order put the new Worker live against the
+      # old schema for as long as the migration took, so a release that adds a
+      # table served 500s on every route reading it until the step caught up.
+      # The migrations are additive and idempotent, so applying them ahead of
+      # the deploy is safe for the running version.
       - name: Run DB migrations
         working-directory: backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npm run db:migrate:remote
+
+      - name: Deploy Worker
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npm run deploy
 
   deploy-frontend:
     runs-on: ubuntu-latest

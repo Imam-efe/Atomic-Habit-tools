@@ -27,7 +27,12 @@ import scheduledNotifications, {
   deliverScheduledNotification,
   type ScheduledNotificationRow,
 } from './routes/scheduled_notifications';
-import { sendPushToUser, queueNotificationEvent } from './lib/push';
+// queueNotificationEvent is declared locally below; importing it too shadowed
+// the local one and made the whole backend fail `tsc`.
+import { sendPushToUser } from './lib/push';
+import calendar from './routes/calendar';
+import holidays from './routes/holidays';
+import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
@@ -81,6 +86,8 @@ app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
 app.route('/api/habit-stacks', habitStacks);
 app.route('/api/scheduled-notifications', scheduledNotifications);
+app.route('/api/calendar', calendar);
+app.route('/api/holidays', holidays);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -289,6 +296,11 @@ const handler = {
       processScheduledNotifications(env),
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
+      // Holiday feed. Sunday only — the decree changes once a year, so a daily
+      // pull would be noise. A failure leaves the previous cache in place.
+      (new Date().getUTCDay() === 0
+        ? syncHolidays(env).catch((err) => console.error('Holiday sync failed', err))
+        : Promise.resolve()),
       // Purge notification events older than 7 days
       env.DB.prepare(
         "DELETE FROM notification_events WHERE created_at < unixepoch() - 7 * 86400"

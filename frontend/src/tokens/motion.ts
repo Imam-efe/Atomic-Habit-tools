@@ -26,3 +26,44 @@ export const duration = {
   screen: 0.4,
   celebration: 0.6,
 };
+
+/**
+ * Screen-level transitions are tweened, not sprung.
+ *
+ * A spring on a full screen overshoots, and an overshoot the size of the
+ * viewport reads as lag rather than bounce. A short ease-out curve gets the
+ * incoming screen to its resting position fast and settles without wobble.
+ *
+ * Only `opacity` and `transform` appear here. Both are composited, so the whole
+ * transition runs off the main thread and holds frame rate on a 120Hz panel
+ * even while the incoming screen is still mounting.
+ */
+export const screenTransition = {
+  /** easeOutQuint — most of the travel happens in the first third. */
+  ease: [0.22, 1, 0.36, 1] as const,
+  enter: 0.26,
+  /** Shorter than the enter so the two crossfade instead of queueing. */
+  exit: 0.16,
+};
+
+/**
+ * Expand/collapse panels.
+ *
+ * `height: auto` is a layout animation — the browser reflows the panel and
+ * everything below it once per frame. A spring makes that worse than it sounds:
+ * it settles over ~550ms and spends the tail of that doing a full reflow per
+ * frame to move a couple of pixels. A short tween covers the same distance in
+ * less than half the frames, which is why the panels feel like they snap open
+ * rather than drag.
+ */
+export const collapse = {
+  type: 'tween' as const,
+  duration: 0.22,
+  ease: [0.32, 0.72, 0, 1] as const,
+};
+
+export const screenVariants = {
+  initial: { opacity: 0, y: 8, scale: 0.994 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -6, scale: 1.004 },
+};

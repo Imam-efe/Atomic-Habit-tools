@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 
 interface Task {
@@ -185,7 +185,7 @@ export function Projects() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Tambah Project Baru</p>
             <input
@@ -251,7 +251,7 @@ export function Projects() {
               key={project.id}
               className="rounded-[18px] p-4 flex flex-col gap-3"
               style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-              layout
+              layout="position"
             >
               {/* Project Title & Badge & Delete */}
               <div className="flex items-start justify-between">
@@ -359,7 +359,7 @@ export function Projects() {
                       <motion.div
                         key={task.id}
                         className="flex items-center gap-3"
-                        layout
+                        layout="position"
                       >
                         {/* Checkbox */}
                         <motion.button

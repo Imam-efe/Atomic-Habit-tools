@@ -94,17 +94,65 @@ body {
   box-shadow: var(--neu-pressed);
 }
 
-/*
- * Primary action. A coloured fill still needs the raised pair, or it reads as a
- * sticker dropped onto the page rather than part of it.
- */
-.neu-cta {
-  box-shadow: var(--neu-raised);
-  transition: box-shadow 180ms var(--ease-depth);
+/* ---------------------------------------------------------------------------
+ * Depth crossfade
+ *
+ * `box-shadow` is a paint property: transitioning it re-rasterises the element
+ * on every frame, and these tokens expand to two blurred layers each, so a
+ * press was costing two full-element repaints per frame. On a 120Hz panel that
+ * is an 8ms budget the CPU cannot meet, which is what made taps and tab
+ * changes stutter.
+ *
+ * Instead each depth state is painted once onto its own pseudo-element and the
+ * two are crossfaded with `opacity`, which the compositor handles on the GPU
+ * without touching layout or paint. Same visual, no per-frame rasterisation.
+ * ------------------------------------------------------------------------- */
+
+.neu-cta,
+.neu-press {
+  position: relative;
+  /* The shadows live on the pseudo-elements now. */
+  box-shadow: none;
 }
 
-.neu-cta:active {
+.neu-cta::before,
+.neu-cta::after,
+.neu-press::before,
+.neu-press::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-depth);
+}
+
+/* Resting depth. */
+.neu-cta::before,
+.neu-press::before {
+  box-shadow: var(--neu-raised);
+  opacity: 1;
+}
+
+/* Pressed depth, revealed by fading the pair rather than re-rendering it. */
+.neu-cta::after,
+.neu-press::after {
   box-shadow: var(--neu-pressed);
+  opacity: 0;
+}
+
+.neu-cta:active::before,
+.neu-press:active::before,
+.neu-press[aria-pressed='true']::before,
+.neu-press[data-active='true']::before {
+  opacity: 0;
+}
+
+.neu-cta:active::after,
+.neu-press:active::after,
+.neu-press[aria-pressed='true']::after,
+.neu-press[data-active='true']::after {
+  opacity: 1;
 }
 
 /* Carved inputs need their own placeholder colour; the UA default is far below AA. */
@@ -115,21 +163,41 @@ textarea::placeholder {
 }
 
 /*
- * Interactive press. The surface sinks instead of moving, which is the whole
- * point of the style — a translate would read as a flat card sliding.
+ * Tab bar well. Driven by React state rather than :active, so it keys off
+ * data-active — but it is the same crossfade: the inactive tab paints no
+ * shadow at all, the active one fades the pressed pair in.
  */
-.neu-press {
-  transition: box-shadow 180ms var(--ease-depth);
+.tab-well {
+  position: relative;
+  transition: color 200ms var(--ease-depth);
 }
 
-.neu-press:active {
+.tab-well::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   box-shadow: var(--neu-pressed);
+  opacity: 0;
+  transition: opacity 200ms var(--ease-depth);
+  pointer-events: none;
 }
 
-/* Selected/toggled state, held rather than momentary. */
-.neu-press[aria-pressed='true'],
-.neu-press[data-active='true'] {
-  box-shadow: var(--neu-pressed);
+.tab-well[data-active='true']::after {
+  opacity: 1;
+}
+
+/*
+ * The tab bar is fixed and blurs whatever scrolls beneath it. Isolating it on
+ * its own compositor layer keeps a repaint inside a screen from forcing the
+ * blur to re-sample. `contain` is deliberately not used here: it would clip the
+ * bar's own upward shadow and turn it into a containing block for the fixed
+ * modals the screens render.
+ */
+.tab-bar-layer {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  isolation: isolate;
 }
 
 /* ---------------------------------------------------------------------------

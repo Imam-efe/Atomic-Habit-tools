@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { CHART_PALETTE } from '@/constants/colors';
 import { createWorker } from 'tesseract.js';
@@ -745,7 +745,7 @@ export function Budget() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <div className="flex justify-between items-center mb-3">
               <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Tambah Transaksi</p>
@@ -936,7 +936,7 @@ export function Budget() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={springs.smooth}
+                transition={collapse}
               >
                 <input
                   type="date"
@@ -987,7 +987,7 @@ export function Budget() {
                   {data.summary.income > 0 && (
                     <div className="text-right">
                       <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: 'var(--text3)' }}>Saving Rate</span>
-                      <span className="text-sm font-bold text-emerald-400">
+                      <span className="text-sm font-bold text-[var(--pos)]">
                         {Math.round(((data.summary.income - data.summary.expense) / data.summary.income) * 100)}%
                       </span>
                     </div>
@@ -1091,7 +1091,7 @@ export function Budget() {
                 {data?.entries.map(entry => (
                   <motion.div
                     key={entry.id}
-                    layout
+                    layout="position"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20 }}
@@ -1201,7 +1201,7 @@ export function Budget() {
                       </span>
                       {cat.limit > 0 && (
                         <span className="text-[10px] block mt-0.5" style={{ color: 'var(--text3)' }}>
-                          Sisa Budget: <span className="font-semibold text-emerald-400">{formatRp(cat.remaining)}</span>
+                          Sisa Budget: <span className="font-semibold text-[var(--pos)]">{formatRp(cat.remaining)}</span>
                         </span>
                       )}
                     </div>

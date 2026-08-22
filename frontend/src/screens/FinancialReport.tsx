@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 
@@ -348,8 +348,8 @@ export function FinancialReport() {
 
                 <div className="grid grid-cols-2 gap-4 pt-4" style={{ borderTop: '1px solid var(--sep)' }}>
                   <div>
-                    <span className="text-[10px] font-bold text-emerald-400 block uppercase mb-0.5">Total Pendapatan</span>
-                    <span className="text-base font-bold text-emerald-500">{formatRp(report.pnl.income)}</span>
+                    <span className="text-[10px] font-bold text-[var(--pos)] block uppercase mb-0.5">Total Pendapatan</span>
+                    <span className="text-base font-bold text-[var(--pos)]">{formatRp(report.pnl.income)}</span>
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-[var(--neg)] block uppercase mb-0.5">Total Pengeluaran</span>
@@ -370,7 +370,7 @@ export function FinancialReport() {
                     {report.pnl.income_breakdown.map(inc => (
                       <div key={inc.category} className="flex justify-between items-center text-xs">
                         <span style={{ color: 'var(--text2)' }}>{inc.category}</span>
-                        <span className="font-bold text-emerald-500">{formatRp(inc.amount)}</span>
+                        <span className="font-bold text-[var(--pos)]">{formatRp(inc.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -446,7 +446,7 @@ export function FinancialReport() {
                   {report.balance_sheet.assets.receivables > 0 && (
                     <div className="flex justify-between items-center text-xs pt-1.5" style={{ borderTop: '1px dashed var(--sep)' }}>
                       <span style={{ color: 'var(--text2)' }} className="italic">💰 Total Piutang (Uang Anda di Orang Lain)</span>
-                      <span className="font-bold text-emerald-500">{formatRp(report.balance_sheet.assets.receivables)}</span>
+                      <span className="font-bold text-[var(--pos)]">{formatRp(report.balance_sheet.assets.receivables)}</span>
                     </div>
                   )}
                 </div>
@@ -493,7 +493,7 @@ export function FinancialReport() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={springs.smooth}
+                    transition={collapse}
                   >
                     <p className="text-xs font-bold mb-3" style={{ color: 'var(--text)' }}>Catat Utang Baru</p>
                     <div className="flex flex-col gap-2.5">

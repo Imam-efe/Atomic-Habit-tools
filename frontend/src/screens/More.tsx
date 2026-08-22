@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 
 const VAPID_PUBLIC_KEY = 'BPOZXYPVRv_DxSObMXImgYoCWH582IyoDQAqqVAbKaJgqEMa7go2RUgDRSwIYLhOKZuKSJgBsU7SFVWg72MMqnI';
@@ -472,7 +472,7 @@ export function More() {
             >
               <motion.div
                 className="w-5 h-5 bg-white rounded-full"
-                layout
+                layout="position"
                 transition={springs.snappy}
                 style={{ marginLeft: theme === 'dark' ? 'auto' : '0' }}
               />
@@ -536,7 +536,7 @@ export function More() {
             >
               <motion.div
                 className="w-5 h-5 bg-white rounded-full"
-                layout
+                layout="position"
                 transition={springs.snappy}
                 style={{ marginLeft: pushEnabled ? 'auto' : '0' }}
               />
@@ -656,7 +656,7 @@ export function More() {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              transition={springs.smooth}
+              transition={collapse}
             >
               <div className="flex flex-col gap-2.5">
                 <input

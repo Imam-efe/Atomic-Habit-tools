@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 
@@ -208,7 +208,7 @@ export function KidsSchedule() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={springs.smooth}
+            transition={collapse}
           >
             <p className="text-sm font-bold mb-3" style={{ color: 'var(--text)' }}>
               {editingId ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}
@@ -430,7 +430,7 @@ export function KidsSchedule() {
                   return (
                     <motion.div
                       key={s.id}
-                      layout
+                      layout="position"
                       className="rounded-2xl p-3.5 flex items-center justify-between gap-3"
                       style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
                     >
