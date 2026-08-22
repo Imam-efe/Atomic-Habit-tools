@@ -178,6 +178,9 @@ export function Dashboard() {
   };
 
   const toggleHabit = async (id: string, isTwoMin?: boolean) => {
+    // Save previous state for rollback on error
+    const prevHabits = habits;
+
     setHabits(prev => prev.map(h => {
       if (h.id === id) {
         const done = !h.doneToday;
@@ -196,10 +199,13 @@ export function Dashboard() {
         method: 'POST',
         body: JSON.stringify({ isTwoMin }),
       });
+      // Verify server response, update if different from optimistic
       setHabits(prev => prev.map(h => h.id === id ? { ...h, doneToday: res.doneToday, streak: res.streak, isTwoMinToday: res.isTwoMinToday } : h));
+      // Silently refresh dashboard data in background
       apiFetch<DashboardData>('/dashboard').then(setData).catch(() => {});
     } catch {
-      loadData();
+      // Revert to previous state instead of full reload
+      setHabits(prevHabits);
     }
   };
 

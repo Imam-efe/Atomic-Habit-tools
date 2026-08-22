@@ -396,8 +396,38 @@ export function Budget() {
     const amt = parseInt(amount.replace(/\D/g, ''));
     if (!amt || amt <= 0) return;
     setSaving(true);
+
+    const tempId = `temp-${Date.now()}`;
+    const optimisticEntry: BudgetEntry = {
+      id: tempId,
+      type: type as 'income' | 'expense',
+      amount: amt,
+      category,
+      note: note.trim() || null,
+      date,
+      bank_account_id: bankAccountId || null,
+      receipt_img: receiptImg || null,
+      recurrence: recurrence || null,
+    };
+
+    // Optimistically add entry and update summary
+    setData(d => d ? {
+      entries: [optimisticEntry, ...d.entries],
+      summary: {
+        ...d.summary,
+        [type === 'income' ? 'income' : 'expense']: d.summary[type === 'income' ? 'income' : 'expense'] + amt,
+        balance: d.summary.balance + (type === 'income' ? amt : -amt),
+      }
+    } : d);
+
+    setAmount('');
+    setNote('');
+    setReceiptImg(null);
+    setRecurrence('');
+    setShowAdd(false);
+
     try {
-      await apiFetch<BudgetEntry>('/budget', {
+      const newEntry = await apiFetch<BudgetEntry>('/budget', {
         method: 'POST',
         body: JSON.stringify({
           type,
@@ -410,27 +440,48 @@ export function Budget() {
           recurrence: recurrence || undefined,
         }),
       });
-      load();
-      setAmount('');
-      setNote('');
-      setReceiptImg(null);
-      setRecurrence('');
-      setShowAdd(false);
-    } catch {}
+      // Replace temp ID with real ID
+      setData(d => d ? {
+        ...d,
+        entries: d.entries.map(e => e.id === tempId ? newEntry : e)
+      } : d);
+    } catch {
+      // Revert optimistic entry on error
+      setData(d => d ? {
+        entries: d.entries.filter(e => e.id !== tempId),
+        summary: {
+          ...d.summary,
+          [type === 'income' ? 'income' : 'expense']: d.summary[type === 'income' ? 'income' : 'expense'] - amt,
+          balance: d.summary.balance - (type === 'income' ? amt : -amt),
+        }
+      } : d);
+    }
     setSaving(false);
   };
 
   const deleteEntry = async (id: string) => {
-    setData(d => d ? {
-      ...d,
-      entries: d.entries.filter(e => e.id !== id)
-    } : d);
+    const prevData = data;
+    const deletedEntry = data?.entries.find(e => e.id === id);
+
+    // Optimistically remove entry and update summary
+    setData(d => {
+      if (!d || !deletedEntry) return d;
+      const isIncome = deletedEntry.type === 'income';
+      return {
+        entries: d.entries.filter(e => e.id !== id),
+        summary: {
+          ...d.summary,
+          [isIncome ? 'income' : 'expense']: d.summary[isIncome ? 'income' : 'expense'] - deletedEntry.amount,
+          balance: d.summary.balance - (isIncome ? deletedEntry.amount : -deletedEntry.amount),
+        }
+      };
+    });
 
     try {
       await apiFetch(`/budget/${id}`, { method: 'DELETE' });
-      load();
     } catch {
-      load();
+      // Revert on error
+      setData(prevData);
     }
   };
 
@@ -450,6 +501,42 @@ export function Budget() {
     const amt = parseInt(editAmount.replace(/\D/g, ''));
     if (!amt || amt <= 0) return;
     setSavingEdit(true);
+
+    const prevData = data;
+    const oldEntry = viewEntry;
+    const amountDiff = amt - oldEntry.amount;
+    const typeChanged = editType !== oldEntry.type;
+
+    // Optimistically update entry and summary
+    setData(d => d ? {
+      entries: d.entries.map(e => e.id === viewEntry.id ? {
+        ...e,
+        type: editType as 'income' | 'expense',
+        amount: amt,
+        category: editCategory,
+        note: editNote.trim() || null,
+        date: editDate,
+        bank_account_id: editBankAccountId || null,
+      } : e),
+      summary: (() => {
+        const newSummary = { ...d.summary };
+        if (typeChanged) {
+          // Type changed: remove old, add new
+          newSummary[oldEntry.type === 'income' ? 'income' : 'expense'] -= oldEntry.amount;
+          newSummary[editType === 'income' ? 'income' : 'expense'] += amt;
+          newSummary.balance = newSummary.income - newSummary.expense;
+        } else {
+          // Same type: adjust amount
+          newSummary[editType === 'income' ? 'income' : 'expense'] += amountDiff;
+          newSummary.balance += (editType === 'income' ? amountDiff : -amountDiff);
+        }
+        return newSummary;
+      })()
+    } : d);
+
+    setViewEntry(null);
+    setEditMode(false);
+
     try {
       await apiFetch(`/budget/${viewEntry.id}`, {
         method: 'PUT',
@@ -462,10 +549,12 @@ export function Budget() {
           bank_account_id: editBankAccountId || undefined,
         }),
       });
-      setViewEntry(null);
-      setEditMode(false);
-      load();
-    } catch {}
+    } catch {
+      // Revert on error
+      setData(prevData);
+      setViewEntry(oldEntry);
+      setEditMode(true);
+    }
     setSavingEdit(false);
   };
 
