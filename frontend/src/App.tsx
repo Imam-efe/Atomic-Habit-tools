@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
@@ -12,19 +12,21 @@ import { Goals } from '@/screens/Goals';
 import { Budget } from '@/screens/Budget';
 import { Calendar } from '@/screens/Calendar';
 import { More } from '@/screens/More';
-import { Projects } from '@/screens/Projects';
-import { Activity } from '@/screens/Activity';
-import { Nutrition } from '@/screens/Nutrition';
-import { Menstrual } from '@/screens/Menstrual';
-import { Inventory } from '@/screens/Inventory';
-import { KidsSchedule } from '@/screens/KidsSchedule';
-import { FinancialReport } from '@/screens/FinancialReport';
-import { WeeklyReview } from '@/screens/WeeklyReview';
-import { HabitHeatmap } from '@/screens/HabitHeatmap';
-import { DebtPlanner } from '@/screens/DebtPlanner';
-import { NotificationCenter } from '@/screens/NotificationCenter';
 import { applyTheme } from '@/tokens/theme';
 import type { AccentName, ThemeName } from '@/types';
+
+// Code-split sub-screens: lazy-load when user navigates to "More" menu
+const Projects = lazy(() => import('@/screens/Projects').then(m => ({ default: m.Projects })));
+const Activity = lazy(() => import('@/screens/Activity').then(m => ({ default: m.Activity })));
+const Nutrition = lazy(() => import('@/screens/Nutrition').then(m => ({ default: m.Nutrition })));
+const Menstrual = lazy(() => import('@/screens/Menstrual').then(m => ({ default: m.Menstrual })));
+const Inventory = lazy(() => import('@/screens/Inventory').then(m => ({ default: m.Inventory })));
+const KidsSchedule = lazy(() => import('@/screens/KidsSchedule').then(m => ({ default: m.KidsSchedule })));
+const FinancialReport = lazy(() => import('@/screens/FinancialReport').then(m => ({ default: m.FinancialReport })));
+const WeeklyReview = lazy(() => import('@/screens/WeeklyReview').then(m => ({ default: m.WeeklyReview })));
+const HabitHeatmap = lazy(() => import('@/screens/HabitHeatmap').then(m => ({ default: m.HabitHeatmap })));
+const DebtPlanner = lazy(() => import('@/screens/DebtPlanner').then(m => ({ default: m.DebtPlanner })));
+const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -189,9 +191,11 @@ function AppShell() {
       )}
       {/* Sub-screens mount fresh per push (keyed) and animate in via CSS. */}
       {subScreen && (
-        <div key={subScreen} className="screen-enter">
-          {subScreens[subScreen]}
-        </div>
+        <Suspense fallback={<div className="screen-enter flex items-center justify-center min-h-screen" />}>
+          <div key={subScreen} className="screen-enter">
+            {subScreens[subScreen]}
+          </div>
+        </Suspense>
       )}
       <TabBar />
     </div>
