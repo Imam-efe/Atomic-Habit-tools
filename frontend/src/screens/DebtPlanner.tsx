@@ -341,7 +341,7 @@ export function DebtPlanner() {
               onClick={() => setPayForm(null)}
             />
             <motion.div
-              className="fixed left-0 right-0 bottom-0 z-50 max-w-[430px] mx-auto rounded-t-[28px] px-5 pt-5 pb-10"
+              className="fixed left-0 right-0 bottom-0 z-50 max-w-[430px] mx-auto rounded-t-[28px] px-5 pt-5 pb-28"
               style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
