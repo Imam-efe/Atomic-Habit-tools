@@ -29,6 +29,41 @@ const exportTables = [
   'weekly_reviews',
 ];
 
+/**
+ * Real columns for every exportable table, mirrored from the migrations.
+ *
+ * Import builds its INSERT statement's column list from the KEYS of a
+ * user-uploaded JSON row (`Object.keys(rowData)`), with the table name itself
+ * already constrained to `exportTables` above. Column names, though, were
+ * going straight into the SQL text unescaped and unchecked — an uploaded row
+ * with an attacker-chosen key becomes part of the query itself, not a bound
+ * value, so nothing downstream of `columns.join(',')` could stop it. This
+ * allowlist is the check: only a row's keys that are real columns on that
+ * table ever reach the query.
+ */
+const TABLE_COLUMNS: Record<string, string[]> = {
+  users: ['id', 'email', 'name', 'avatar_url', 'accent', 'theme', 'created_at', 'role', 'last_weekly_recap_sent'],
+  habits: ['id', 'user_id', 'name', 'color', 'icon', 'trigger_cue', 'action_desc', 'action_time', 'action_place', 'two_min', 'streak', 'last_completed_date', 'milestone', 'goal_ids', 'sort_order', 'created_at', 'streak_alert_sent'],
+  habit_completions: ['id', 'habit_id', 'user_id', 'completed_date', 'is_two_min', 'created_at'],
+  goals: ['id', 'user_id', 'identity_statement', 'color', 'icon', 'habit_ids', 'sort_order', 'created_at'],
+  projects: ['id', 'user_id', 'name', 'goal_id', 'created_at'],
+  tasks: ['id', 'project_id', 'user_id', 'name', 'status', 'goal_id', 'parent_task_id', 'sort_order', 'created_at'],
+  budget_entries: ['id', 'user_id', 'type', 'amount_idr', 'category', 'note', 'entry_date', 'bank_account_id', 'receipt_img', 'created_at', 'recurrence', 'next_recurrence_date'],
+  budget_limits: ['id', 'user_id', 'category', 'monthly_limit_idr', 'month'],
+  activity_logs: ['id', 'user_id', 'label', 'hours', 'log_date', 'created_at'],
+  food_logs: ['id', 'user_id', 'food_name', 'portion', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'label', 'log_date', 'created_at'],
+  nutrition_targets: ['id', 'user_id', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'updated_at'],
+  menstrual_settings: ['user_id', 'cycle_length', 'period_length', 'updated_at'],
+  menstrual_logs: ['id', 'user_id', 'start_date', 'end_date', 'notes', 'created_at'],
+  bank_accounts: ['id', 'user_id', 'name', 'account_type', 'balance', 'created_at'],
+  inventory_items: ['id', 'user_id', 'name', 'quantity', 'unit', 'expiry_date', 'purchase_date', 'category', 'note', 'expiry_alert_sent', 'created_at'],
+  kids_schedules: ['id', 'user_id', 'kid_name', 'title', 'type', 'day_of_week', 'schedule_time', 'schedule_date', 'note', 'created_at'],
+  debts: ['id', 'user_id', 'type', 'person_name', 'amount_idr', 'due_date', 'note', 'status', 'created_at'],
+  debt_payments: ['id', 'debt_id', 'user_id', 'amount_idr', 'payment_date', 'status', 'note', 'created_at', 'bank_account_id', 'budget_entry_id'],
+  net_worth_snapshots: ['id', 'user_id', 'month', 'assets', 'liabilities', 'net_worth', 'created_at'],
+  weekly_reviews: ['id', 'user_id', 'week_start', 'habit_reflection', 'obstacle', 'adjustment', 'identity_affirmation', 'rating'],
+};
+
 // GET /api/export - Export all user data as JSON
 app.get('/', async (c) => {
   const userId = c.get('user').sub;
@@ -92,7 +127,14 @@ app.post('/', async (c) => {
         }
 
         try {
-          const columns = Object.keys(rowData);
+          // Column names go straight into the SQL text below, unlike the
+          // values (which are always bound as parameters) — an uploaded
+          // row's keys have to be real columns on this table before that's
+          // safe to do at all.
+          const allowedColumns = TABLE_COLUMNS[table] ?? [];
+          const columns = Object.keys(rowData).filter((col) => allowedColumns.includes(col));
+          if (columns.length === 0) continue;
+
           const placeholders = columns.map((_, i) => `?${i + 1}`).join(',');
           const values = columns.map((col) => rowData[col]);
 

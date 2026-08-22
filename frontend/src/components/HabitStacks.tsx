@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { springs } from '@/tokens/motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 
 interface StackHabit {
@@ -21,8 +21,15 @@ interface HabitStack {
   habits: StackHabit[];
 }
 
+interface Habit {
+  id: string;
+  name: string;
+  action_time?: string | null;
+  reminderTime?: string | null;
+}
+
 interface Props {
-  habits: any[];
+  habits: Habit[];
   onRefresh?: () => void;
 }
 
@@ -32,60 +39,59 @@ export default function HabitStacks({ habits, onRefresh }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [selectedHabits, setSelectedHabits] = useState<string[]>([]);
   const [stackName, setStackName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadStacks();
-  }, []);
-
-  async function loadStacks() {
+  const load = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const data = await apiFetch<HabitStack[]>('/habit-stacks');
       setStacks(data);
-    } catch (err) {
-      console.error('Failed to load habit stacks:', err);
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Failed to load habit stacks:', error);
     }
-  }
+    setLoading(false);
+  };
 
-  async function handleCreateStack() {
+  useEffect(() => {
+    load();
+  }, []);
+
+  const handleCreateStack = async () => {
     if (!stackName.trim() || selectedHabits.length < 2) {
-      alert('Need name and at least 2 habits');
+      alert('Beri nama dan pilih minimal 2 kebiasaan.');
       return;
     }
-
+    setSaving(true);
     try {
       await apiFetch('/habit-stacks', {
         method: 'POST',
-        body: JSON.stringify({
-          name: stackName,
-          habit_ids: selectedHabits,
-        }),
+        body: JSON.stringify({ name: stackName.trim(), habit_ids: selectedHabits }),
       });
       setStackName('');
       setSelectedHabits([]);
       setShowForm(false);
-      await loadStacks();
+      await load();
       onRefresh?.();
-    } catch (err) {
-      console.error('Failed to create stack:', err);
-      alert('Failed to create stack');
+    } catch (error) {
+      console.error('Failed to create stack:', error);
+      alert('Gagal membuat stack.');
     }
-  }
+    setSaving(false);
+  };
 
-  async function handleDeleteStack(stackId: string) {
-    if (!confirm('Delete this stack?')) return;
-
+  const handleDeleteStack = async (stackId: string) => {
+    if (!confirm('Hapus stack ini?')) return;
+    setDeleting(stackId);
     try {
       await apiFetch(`/habit-stacks/${stackId}`, { method: 'DELETE' });
-      await loadStacks();
+      await load();
       onRefresh?.();
-    } catch (err) {
-      console.error('Failed to delete stack:', err);
-      alert('Failed to delete stack');
+    } catch {
+      alert('Gagal menghapus stack.');
     }
-  }
+    setDeleting(null);
+  };
 
   const toggleHabit = (habitId: string) => {
     setSelectedHabits((prev) =>
@@ -93,147 +99,181 @@ export default function HabitStacks({ habits, onRefresh }: Props) {
     );
   };
 
-  if (loading) return <div className="p-4 text-center text-text3">Loading stacks...</div>;
-  if (stacks.length === 0 && !showForm) {
+  if (loading) {
     return (
-      <div className="p-4">
-        <h3 className="font-bold text-lg mb-3">Habit Stacking</h3>
-        <button
-          onClick={() => setShowForm(true)}
-          className="w-full py-3 rounded-lg bg-accent text-white font-semibold"
-        >
-          Create Stack
-        </button>
+      <div className="flex items-center justify-center py-8">
+        <div className="w-4 h-4 rounded-full border border-t-transparent animate-spin"
+          style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
       </div>
     );
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={springs.gentle}
-      className="p-4"
-    >
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="font-bold text-lg">Habit Stacking</h3>
-        {!showForm && (
-          <button onClick={() => setShowForm(true)} className="text-accent font-semibold text-sm">
-            + New
-          </button>
-        )}
+    <div className="mb-8">
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-sm font-bold uppercase" style={{ color: 'var(--text2)' }}>
+          🔗 Habit Stacking
+        </h3>
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          className="text-xs font-bold"
+          style={{ color: 'var(--accent)' }}
+        >
+          {showForm ? 'Tutup' : '+ Buat Stack'}
+        </button>
       </div>
 
-      {showForm && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={springs.snappy}
-          className="mb-6 p-4 bg-surface rounded-lg border border-sep"
-        >
-          <input
-            type="text"
-            placeholder="Stack name (e.g., Morning Routine)"
-            value={stackName}
-            onChange={(e) => setStackName(e.target.value)}
-            className="w-full mb-4 p-2 bg-bg border border-sep rounded text-text placeholder-text3"
-          />
-
-          <div className="mb-4">
-            <p className="text-sm text-text2 mb-2">Select habits (min 2):</p>
-            <div className="space-y-2">
-              {habits.map((habit) => (
-                <label
-                  key={habit.id}
-                  className="flex items-center p-3 rounded-lg bg-bg cursor-pointer hover:border-accent border border-sep transition"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedHabits.includes(habit.id)}
-                    onChange={() => toggleHabit(habit.id)}
-                    className="mr-3"
-                  />
-                  <span className="flex-1">{habit.name}</span>
-                  {habit.action_time && <span className="text-xs text-text3">{habit.action_time}</span>}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleCreateStack}
-              className="flex-1 py-2 bg-accent text-white rounded font-semibold"
-            >
-              Create
-            </button>
-            <button
-              onClick={() => {
-                setShowForm(false);
-                setStackName('');
-                setSelectedHabits([]);
-              }}
-              className="flex-1 py-2 bg-surface border border-sep text-text rounded font-semibold"
-            >
-              Cancel
-            </button>
-          </div>
-        </motion.div>
-      )}
-
-      <div className="space-y-4">
-        {stacks.map((stack) => (
+      <AnimatePresence>
+        {showForm && (
           <motion.div
-            key={stack.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={springs.snappy}
-            className="p-4 bg-surface rounded-lg border border-sep"
+            className="rounded-[18px] p-4 mb-4"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={collapse}
           >
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h4 className="font-semibold text-text">{stack.name}</h4>
-                {stack.description && <p className="text-sm text-text2 mt-1">{stack.description}</p>}
-              </div>
-              <button
-                onClick={() => handleDeleteStack(stack.id)}
-                className="text-[var(--neg)] text-sm font-semibold hover:opacity-70"
-              >
-                Delete
-              </button>
-            </div>
+            <div className="flex flex-col gap-3">
+              <input
+                type="text"
+                placeholder="Nama stack (misal: Rutinitas Pagi)"
+                value={stackName}
+                onChange={(e) => setStackName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl text-xs outline-none"
+                style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
+              />
 
-            {/* Habit chain visualization */}
-            <div className="space-y-3">
-              {stack.habits
-                .sort((a, b) => a.position - b.position)
-                .map((habit, index) => (
-                  <div key={habit.id}>
-                    <div className="flex items-center gap-3 p-3 bg-bg rounded-lg">
+              <div>
+                <label className="text-xs font-bold block mb-1.5" style={{ color: 'var(--text2)' }}>
+                  Pilih kebiasaan (min. 2), urutan sesuai yang dipilih
+                </label>
+                <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {habits.map((habit) => {
+                    const isChecked = selectedHabits.includes(habit.id);
+                    return (
                       <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                        style={{ backgroundColor: habit.habit_color }}
+                        key={habit.id}
+                        onClick={() => toggleHabit(habit.id)}
+                        className="flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer"
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
                       >
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-semibold text-text">{habit.habit_name}</p>
-                        {habit.habit_action_time && (
-                          <p className="text-xs text-text3">@ {habit.habit_action_time}</p>
+                        <div
+                          className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0"
+                          style={{
+                            borderColor: isChecked ? 'var(--accent)' : 'var(--text3)',
+                            background: isChecked ? 'var(--accentFill)' : 'transparent',
+                          }}
+                        >
+                          {isChecked && <span className="text-[9px] text-white">✓</span>}
+                        </div>
+                        <span className="text-xs flex-1 truncate" style={{ color: 'var(--text)' }}>
+                          {habit.name}
+                        </span>
+                        {habit.reminderTime && (
+                          <span className="text-[10px] flex-shrink-0" style={{ color: 'var(--text3)' }}>
+                            {habit.reminderTime}
+                          </span>
                         )}
                       </div>
-                    </div>
-                    {index < stack.habits.length - 1 && (
-                      <div className="flex justify-center py-1">
-                        <div className="w-1 h-4 bg-accent/30 rounded-full"></div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={handleCreateStack}
+                  disabled={saving}
+                  className="neu-cta flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-60"
+                  style={{ background: 'var(--accentFill)' }}
+                >
+                  {saving ? 'Menyimpan...' : 'Buat Stack'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowForm(false);
+                    setStackName('');
+                    setSelectedHabits([]);
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold"
+                  style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                >
+                  Batal
+                </button>
+              </div>
             </div>
           </motion.div>
-        ))}
-      </div>
-    </motion.div>
+        )}
+      </AnimatePresence>
+
+      {stacks.length === 0 ? (
+        <div className="text-center py-6">
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Belum ada habit stack. Rangkai beberapa kebiasaan berurutan supaya satu memicu yang berikutnya!
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {stacks.map((stack) => {
+            const items = [...stack.habits].sort((a, b) => a.position - b.position);
+            return (
+              <div
+                key={stack.id}
+                className="rounded-[18px] p-4"
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold truncate" style={{ color: 'var(--text)' }}>{stack.name}</p>
+                    {stack.description && (
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text2)' }}>{stack.description}</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteStack(stack.id)}
+                    disabled={deleting === stack.id}
+                    className="w-6 h-6 flex items-center justify-center rounded-lg flex-shrink-0"
+                    style={{ background: 'rgba(255,69,58,0.1)' }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--neg)" strokeWidth="2.5">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  {items.map((item, index) => (
+                    <div key={item.id}>
+                      <div className="flex items-center gap-2.5 p-2.5 rounded-xl" style={{ background: 'var(--bg)' }}>
+                        <div
+                          className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[11px] flex-shrink-0"
+                          style={{ background: item.habit_color }}
+                        >
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>
+                            {item.habit_name}
+                          </p>
+                          {item.habit_action_time && (
+                            <p className="text-[10px]" style={{ color: 'var(--text3)' }}>@ {item.habit_action_time}</p>
+                          )}
+                        </div>
+                      </div>
+                      {index < items.length - 1 && (
+                        <div className="flex justify-center py-0.5">
+                          <div className="w-0.5 h-3 rounded-full" style={{ background: 'var(--sep)' }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
