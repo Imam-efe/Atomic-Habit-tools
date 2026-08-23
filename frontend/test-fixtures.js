@@ -73,6 +73,12 @@ const FIXTURES = {
     { id: 'iv1', name: 'Beras', quantity: 5, unit: 'kg', expiry_date: '2026-09-10', purchase_date: TODAY, category: 'Bahan Makanan', note: null },
     { id: 'iv2', name: 'Susu', quantity: 0, unit: 'liter', expiry_date: '2026-08-01', purchase_date: TODAY, category: 'Bahan Makanan', note: null },
   ],
+  '/api/inventory/shopping-suggestions': {
+    suggestions: [
+      { name: 'Susu UHT', quantity: 2, unit: 'liter', reason: 'stok habis' },
+      { name: 'Beras', quantity: 5, unit: 'kg', reason: 'kadaluarsa 2 hari lagi' },
+    ],
+  },
   '/api/kids-schedule': [
     { id: 'k1', kid_name: 'Aisyah', title: 'Matematika', type: 'pelajaran', day_of_week: 'Senin', schedule_time: '08:00', schedule_date: null, note: null },
   ],

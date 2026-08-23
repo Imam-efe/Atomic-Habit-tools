@@ -22,6 +22,13 @@ interface BankAccount {
   balance: number;
 }
 
+interface ShoppingSuggestion {
+  name: string;
+  quantity: number;
+  unit: string;
+  reason: string;
+}
+
 const CATEGORIES = ['Bahan Makanan', 'Bahan Dapur', 'Kebutuhan Mandi', 'Obat-obatan', 'Lainnya'];
 const UNITS = ['pcs', 'kg', 'gr', 'liter', 'ml', 'box', 'pack', 'botol'];
 
@@ -58,6 +65,11 @@ export function Inventory() {
   const [buyExpiryDate, setBuyExpiryDate] = useState('');
   const [buyBankId, setBuyBankId] = useState('');
   const [savingPurchase, setSavingPurchase] = useState(false);
+
+  // AI shopping suggestions
+  const [aiSuggestions, setAiSuggestions] = useState<ShoppingSuggestion[] | null>(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -174,6 +186,26 @@ export function Inventory() {
     } catch {
       load();
     }
+  };
+
+  const handleFetchSuggestions = async () => {
+    setLoadingSuggestions(true);
+    setSuggestionsError('');
+    try {
+      const res = await apiFetch<{ suggestions: ShoppingSuggestion[] }>('/inventory/shopping-suggestions', { method: 'POST' });
+      setAiSuggestions(res.suggestions);
+    } catch {
+      setSuggestionsError('Gagal memuat saran belanja. Coba lagi.');
+    }
+    setLoadingSuggestions(false);
+  };
+
+  const handleUseSuggestion = (s: ShoppingSuggestion) => {
+    resetForm();
+    setName(s.name);
+    setQuantity(String(s.quantity));
+    if (UNITS.includes(s.unit)) setUnit(s.unit);
+    setShowForm(true);
   };
 
   const resetForm = () => {
@@ -671,7 +703,57 @@ export function Inventory() {
         )
       ) : (
         /* SHOPPING LIST TAB */
-        shoppingItems.length === 0 ? (
+        <>
+          <div className="mb-3">
+            <motion.button
+              className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+              style={{ background: 'var(--surface)', color: 'var(--accent)', boxShadow: 'var(--neu-raised)', opacity: loadingSuggestions ? 0.6 : 1 }}
+              onClick={handleFetchSuggestions}
+              disabled={loadingSuggestions}
+              whileTap={{ scale: 0.97 }}
+            >
+              ✨ {loadingSuggestions ? 'Menganalisis stok...' : 'Saran Belanja AI'}
+            </motion.button>
+          </div>
+
+          <AnimatePresence>
+            {(suggestionsError || aiSuggestions !== null) && (
+              <motion.div
+                className="rounded-[16px] p-3.5 mb-4 flex flex-col gap-2.5"
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={collapse}
+              >
+                {suggestionsError ? (
+                  <p className="text-xs" style={{ color: 'var(--neg)' }}>{suggestionsError}</p>
+                ) : aiSuggestions!.length === 0 ? (
+                  <p className="text-xs" style={{ color: 'var(--text3)' }}>Stok masih aman, belum ada yang perlu dibeli.</p>
+                ) : (
+                  aiSuggestions!.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 pb-2.5" style={{ borderBottom: i < aiSuggestions!.length - 1 ? '1px solid var(--sep)' : 'none' }}>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold truncate" style={{ color: 'var(--text)' }}>
+                          {s.name} <span className="font-normal" style={{ color: 'var(--text2)' }}>· {s.quantity} {s.unit}</span>
+                        </p>
+                        {s.reason && <p className="text-[11px]" style={{ color: 'var(--text3)' }}>{s.reason}</p>}
+                      </div>
+                      <button
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold flex-shrink-0"
+                        style={{ background: 'var(--accentSoft)', color: 'var(--accent)' }}
+                        onClick={() => handleUseSuggestion(s)}
+                      >
+                        + Tambah
+                      </button>
+                    </div>
+                  ))
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {shoppingItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="text-4xl mb-3">🛒</p>
             <p className="font-semibold text-sm" style={{ color: 'var(--text2)' }}>Daftar Belanja Bersih</p>
@@ -729,7 +811,8 @@ export function Inventory() {
               );
             })}
           </div>
-        )
+          )}
+        </>
       )}
     </div>
   );
