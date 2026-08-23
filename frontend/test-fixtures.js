@@ -158,7 +158,14 @@ const FIXTURES = {
     review: null,
   },
   '/api/weekly-review/list': [],
-  '/api/projects': [{ id: 'p1', name: 'Rumah', status: 'active', tasks: [] }],
+  '/api/projects': [{
+    id: 'p1', name: 'Rumah', goalId: null, goalName: null, goalColor: null,
+    tasks: [
+      { id: 't1', name: 'Beli cat tembok', status: 'backlog', goalId: null, goalName: null, goalColor: null, dueDate: '2026-08-01', priority: 'high' },
+      { id: 't2', name: 'Rapikan gudang', status: 'done', goalId: null, goalName: null, goalColor: null, dueDate: null, priority: 'normal' },
+    ],
+  }],
+  '/api/projects/p1/breakdown': { tasks: ['Ukur ruang tamu', 'Beli material', 'Pasang lantai'] },
   // Route is /api/finance-report (not financial-), and the shape is pnl /
   // balance_sheet / upcoming_payments. Both were wrong here before, which left
   // the screen blank while the audit scored it as a clean pass.
