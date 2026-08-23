@@ -53,6 +53,15 @@ export function Dashboard() {
   // Read once: the API either exists in this browser or it does not, and
   // re-checking on every render would just churn.
   const [voiceReady] = useState(isVoiceSupported);
+  // "You just acted like X" — from the completed habit's linked goal. See
+  // Habits.tsx's identical pattern; both screens can toggle a habit, so both
+  // need it.
+  const [identityFlash, setIdentityFlash] = useState<{ habitName: string; statement: string } | null>(null);
+  useEffect(() => {
+    if (!identityFlash) return;
+    const t = setTimeout(() => setIdentityFlash(null), 3200);
+    return () => clearTimeout(t);
+  }, [identityFlash]);
   const [data, setData] = useState<DashboardData | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -231,7 +240,7 @@ export function Dashboard() {
     }));
 
     try {
-      const res = await apiFetch<{ doneToday: boolean; streak: number; isTwoMinToday: boolean }>(`/habits/${id}/toggle`, {
+      const res = await apiFetch<{ doneToday: boolean; streak: number; isTwoMinToday: boolean; identityStatement?: string | null }>(`/habits/${id}/toggle`, {
         method: 'POST',
         body: JSON.stringify({ isTwoMin }),
       });
@@ -239,6 +248,11 @@ export function Dashboard() {
       setHabits(prev => prev.map(h => h.id === id ? { ...h, doneToday: res.doneToday, streak: res.streak, isTwoMinToday: res.isTwoMinToday } : h));
       // Silently refresh dashboard data in background
       apiFetch<DashboardData>('/dashboard').then(setData).catch(() => {});
+
+      if (res.doneToday && res.identityStatement) {
+        const habitName = habits.find(h => h.id === id)?.name ?? '';
+        setIdentityFlash({ habitName, statement: res.identityStatement });
+      }
     } catch {
       // Revert to previous state instead of full reload
       setHabits(prevHabits);
@@ -259,6 +273,30 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+      <AnimatePresence>
+        {identityFlash && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={springs.gentle}
+            className="fixed left-4 right-4 z-50 rounded-2xl px-4 py-3"
+            style={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+              background: 'var(--accentFill)',
+              boxShadow: 'var(--neu-raised-lg)',
+              maxWidth: 400,
+              margin: '0 auto',
+            }}
+          >
+            <p className="text-[13px] leading-snug text-white">
+              <span aria-hidden>✨ </span>
+              Kamu baru saja bertindak sebagai orang yang{' '}
+              <span className="font-bold">{identityFlash.statement}</span>.
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={springs.gentle}>
         {/* Header */}
         <div className="flex items-center justify-between mb-4">

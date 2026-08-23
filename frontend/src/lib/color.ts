@@ -49,6 +49,22 @@ export function contrast(a: RGB, b: RGB): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
+/**
+ * '#fff' or '#000', whichever a solid `hex` fill carries better as text on top
+ * of it. For buttons filled with a user-picked accent: every one of the app's
+ * six habit-colour swatches turns out to read under 4.5:1 for white text in at
+ * least one theme (the purple and blue swatches fail in both — they were
+ * tuned as accents against the page, not as a solid fill behind white type),
+ * so the foreground has to be decided per colour rather than hardcoded.
+ */
+export function bestForegroundFor(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#fff';
+  const white: RGB = [255, 255, 255];
+  const black: RGB = [0, 0, 0];
+  return contrast(rgb, white) >= contrast(rgb, black) ? '#fff' : '#000';
+}
+
 function mix(from: RGB, to: RGB, t: number): RGB {
   return [
     from[0] + (to[0] - from[0]) * t,

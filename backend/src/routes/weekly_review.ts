@@ -40,8 +40,10 @@ weeklyReview.get('/', async (c) => {
 
   const habitStats = await c.env.DB.prepare(`
     SELECT h.id, h.name, h.color, h.streak,
+           hf.frequency_type, hf.target_per_week,
            COUNT(hc.id) as completions_this_week
     FROM habits h
+    LEFT JOIN habit_frequency hf ON hf.habit_id = h.id
     LEFT JOIN habit_completions hc
       ON hc.habit_id = h.id
       AND hc.completed_date BETWEEN ?2 AND ?3
@@ -49,7 +51,9 @@ weeklyReview.get('/', async (c) => {
     WHERE h.user_id = ?1
     GROUP BY h.id
   `).bind(user.sub, weekStart, weekEnd).all<{
-    id: string; name: string; color: string; streak: number; completions_this_week: number;
+    id: string; name: string; color: string; streak: number;
+    frequency_type: string | null; target_per_week: number | null;
+    completions_this_week: number;
   }>();
 
   const todayDate = new Date(today);
@@ -58,10 +62,16 @@ weeklyReview.get('/', async (c) => {
   const startDate = new Date(weekStart);
   const daysElapsed = Math.max(1, Math.round((new Date(cappedEnd).getTime() - startDate.getTime()) / 86400000) + 1);
 
-  const habits = (habitStats.results ?? []).map(h => ({
-    ...h,
-    consistency: Math.round((h.completions_this_week / Math.min(daysElapsed, 7)) * 100),
-  }));
+  // A 3x/week habit doing 3/7 days is at 100% of what it actually asks for,
+  // not 43% — the daily denominator only makes sense for daily habits.
+  const habits = (habitStats.results ?? []).map(({ frequency_type, target_per_week, ...h }) => {
+    const isWeekly = frequency_type === 'weekly' && !!target_per_week;
+    const denominator = isWeekly ? target_per_week! : Math.min(daysElapsed, 7);
+    return {
+      ...h,
+      consistency: Math.min(100, Math.round((h.completions_this_week / denominator) * 100)),
+    };
+  });
 
   const overallConsistency = habits.length > 0
     ? Math.round(habits.reduce((s, h) => s + h.consistency, 0) / habits.length)

@@ -12,7 +12,7 @@ const KINDS = ['task', 'event', 'reminder', 'milestone'] as const;
 const PRIORITIES = ['low', 'normal', 'high'] as const;
 const REPEATS = ['none', 'daily', 'weekly', 'monthly', 'yearly'] as const;
 
-interface CalendarRow {
+export interface CalendarRow {
   id: string;
   title: string;
   note: string | null;
@@ -54,7 +54,7 @@ function parts(iso: string) {
  * has no 31st — which is the behaviour people expect from a reminder, and
  * avoids silently sliding it to the 1st.
  */
-function occursOn(row: CalendarRow, target: string): boolean {
+export function occursOn(row: CalendarRow, target: string): boolean {
   if (target < row.event_date) return false;
   if (row.repeat_until && target > row.repeat_until) return false;
 

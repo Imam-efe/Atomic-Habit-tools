@@ -29,10 +29,13 @@ const Inventory = lazy(() => import('@/screens/Inventory').then(m => ({ default:
 const KidsSchedule = lazy(() => import('@/screens/KidsSchedule').then(m => ({ default: m.KidsSchedule })));
 const FinancialReport = lazy(() => import('@/screens/FinancialReport').then(m => ({ default: m.FinancialReport })));
 const WeeklyReview = lazy(() => import('@/screens/WeeklyReview').then(m => ({ default: m.WeeklyReview })));
+const MonthlyReview = lazy(() => import('@/screens/MonthlyReview').then(m => ({ default: m.MonthlyReview })));
+const Garden = lazy(() => import('@/screens/Garden').then(m => ({ default: m.Garden })));
 const HabitHeatmap = lazy(() => import('@/screens/HabitHeatmap').then(m => ({ default: m.HabitHeatmap })));
 const DebtPlanner = lazy(() => import('@/screens/DebtPlanner').then(m => ({ default: m.DebtPlanner })));
 const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
 const Achievements = lazy(() => import('@/screens/Achievements').then(m => ({ default: m.Achievements })));
+const Notes = lazy(() => import('@/screens/Notes').then(m => ({ default: m.Notes })));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -153,10 +156,13 @@ function AppShell() {
       'kids-schedule': <KidsSchedule />,
       'financial-report': <FinancialReport />,
       'weekly-review': <WeeklyReview />,
+      'monthly-review': <MonthlyReview />,
+      'garden': <Garden />,
       'habit-heatmap': <HabitHeatmap />,
       'debt-planner': <DebtPlanner />,
       'notification-center': <NotificationCenter />,
       'achievements': <Achievements />,
+      'notes': <Notes />,
     }),
     [],
   );

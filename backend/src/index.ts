@@ -20,10 +20,13 @@ import debts from './routes/debts';
 import financeReport from './routes/finance_report';
 import netWorth from './routes/net_worth';
 import weeklyReview, { getMondayOf } from './routes/weekly_review';
+import monthlyReview from './routes/monthly_review';
+import garden, { computeCareState, lastActions, resolvePlants, type PlantingRow } from './routes/garden';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
 import quickadd from './routes/quickadd';
 import search from './routes/search';
+import notes from './routes/notes';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -34,7 +37,7 @@ import scheduledNotifications, {
 // queueNotificationEvent is declared locally below; importing it too shadowed
 // the local one and made the whole backend fail `tsc`.
 import { sendPushToUser } from './lib/push';
-import calendar from './routes/calendar';
+import calendar, { occursOn, type CalendarRow } from './routes/calendar';
 import holidays from './routes/holidays';
 import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
@@ -86,6 +89,8 @@ app.route('/api/debts', debts);
 app.route('/api/finance-report', financeReport);
 app.route('/api/net-worth', netWorth);
 app.route('/api/weekly-review', weeklyReview);
+app.route('/api/monthly-review', monthlyReview);
+app.route('/api/garden', garden);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
 app.route('/api/habit-stacks', habitStacks);
@@ -96,6 +101,7 @@ app.route('/api/achievements', achievements);
 app.route('/api/insights', insights);
 app.route('/api/quickadd', quickadd);
 app.route('/api/search', search);
+app.route('/api/notes', notes);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -148,6 +154,73 @@ async function triggerReminders(env: Env) {
     });
 
     await sendPushToUser(env, row.user_id, { title, body, url: '/kebiasaan' });
+  }
+}
+
+/** "HH:MM" the given minutes before `eventTime`, or null if that crosses into the previous day. */
+function reminderClockTime(eventTime: string, minutesBefore: number): string | null {
+  const [h, m] = eventTime.split(':').map(Number);
+  const total = h * 60 + m - minutesBefore;
+  if (total < 0) return null;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Push a calendar event's own reminder — remind_minutes_before was captured
+// by the form since the feature shipped, but nothing ever read it until now.
+// Fires once per (event, occurrence date): a repeating event reminds on
+// every occurrence, not just once ever, via calendar_reminder_sent.
+async function triggerCalendarReminders(env: Env) {
+  const now = new Date();
+  const jakartaTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const hhmm = `${String(jakartaTime.getUTCHours()).padStart(2, '0')}:${String(jakartaTime.getUTCMinutes()).padStart(2, '0')}`;
+  const today = jakartaToday();
+
+  const due = await env.DB.prepare(`
+    SELECT DISTINCT ce.id, ce.user_id, ce.title, ce.note, ce.event_date, ce.event_time,
+           ce.repeat_rule, ce.repeat_until, ce.remind_minutes_before
+    FROM calendar_events ce
+    JOIN push_subscriptions s ON ce.user_id = s.user_id
+    WHERE ce.remind_minutes_before IS NOT NULL
+      AND ce.event_time IS NOT NULL
+      AND ce.is_done = 0
+  `).all<{
+    id: string; user_id: string; title: string; note: string | null;
+    event_date: string; event_time: string; repeat_rule: string;
+    repeat_until: string | null; remind_minutes_before: number;
+  }>();
+
+  for (const row of due.results ?? []) {
+    // Simplification, deliberate: a reminder whose minutes-before crosses
+    // back into the previous day (e.g. 60 min before a 00:30 event) never
+    // fires. Same-day reminders are the overwhelming common case; matching
+    // "yesterday evening" against "today's occurrence" is a second lookup
+    // this doesn't attempt.
+    const fireAt = reminderClockTime(row.event_time, row.remind_minutes_before);
+    if (fireAt !== hhmm) continue;
+
+    const occursToday = row.repeat_rule === 'none'
+      ? row.event_date === today
+      : occursOn(row as unknown as CalendarRow, today);
+    if (!occursToday) continue;
+
+    // The unique (event_id, occurrence_date) key makes a repeat tick, or an
+    // overlapping run, a no-op rather than a double send.
+    try {
+      await env.DB.prepare(
+        'INSERT INTO calendar_reminder_sent (event_id, occurrence_date) VALUES (?1, ?2)'
+      ).bind(row.id, today).run();
+    } catch {
+      continue;
+    }
+
+    const title = '📅 Pengingat Kalender';
+    const body = row.note ? `${row.title} — ${row.note}` : row.title;
+
+    await queueNotificationEvent(env, row.user_id, 'calendar_reminder', title, body, {
+      eventId: row.id,
+      url: '/kalender',
+    });
+    await sendPushToUser(env, row.user_id, { title, body, url: '/kalender' });
   }
 }
 
@@ -306,11 +379,15 @@ async function triggerStreakAtRisk(env: Env) {
 
   const today = jakartaToday();
 
+  // Weekly-frequency habits are excluded: "not done today" isn't a risk to
+  // a habit whose streak is measured in weeks, not days.
   const atRisk = await env.DB.prepare(`
     SELECT h.id, h.name, h.user_id, h.streak
     FROM habits h
     JOIN push_subscriptions s ON h.user_id = s.user_id
+    LEFT JOIN habit_frequency hf ON hf.habit_id = h.id
     WHERE h.streak > 0
+      AND (hf.frequency_type IS NULL OR hf.frequency_type != 'weekly')
       AND (h.last_completed_date IS NULL OR h.last_completed_date != ?1)
       AND (h.streak_alert_sent IS NULL OR h.streak_alert_sent != ?1)
   `).bind(today).all<{ id: string; name: string; user_id: string; streak: number }>();
@@ -367,21 +444,31 @@ async function triggerWeeklyRecap(env: Env) {
 
   for (const { id: userId } of users.results ?? []) {
     const habitStats = await env.DB.prepare(`
-      SELECT h.id, h.streak, COUNT(hc.id) as completions_this_week
+      SELECT h.id, h.streak, hf.frequency_type, hf.target_per_week,
+             COUNT(hc.id) as completions_this_week
       FROM habits h
+      LEFT JOIN habit_frequency hf ON hf.habit_id = h.id
       LEFT JOIN habit_completions hc
         ON hc.habit_id = h.id AND hc.completed_date BETWEEN ?2 AND ?3 AND hc.user_id = h.user_id
       WHERE h.user_id = ?1
       GROUP BY h.id
-    `).bind(userId, weekStart, today).all<{ id: string; streak: number; completions_this_week: number }>();
+    `).bind(userId, weekStart, today).all<{
+      id: string; streak: number; frequency_type: string | null; target_per_week: number | null;
+      completions_this_week: number;
+    }>();
 
     const habits = habitStats.results ?? [];
     // Nothing tracked yet — a recap of zero habits isn't worth a push, and
     // marking it sent would stop it from ever nudging the user once they add one.
     if (habits.length === 0) continue;
 
-    const totalCompletions = habits.reduce((s, h) => s + h.completions_this_week, 0);
-    const possibleCompletions = habits.length * 7;
+    // Each habit's own target is its possible max for the week — 7 for a
+    // daily habit, target_per_week for a weekly one — so a 3x/week habit
+    // doesn't drag the aggregate down for simply not being daily.
+    const possibleFor = (h: (typeof habits)[number]) =>
+      h.frequency_type === 'weekly' && h.target_per_week ? h.target_per_week : 7;
+    const totalCompletions = habits.reduce((s, h) => s + Math.min(h.completions_this_week, possibleFor(h)), 0);
+    const possibleCompletions = habits.reduce((s, h) => s + possibleFor(h), 0);
     const consistency = Math.round((totalCompletions / possibleCompletions) * 100);
     const longestStreak = Math.max(...habits.map(h => h.streak));
 
@@ -413,6 +500,91 @@ async function processStreakFreezes(env: Env) {
   await grantStreakFreezes(env.DB, jakartaToday());
 }
 
+// Pengingat perawatan kebun, satu push agregat per pengguna tiap pagi.
+//
+// Jadwalnya diturunkan dari log perawatan (computeCareState), bukan dari kolom
+// "next_water" yang disimpan — jadi mencatat siram lewat aplikasi langsung
+// menggeser pengingat besoknya tanpa ada state kedua yang bisa basi.
+// Dedup lewat garden_care_alert_sent (planting_id, alert_date): sekali
+// diingatkan per tanaman per hari, walau cron menyala tiap menit.
+async function triggerGardenCare(env: Env) {
+  const jakartaHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  if (jakartaHour !== 7) return;
+
+  const today = jakartaToday();
+
+  // Hanya pengguna yang punya push subscription — sisanya tidak ada gunanya dihitung.
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT g.user_id
+    FROM garden_plantings g
+    JOIN push_subscriptions s ON s.user_id = g.user_id
+    WHERE g.status IN ('tumbuh', 'panen')
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const [rows, lastMap] = await Promise.all([
+      env.DB.prepare(
+        `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+                planted_date, expected_harvest_date, status, note
+         FROM garden_plantings WHERE user_id = ?1 AND status IN ('tumbuh', 'panen')`
+      ).bind(userId).all<PlantingRow>(),
+      lastActions(env.DB, userId),
+    ]);
+
+    const plantings = rows.results ?? [];
+    if (plantings.length === 0) continue;
+
+    const plantMap = await resolvePlants(
+      env.DB,
+      [...new Set(plantings.map(p => p.plant_id).filter((id): id is string => !!id))]
+    );
+
+    const water: string[] = [];
+    const fertilize: string[] = [];
+    const harvest: string[] = [];
+    const touched: string[] = [];
+
+    for (const p of plantings) {
+      const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
+      const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
+      const label = p.nickname || plant?.name || p.custom_name || 'Tanaman';
+
+      const dueWater = care.nextWater !== null && care.nextWater <= today;
+      const dueFertilize = care.nextFertilize !== null && care.nextFertilize <= today;
+      if (!dueWater && !dueFertilize && !care.harvestReady) continue;
+
+      // Sudah diingatkan hari ini? INSERT gagal karena primary key, lalu dilewati.
+      try {
+        await env.DB.prepare(
+          'INSERT INTO garden_care_alert_sent (planting_id, alert_date) VALUES (?1, ?2)'
+        ).bind(p.id, today).run();
+      } catch {
+        continue;
+      }
+
+      if (dueWater) water.push(label);
+      if (dueFertilize) fertilize.push(label);
+      if (care.harvestReady) harvest.push(label);
+      touched.push(p.id);
+    }
+
+    if (touched.length === 0) continue;
+
+    const parts: string[] = [];
+    if (water.length) parts.push(`💧 Siram: ${water.join(', ')}`);
+    if (fertilize.length) parts.push(`🌿 Pupuk: ${fertilize.join(', ')}`);
+    if (harvest.length) parts.push(`🧺 Siap panen: ${harvest.join(', ')}`);
+
+    const title = harvest.length > 0 ? '🧺 Ada yang siap dipanen!' : '🌱 Kebun perlu dirawat';
+    const body = parts.join('\n');
+
+    await queueNotificationEvent(env, userId, 'garden_care', title, body, {
+      water, fertilize, harvest, url: '/lainnya',
+    });
+    await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -420,11 +592,13 @@ const handler = {
   async scheduled(event: any, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(Promise.all([
       triggerReminders(env),
+      triggerCalendarReminders(env).catch((err) => console.error('Calendar reminder push failed', err)),
       processScheduledNotifications(env),
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
       triggerStreakAtRisk(env),
       triggerWeeklyRecap(env),
+      triggerGardenCare(env).catch((err) => console.error('Garden care push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       // Holiday feed. Sunday only — the decree changes once a year, so a daily
       // pull would be noise. A failure leaves the previous cache in place.
@@ -439,6 +613,10 @@ const handler = {
       env.DB.prepare(
         "DELETE FROM notification_deliveries WHERE fired_at < unixepoch() - 30 * 86400"
       ).run().catch((err) => console.error('Delivery history cleanup failed', err)),
+      // Dedup pengingat kebun hanya perlu berlaku untuk hari berjalan
+      env.DB.prepare(
+        "DELETE FROM garden_care_alert_sent WHERE sent_at < unixepoch() - 7 * 86400"
+      ).run().catch((err) => console.error('Garden alert cleanup failed', err)),
     ]));
   }
 };

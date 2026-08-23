@@ -70,8 +70,8 @@ const AUDIT = () => {
 
 const SUBSCREENS = [
   'Projects', 'Aktivitas', 'Nutrisi', 'Kalender Haid', 'Stok & Inventaris',
-  'Jadwal Anak', 'Laporan Keuangan', 'Review Mingguan', 'Heatmap Kebiasaan',
-  'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian',
+  'Jadwal Anak', 'Laporan Keuangan', 'Review Mingguan', 'Rekap Bulanan', 'Heatmap Kebiasaan',
+  'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian', 'Catatan', 'Kebun',
 ];
 
 /** Root-level overlays, opened from the Beranda command bar. */
@@ -79,7 +79,7 @@ const OVERLAYS = [
   { name: 'Pencarian Global', open: 'Cari apa saja', placeholder: 'Cari transaksi', type: 'beras' },
   // `then` drives the parse so the editable proposal card is on screen — the
   // empty state alone would leave most of this overlay's text unaudited.
-  { name: 'Catat Cepat', open: 'Catat cepat', placeholder: 'beli kopi', type: 'beli kopi 25rb', then: 'Baca' },
+  { name: 'Catat Cepat', open: 'Catat cepat', placeholder: 'beli kopi', type: 'meeting jam 3 sore besok', then: 'Baca' },
 ];
 
 (async () => {
@@ -149,6 +149,23 @@ const OVERLAYS = [
         // text exists in hidden panes too — match only the visible one.
         const h = page.locator('text=Olahraga pagi >> visible=true').first();
         if (await h.count()) { await h.click(); await page.waitForTimeout(600); }
+
+        // Drive the Four Laws diagnosis to its "diagnosed" result state — the
+        // weakest-law border highlight and reason/suggestion text only exist
+        // after this click, and would otherwise never be in the audit's path.
+        const diagnoseBtn = page.getByRole('button', { name: 'Diagnosa 4 Hukum', exact: false }).first();
+        if (await diagnoseBtn.count()) { await diagnoseBtn.click(); await page.waitForTimeout(700); }
+
+        // Open the add-habit form so the frequency picker's segmented control
+        // (and its "X kali/minggu" stepper) is in the audit's path too — it
+        // only renders once this panel is expanded.
+        const addBtn = page.getByRole('button', { name: 'Tambah kebiasaan baru' }).first();
+        if (await addBtn.count()) {
+          await addBtn.click();
+          await page.waitForTimeout(400);
+          const weeklySegment = page.getByRole('button', { name: 'X kali/minggu', exact: true }).first();
+          if (await weeklySegment.count()) { await weeklySegment.click(); await page.waitForTimeout(300); }
+        }
       }
       await check(tab);
     } catch (e) {

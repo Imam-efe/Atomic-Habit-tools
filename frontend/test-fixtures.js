@@ -21,11 +21,26 @@ const FIXTURES = {
     history: [{ month: 'Jul 2026', assets: 200000000, liabilities: 48000000, net_worth: 152000000 }],
   },
   // h1 carries a spent streak freeze so the "streak diselamatkan" banner and
-  // the ❄️ marker on the streak chip are both in the audit's path.
+  // the ❄️ marker on the streak chip are both in the audit's path. h3 is
+  // weekly-frequency so the "X/Y× minggu ini" line and the "mgu" streak unit
+  // are in the audit's path too.
   '/api/habits': [
     { id: 'h1', name: 'Olahraga pagi', color: '#5B41D6', streak: 12, doneToday: true, triggerCue: 'bangun tidur', twoMin: 'Push up 5x', freezesUsed: 1, freezesLeft: 1, lastFreezeDate: '2026-08-14' },
     { id: 'h2', name: 'Baca 10 halaman', color: '#1B6E37', streak: 5, doneToday: false, freezesUsed: 0, freezesLeft: 2, lastFreezeDate: null },
+    { id: 'h3', name: 'Gym', color: '#0A84FF', streak: 4, doneToday: false, freezesUsed: 0, freezesLeft: 2, lastFreezeDate: null, frequencyType: 'weekly', targetPerWeek: 3, completionsThisWeek: 2 },
   ],
+  // Four Laws diagnostic — keyed literally on h1's diagnose path, since the
+  // fixture router matches full pathname, not a wildcard. Exercises the
+  // "diagnosed" panel (weakest-law highlight + reason/suggestion), the branch
+  // sweep.js drives by clicking the button before capturing the Kebiasaan screen.
+  '/api/habits/h1/diagnose': {
+    verdict: 'diagnosed',
+    consistency: 42,
+    weakestLaw: 'obvious',
+    weakestLawLabel: 'Jadikan Terlihat (Obvious)',
+    reason: 'Belum ada waktu pengingat spesifik, jadi mudah terlupa di tengah kesibukan pagi.',
+    suggestion: 'Tambahkan waktu pengingat tetap, misalnya 06:00, agar muncul notifikasi setiap hari.',
+  },
   '/api/habit-stacks': [{
     id: 's1', name: 'Rutinitas pagi', description: 'Urutan pagi', is_active: 1,
     habits: [{ id: 'i1', habit_id: 'h1', position: 1, habit_name: 'Olahraga pagi', habit_color: '#5B41D6', habit_icon: '', habit_action_time: '06:00' }],
@@ -58,6 +73,12 @@ const FIXTURES = {
     { id: 'iv1', name: 'Beras', quantity: 5, unit: 'kg', expiry_date: '2026-09-10', purchase_date: TODAY, category: 'Bahan Makanan', note: null },
     { id: 'iv2', name: 'Susu', quantity: 0, unit: 'liter', expiry_date: '2026-08-01', purchase_date: TODAY, category: 'Bahan Makanan', note: null },
   ],
+  '/api/inventory/shopping-suggestions': {
+    suggestions: [
+      { name: 'Susu UHT', quantity: 2, unit: 'liter', reason: 'stok habis' },
+      { name: 'Beras', quantity: 5, unit: 'kg', reason: 'kadaluarsa 2 hari lagi' },
+    ],
+  },
   '/api/kids-schedule': [
     { id: 'k1', kid_name: 'Aisyah', title: 'Matematika', type: 'pelajaran', day_of_week: 'Senin', schedule_time: '08:00', schedule_date: null, note: null },
   ],
@@ -143,7 +164,113 @@ const FIXTURES = {
     review: null,
   },
   '/api/weekly-review/list': [],
-  '/api/projects': [{ id: 'p1', name: 'Rumah', status: 'active', tasks: [] }],
+  '/api/monthly-review': {
+    month: '2026-08', monthLabel: 'Agustus 2026',
+    stats: {
+      month: '2026-08', daysElapsed: 23, overallConsistency: 68,
+      habits: [{ name: 'Olahraga pagi', completions: 14, expected: 23, consistency: 61 }],
+      totalIncome: 12000000, totalExpense: 7400000, netProfit: 4600000,
+      netWorth: 25000000, netWorthDelta: 1200000, identityStatement: 'seorang yang disiplin',
+    },
+    narrative: 'Bulan ini aku cukup konsisten menjaga kebiasaan olahraga meski belum sempurna, dan keuanganku tetap sehat dengan sisa positif dari pemasukan.',
+  },
+  '/api/monthly-review/list': [
+    { month: '2026-07', monthLabel: 'Juli 2026', narrative: 'Bulan lalu aku mulai membangun rutinitas pagi dan berhasil menabung lebih banyak dari biasanya.' },
+  ],
+  // Kebun. Bentuknya mengikuti GET /api/garden di backend/src/routes/garden.ts —
+  // `plantings` dan `summary` wajib ada, kalau tidak layarnya crash saat map().
+  '/api/garden': {
+    today: TODAY,
+    plantings: [
+      {
+        id: 'gp1', plantId: 'cabai-rawit', name: 'Cabai Rawit', emoji: '🌶️',
+        category: 'sayuran-buah', latinName: 'Capsicum frutescens',
+        nickname: 'Cabai pot teras', location: 'Teras depan', quantity: 3,
+        plantingMethod: 'bibit', plantedDate: '2026-06-20',
+        expectedHarvestDate: '2026-09-03', status: 'tumbuh', note: null,
+        care: {
+          lastWater: '2026-08-21', nextWater: '2026-08-23', waterOverdueDays: 0,
+          lastFertilize: '2026-08-10', nextFertilize: '2026-08-24', fertilizeOverdueDays: 0,
+          lastHarvest: null, nextHarvest: '2026-09-03', harvestReady: false,
+          ageDays: 64, growthPercent: 85,
+        },
+      },
+      {
+        id: 'gp2', plantId: 'kangkung', name: 'Kangkung', emoji: '🥬',
+        category: 'sayuran-daun', latinName: 'Ipomoea aquatica',
+        nickname: null, location: 'Kebun belakang', quantity: 12,
+        plantingMethod: 'benih', plantedDate: '2026-07-25',
+        expectedHarvestDate: '2026-08-19', status: 'tumbuh', note: 'Sebar rapat di bedeng kecil',
+        care: {
+          lastWater: '2026-08-20', nextWater: '2026-08-21', waterOverdueDays: 2,
+          lastFertilize: null, nextFertilize: '2026-08-08', fertilizeOverdueDays: 15,
+          lastHarvest: null, nextHarvest: '2026-08-19', harvestReady: true,
+          ageDays: 29, growthPercent: 100,
+        },
+      },
+    ],
+    summary: { total: 2, active: 2, needWater: 1, needFertilize: 1, readyToHarvest: 1 },
+  },
+  '/api/garden/schedule': {
+    today: TODAY,
+    horizonDays: 14,
+    overdue: [
+      { plantingId: 'gp2', name: 'Kangkung', emoji: '🥬', nickname: null, location: 'Kebun belakang', action: 'siram', dueDate: '2026-08-21', overdueDays: 2 },
+      { plantingId: 'gp2', name: 'Kangkung', emoji: '🥬', nickname: null, location: 'Kebun belakang', action: 'panen', dueDate: '2026-08-19', overdueDays: 4 },
+    ],
+    todayDue: [
+      { plantingId: 'gp1', name: 'Cabai Rawit', emoji: '🌶️', nickname: 'Cabai pot teras', location: 'Teras depan', action: 'siram', dueDate: TODAY, overdueDays: 0 },
+    ],
+    upcoming: [
+      { plantingId: 'gp1', name: 'Cabai Rawit', emoji: '🌶️', nickname: 'Cabai pot teras', location: 'Teras depan', action: 'pupuk', dueDate: '2026-08-24', overdueDays: 0 },
+    ],
+  },
+  '/api/garden/catalog': {
+    categories: [
+      { id: 'sayuran-daun', label: 'Sayuran Daun' },
+      { id: 'sayuran-buah', label: 'Sayuran Buah' },
+      { id: 'umbi', label: 'Umbi & Akar' },
+      { id: 'rempah', label: 'Rempah & Herbal' },
+      { id: 'buah', label: 'Buah' },
+    ],
+    total: 66,
+    plants: [
+      {
+        id: 'kangkung', name: 'Kangkung', latinName: 'Ipomoea aquatica',
+        category: 'sayuran-daun', emoji: '🥬', daysToHarvest: [25, 30],
+        repeatHarvest: true, harvestEveryDays: 14,
+        waterIntervalDays: 1, waterNote: 'Suka air. Media jangan sampai kering, siram pagi dan sore saat kemarau.',
+        fertilizeIntervalDays: 14, fertilizer: 'Pupuk kandang + urea tipis, atau POC daun',
+        sunlight: 'penuh', spacingCm: 10, potLiter: 5, difficulty: 'mudah',
+        season: 'Sepanjang tahun', altitude: 'rendah sampai menengah',
+        pests: ['ulat grayak', 'kutu daun'], companions: ['bayam', 'sawi'],
+        propagation: 'Sebar benih langsung, tidak perlu semai',
+        harvestNote: 'Potong 3–5 cm di atas pangkal supaya tumbuh tunas baru.',
+        tips: 'Paling cocok untuk pemula. Daun menguning biasanya kurang nitrogen, bukan kurang air.',
+      },
+      {
+        id: 'cabai-rawit', name: 'Cabai Rawit', latinName: 'Capsicum frutescens',
+        category: 'sayuran-buah', emoji: '🌶️', daysToHarvest: [75, 90],
+        repeatHarvest: true, harvestEveryDays: 7,
+        waterIntervalDays: 2, waterNote: 'Rutin tapi tidak becek. Genangan bikin busuk akar.',
+        fertilizeIntervalDays: 14, fertilizer: 'NPK seimbang, tinggi kalium saat berbuah',
+        sunlight: 'penuh', spacingCm: 50, potLiter: 10, difficulty: 'sedang',
+        season: 'Awal kemarau', altitude: 'rendah sampai tinggi',
+        pests: ['trips', 'lalat buah', 'antraknosa'], companions: ['kemangi', 'bawang merah'],
+        propagation: 'Semai 3–4 minggu, pindah tanam',
+        harvestNote: 'Petik dengan tangkainya. Panen rutin memicu buah baru.',
+        tips: 'Buang tunas air di bawah cabang Y pertama.',
+      },
+    ],
+  },
+  '/api/projects': [{
+    id: 'p1', name: 'Rumah', goalId: null, goalName: null, goalColor: null,
+    tasks: [
+      { id: 't1', name: 'Beli cat tembok', status: 'backlog', goalId: null, goalName: null, goalColor: null, dueDate: '2026-08-01', priority: 'high' },
+      { id: 't2', name: 'Rapikan gudang', status: 'done', goalId: null, goalName: null, goalColor: null, dueDate: null, priority: 'normal' },
+    ],
+  }],
+  '/api/projects/p1/breakdown': { tasks: ['Ukur ruang tamu', 'Beli material', 'Pasang lantai'] },
   // Route is /api/finance-report (not financial-), and the shape is pnl /
   // balance_sheet / upcoming_payments. Both were wrong here before, which left
   // the screen blank while the audit scored it as a clean pass.
@@ -171,18 +298,39 @@ const FIXTURES = {
       { type: 'inventory', label: 'Stok', id: 'iv1', title: 'Beras', subtitle: '5 kg · Bahan Makanan', date: '2026-09-10', subScreen: 'inventory' },
       { type: 'budget', label: 'Pengeluaran', id: 'be1', title: 'Beras 5kg', subtitle: 'Rp70.000 · Belanja Bulanan', date: TODAY, tab: 'uang' },
       { type: 'habit', label: 'Kebiasaan', id: 'h1', title: 'Olahraga pagi', subtitle: 'Streak 12 hari', date: null, tab: 'kebiasaan' },
+      { type: 'note', label: 'Catatan', id: 'n2', title: 'Ide hadiah ulang tahun Aisyah: sepeda roda tiga warna pink', subtitle: null, date: TODAY, subScreen: 'notes' },
+      { type: 'garden', label: 'Kebun', id: 'gp1', title: 'Cabai pot teras', subtitle: 'Cabai Rawit', date: '2026-06-20', subScreen: 'garden' },
     ],
   },
   // Quick-add proposal card. An expense keeps the richest layout on screen:
   // amount, category select and note are all editable before saving.
+  // Calendar intent — the newest QuickAdd branch, so this is the one worth
+  // auditing this pass; expense/habit/inventory render the same shared
+  // tokens and were unchanged and already proven passing.
   '/api/quickadd/parse': {
-    intent: 'expense',
-    text: 'beli kopi 25rb',
-    entry: {
-      type: 'expense', amount: 25000, category: 'Makanan & Minuman',
-      note: 'Kopi', date: TODAY, bank_account_id: 'b1', bank_name: 'BCA',
+    intent: 'calendar',
+    text: 'meeting jam 3 sore besok',
+    event: {
+      title: 'Meeting', note: null, kind: 'event',
+      event_date: TODAY, event_time: '15:00',
     },
   },
+  // Notes screen. n1 has an existing AI summary (the italic info-coloured
+  // line) and a linked habit; n2 has neither, so it still shows the
+  // "✨ Ringkas" button — both branches are in the audit's path.
+  '/api/notes': [
+    {
+      id: 'n1', body: 'Kenapa aku skip lari pagi ini\nBadan pegal karena begadang nonton bola semalam, besok tidur lebih awal.',
+      summary: 'Melewatkan lari pagi karena kurang tidur semalam.',
+      linkedHabitId: 'h1', linkedHabitName: 'Olahraga pagi', linkedGoalId: null, linkedGoalStatement: null,
+      createdAt: Math.floor(Date.now() / 1000) - 3600, updatedAt: Math.floor(Date.now() / 1000) - 3600,
+    },
+    {
+      id: 'n2', body: 'Ide hadiah ulang tahun Aisyah: sepeda roda tiga warna pink',
+      summary: null, linkedHabitId: null, linkedHabitName: null, linkedGoalId: null, linkedGoalStatement: null,
+      createdAt: Math.floor(Date.now() / 1000) - 90000, updatedAt: Math.floor(Date.now() / 1000) - 90000,
+    },
+  ],
   // Month-end projection card. `days_remaining` must stay above zero or the
   // card hides itself and the audit never measures it. `category_pace` carries
   // one over-limit row so the warning block renders too.

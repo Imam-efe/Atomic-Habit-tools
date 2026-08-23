@@ -11,6 +11,15 @@ interface Task {
   goalId: string | null;
   goalName: string | null;
   goalColor: string | null;
+  dueDate: string | null;
+  priority: 'low' | 'normal' | 'high';
+}
+
+const PRIORITY_LABELS: Record<Task['priority'], string> = { low: 'Rendah', normal: 'Normal', high: 'Tinggi' };
+const PRIORITY_COLORS: Record<Task['priority'], string> = { low: 'var(--text3)', normal: 'var(--info)', high: 'var(--neg)' };
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 interface Project {
@@ -43,7 +52,15 @@ export function Projects() {
   const [addingTaskForProjId, setAddingTaskForProjId] = useState<string | null>(null);
   const [taskName, setTaskName] = useState('');
   const [taskGoalId, setTaskGoalId] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskPriority, setTaskPriority] = useState<Task['priority']>('normal');
   const [savingTask, setSavingTask] = useState(false);
+
+  const [breakdownProjId, setBreakdownProjId] = useState<string | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownError, setBreakdownError] = useState('');
+  const [breakdownTasks, setBreakdownTasks] = useState<{ name: string; checked: boolean }[]>([]);
+  const [breakdownSaving, setBreakdownSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -94,6 +111,8 @@ export function Projects() {
         body: JSON.stringify({
           name: taskName.trim(),
           goalId: taskGoalId || undefined,
+          dueDate: taskDueDate || undefined,
+          priority: taskPriority,
         }),
       });
 
@@ -114,9 +133,43 @@ export function Projects() {
 
       setTaskName('');
       setTaskGoalId('');
+      setTaskDueDate('');
+      setTaskPriority('normal');
       setAddingTaskForProjId(null);
     } catch {}
     setSavingTask(false);
+  };
+
+  const handleStartBreakdown = async (projectId: string) => {
+    setBreakdownProjId(projectId);
+    setBreakdownTasks([]);
+    setBreakdownError('');
+    setBreakdownLoading(true);
+    try {
+      const res = await apiFetch<{ tasks: string[] }>(`/projects/${projectId}/breakdown`, { method: 'POST' });
+      setBreakdownTasks(res.tasks.map(name => ({ name, checked: true })));
+    } catch {
+      setBreakdownError('Gagal membuat breakdown. Coba lagi.');
+    }
+    setBreakdownLoading(false);
+  };
+
+  const handleConfirmBreakdown = async (projectId: string) => {
+    const picked = breakdownTasks.filter(t => t.checked);
+    if (picked.length === 0) { setBreakdownProjId(null); return; }
+    setBreakdownSaving(true);
+    try {
+      for (const t of picked) {
+        const newTask = await apiFetch<Task>(`/projects/${projectId}/tasks`, {
+          method: 'POST',
+          body: JSON.stringify({ name: t.name }),
+        });
+        setProjects(prev => prev.map(p => p.id === projectId ? { ...p, tasks: [...p.tasks, newTask] } : p));
+      }
+    } catch {}
+    setBreakdownSaving(false);
+    setBreakdownProjId(null);
+    setBreakdownTasks([]);
   };
 
   const handleToggleTask = async (taskId: string) => {
@@ -270,6 +323,16 @@ export function Projects() {
                 </div>
 
                 <div className="flex gap-2">
+                  {/* AI breakdown */}
+                  <motion.button
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-sm"
+                    style={{ background: 'var(--track)' }}
+                    onClick={() => handleStartBreakdown(project.id)}
+                    whileTap={{ scale: 0.85 }}
+                    title="Breakdown AI"
+                  >
+                    ✨
+                  </motion.button>
                   {/* Plus to add task */}
                   <motion.button
                     className="w-7 h-7 rounded-full flex items-center justify-center"
@@ -277,6 +340,8 @@ export function Projects() {
                     onClick={() => {
                       setAddingTaskForProjId(project.id);
                       setTaskGoalId(project.goalId ?? '');
+                      setTaskDueDate('');
+                      setTaskPriority('normal');
                     }}
                     whileTap={{ scale: 0.85 }}
                   >
@@ -296,6 +361,57 @@ export function Projects() {
                   </motion.button>
                 </div>
               </div>
+
+              {/* AI Breakdown proposal panel */}
+              <AnimatePresence>
+                {breakdownProjId === project.id && (
+                  <motion.div
+                    className="p-3 rounded-xl flex flex-col gap-2.5"
+                    style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>✨ Breakdown AI</p>
+                    {breakdownLoading ? (
+                      <p className="text-xs" style={{ color: 'var(--text3)' }}>Membuat daftar tugas...</p>
+                    ) : breakdownError ? (
+                      <p className="text-xs" style={{ color: 'var(--neg)' }}>{breakdownError}</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {breakdownTasks.map((t, i) => (
+                          <label key={i} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text)' }}>
+                            <input
+                              type="checkbox"
+                              checked={t.checked}
+                              onChange={e => setBreakdownTasks(prev => prev.map((x, xi) => xi === i ? { ...x, checked: e.target.checked } : x))}
+                            />
+                            {t.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <motion.button
+                        className="neu-cta flex-1 py-1.5 rounded-lg text-xs font-semibold text-white"
+                        style={{ background: 'var(--accentFill)', opacity: breakdownSaving || breakdownLoading || breakdownTasks.length === 0 ? 0.6 : 1 }}
+                        onClick={() => handleConfirmBreakdown(project.id)}
+                        disabled={breakdownSaving || breakdownLoading || breakdownTasks.length === 0}
+                        whileTap={{ scale: 0.97 }}
+                      >
+                        {breakdownSaving ? 'Menyimpan...' : 'Tambahkan Tugas Terpilih'}
+                      </motion.button>
+                      <button
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                        style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                        onClick={() => { setBreakdownProjId(null); setBreakdownTasks([]); }}
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Add Task Box inside this project */}
               <AnimatePresence>
@@ -328,6 +444,25 @@ export function Projects() {
                         </option>
                       ))}
                     </select>
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        className="flex-1 text-xs outline-none py-1 border-t"
+                        style={{ background: 'transparent', color: 'var(--text2)', borderColor: 'var(--sep)' }}
+                        value={taskDueDate}
+                        onChange={e => setTaskDueDate(e.target.value)}
+                      />
+                      <select
+                        className="text-xs outline-none py-1 border-t"
+                        style={{ background: 'transparent', color: 'var(--text2)', borderColor: 'var(--sep)' }}
+                        value={taskPriority}
+                        onChange={e => setTaskPriority(e.target.value as Task['priority'])}
+                      >
+                        {(Object.keys(PRIORITY_LABELS) as Task['priority'][]).map(p => (
+                          <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="flex gap-2 pt-1">
                       <motion.button
                         className="neu-cta flex-1 py-1.5 rounded-lg text-xs font-semibold text-white"
@@ -341,7 +476,7 @@ export function Projects() {
                       <button
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold"
                         style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
-                        onClick={() => setAddingTaskForProjId(null)}
+                        onClick={() => { setAddingTaskForProjId(null); setTaskDueDate(''); setTaskPriority('normal'); }}
                       >
                         Batal
                       </button>
@@ -355,6 +490,7 @@ export function Projects() {
                 <div className="flex flex-col gap-2.5 mt-2 border-t pt-3" style={{ borderColor: 'var(--sep)' }}>
                   {project.tasks.map(task => {
                     const isDone = task.status === 'done';
+                    const isOverdue = !isDone && !!task.dueDate && task.dueDate < todayISO();
                     return (
                       <motion.div
                         key={task.id}
@@ -381,15 +517,37 @@ export function Projects() {
 
                         {/* Task text and goal badge */}
                         <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-                          <p
-                            className="text-sm truncate"
-                            style={{
-                              color: isDone ? 'var(--text3)' : 'var(--text)',
-                              textDecoration: isDone ? 'line-through' : 'none',
-                            }}
-                          >
-                            {task.name}
-                          </p>
+                          <div className="min-w-0 flex flex-col">
+                            <p
+                              className="text-sm truncate"
+                              style={{
+                                color: isDone ? 'var(--text3)' : 'var(--text)',
+                                textDecoration: isDone ? 'line-through' : 'none',
+                              }}
+                            >
+                              {task.name}
+                            </p>
+                            {(task.dueDate || task.priority !== 'normal') && (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {task.dueDate && (
+                                  <span
+                                    className="text-[10px] font-semibold"
+                                    style={{ color: isOverdue ? 'var(--neg)' : 'var(--text3)' }}
+                                  >
+                                    {isOverdue ? '⚠ ' : ''}{task.dueDate}
+                                  </span>
+                                )}
+                                {task.priority !== 'normal' && (
+                                  <span
+                                    className="text-[10px] font-bold uppercase tracking-wide"
+                                    style={{ color: PRIORITY_COLORS[task.priority] }}
+                                  >
+                                    {PRIORITY_LABELS[task.priority]}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
 
                           {task.goalColor && (
                             <div

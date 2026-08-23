@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
+import { resolvePlants } from './garden';
 
 const search = new Hono<AuthContext>();
 search.use('/*', requireAuth);
@@ -46,7 +47,7 @@ search.get('/', async (c) => {
   const p = likePattern(q);
   const uid = user.sub;
 
-  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events] = await Promise.all([
+  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events, userNotes, garden] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id, type, amount_idr, category, note, entry_date FROM budget_entries
        WHERE user_id = ?1 AND (note LIKE ?2 ESCAPE '\\' OR category LIKE ?2 ESCAPE '\\')
@@ -115,7 +116,32 @@ search.get('/', async (c) => {
     ).bind(uid, p, PER_SOURCE).all<{
       id: string; title: string; kind: string; event_date: string; event_time: string | null;
     }>(),
+
+    c.env.DB.prepare(
+      `SELECT id, body, created_at FROM notes
+       WHERE user_id = ?1 AND body LIKE ?2 ESCAPE '\\'
+       ORDER BY created_at DESC LIMIT ?3`
+    ).bind(uid, p, PER_SOURCE).all<{ id: string; body: string; created_at: number }>(),
+
+    // plant_id (slug katalog, mis. 'cabai-rawit') dicocokkan juga sebagai
+    // proxy nama tanaman — nama aslinya baru diketahui setelah resolvePlants
+    // di bawah, karena katalog tidak hidup sebagai tabel di D1.
+    c.env.DB.prepare(
+      `SELECT id, plant_id, custom_name, nickname, location, planted_date FROM garden_plantings
+       WHERE user_id = ?1 AND (plant_id LIKE ?2 ESCAPE '\\' OR custom_name LIKE ?2 ESCAPE '\\'
+         OR nickname LIKE ?2 ESCAPE '\\' OR location LIKE ?2 ESCAPE '\\' OR note LIKE ?2 ESCAPE '\\')
+       ORDER BY planted_date DESC LIMIT ?3`
+    ).bind(uid, p, PER_SOURCE).all<{
+      id: string; plant_id: string | null; custom_name: string | null;
+      nickname: string | null; location: string | null; planted_date: string;
+    }>(),
   ]);
+
+  const gardenRows = garden.results ?? [];
+  const gardenPlantMap = await resolvePlants(
+    c.env.DB,
+    [...new Set(gardenRows.map(g => g.plant_id).filter((id): id is string => !!id))]
+  );
 
   const rp = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
 
@@ -201,6 +227,31 @@ search.get('/', async (c) => {
       date: ev.event_date,
       tab: 'kalender',
     })),
+    ...(userNotes.results ?? []).map(n => {
+      const firstLine = n.body.split('\n')[0].trim();
+      return {
+        type: 'note',
+        label: 'Catatan',
+        id: n.id,
+        title: firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine,
+        subtitle: n.body.length > firstLine.length ? n.body.slice(firstLine.length).trim().slice(0, 80) : null,
+        date: new Date(n.created_at * 1000).toISOString().slice(0, 10),
+        subScreen: 'notes',
+      };
+    }),
+    ...gardenRows.map(g => {
+      const plant = g.plant_id ? gardenPlantMap.get(g.plant_id) : undefined;
+      const plantName = plant?.name ?? g.custom_name ?? 'Tanaman';
+      return {
+        type: 'garden',
+        label: 'Kebun',
+        id: g.id,
+        title: g.nickname || plantName,
+        subtitle: g.nickname ? plantName : g.location,
+        date: g.planted_date,
+        subScreen: 'garden',
+      };
+    }),
   ];
 
   // Dated hits first, newest first — a search is nearly always about something

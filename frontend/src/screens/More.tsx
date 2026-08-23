@@ -451,10 +451,13 @@ export function More() {
             { label: 'Jadwal Anak', id: 'kids-schedule', desc: 'Jadwal pelajaran, rutinitas & aktivitas anak' },
             { label: 'Laporan Keuangan', id: 'financial-report', desc: 'Rekap Laba Rugi, Neraca, & Utang' },
             { label: 'Review Mingguan', id: 'weekly-review', desc: 'Refleksi kebiasaan & penyesuaian mingguan' },
+            { label: 'Rekap Bulanan', id: 'monthly-review', desc: 'Narasi AI bulanan: kebiasaan, keuangan & identitas' },
+            { label: 'Kebun', id: 'garden', desc: 'Kebun sayur & buah: jadwal siram, pupuk, panen & diagnosis AI' },
             { label: 'Heatmap Kebiasaan', id: 'habit-heatmap', desc: 'Visualisasi 52 minggu konsistensi kebiasaan' },
             { label: 'Pelunasan Utang', id: 'debt-planner', desc: 'Kalkulator snowball & avalanche payoff' },
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas' },
             { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang' },
+            { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal' },
           ].map((item, i) => (
             <div key={item.id}>
               {i > 0 && (

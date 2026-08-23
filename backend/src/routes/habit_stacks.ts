@@ -6,6 +6,15 @@ const app = new Hono<AuthContext>();
 
 app.use('/*', requireAuth);
 
+interface StackRow {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: number;
+  sort_order: number;
+  habits: string;
+}
+
 // GET /api/habit-stacks - List all stacks for user
 app.get('/', async (c) => {
   const user_id = c.get('user').sub;
@@ -33,9 +42,28 @@ app.get('/', async (c) => {
     WHERE hs.user_id = ?1
     GROUP BY hs.id
     ORDER BY hs.sort_order ASC, hs.created_at DESC
-  `).bind(user_id).all();
+  `).bind(user_id).all<StackRow>();
 
-  return c.json(stacks.results || []);
+  // json_group_array() returns a JSON-encoded TEXT column, not a parsed
+  // array — D1 hands it back as a plain string, and the frontend calling
+  // .sort()/.map() straight on that string is exactly the crash reported
+  // after creating a stack (the freshly-created row is the first one whose
+  // .habits was ever rendered, since an empty list never gets this far).
+  const result = (stacks.results ?? []).map((s) => {
+    let habits: Record<string, unknown>[] = [];
+    try {
+      habits = JSON.parse(s.habits);
+    } catch {
+      habits = [];
+    }
+    // A stack with zero items still produces one row through the LEFT JOIN,
+    // which json_group_array turns into a single all-null placeholder
+    // object rather than an empty array — drop it.
+    habits = habits.filter((h) => h.habit_id !== null);
+    return { ...s, habits };
+  });
+
+  return c.json(result);
 });
 
 // POST /api/habit-stacks - Create new stack
