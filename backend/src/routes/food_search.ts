@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { runJson, SCHEMA_MODEL } from '../lib/ai';
+import { runJson, runText, SCHEMA_MODEL } from '../lib/ai';
 import { searchCuratedFoods, type CuratedFood } from '../data/foods_id';
 import type { Env } from '../types';
+import { jakartaToday } from '../lib/validate';
+import { ALG_UMUM, computeAlgPercent, buildWarnings, scaleServing, type AlgNutrients } from '../lib/nutrition_insight';
 
 const foodSearch = new Hono<AuthContext>();
 foodSearch.use('/*', requireAuth);
@@ -267,6 +269,136 @@ foodSearch.post('/lookup', async (c) => {
     );
   }
   return c.json({ food: result });
+});
+
+const LABEL_SCHEMA = {
+  type: 'object',
+  properties: {
+    servingSize: { type: 'string' },
+    servingsPerPack: { type: 'number' },
+    calories: { type: 'number' },
+    protein: { type: 'number' },
+    carbs: { type: 'number' },
+    fat: { type: 'number' },
+    saturatedFat: { type: 'number' },
+    fiber: { type: 'number' },
+    sugar: { type: 'number' },
+    sodium: { type: 'number' },
+  },
+  required: ['calories'],
+} as const;
+
+interface RawLabel {
+  servingSize?: string;
+  servingsPerPack?: number;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  saturatedFat?: number;
+  fiber?: number;
+  sugar?: number;
+  sodium?: number;
+}
+
+// POST /api/food/scan-label — { image } data URL panel Informasi Nilai Gizi.
+//
+// Panel Indonesia mencantumkan angka PER TAKARAN SAJI, dan satu kemasan
+// sering berisi lebih dari satu sajian — kalau dibaca mentah lalu disimpan
+// sebagai "1 porsi", user yang makan seluruh kemasan tercatat sepertiga dari
+// yang sebenarnya. Makanya respons ini SELALU mengembalikan dua angka
+// (per sajian, per kemasan) dan membiarkan pemanggil (frontend) memaksa
+// user memilih sebelum disimpan ke log.
+foodSearch.post('/scan-label', async (c) => {
+  const body = await c.req.json<{ image?: string }>().catch(() => null);
+  const image = body?.image?.trim();
+  if (!image) return c.json({ error: 'image is required' }, 400);
+  if (!image.startsWith('data:image/')) return c.json({ error: 'image must be a data URL' }, 400);
+  if (image.length > 6_000_000) return c.json({ error: 'image too large' }, 413);
+
+  let raw: RawLabel | null = null;
+  try {
+    raw = await runJson<RawLabel>(
+      c.env,
+      [
+        {
+          role: 'system',
+          content: 'Kamu membaca panel Informasi Nilai Gizi pada kemasan makanan Indonesia. Ambil angka PER TAKARAN SAJI seperti tercetak (bukan per 100g kecuali memang itu yang tercetak), takaran saji, dan jumlah sajian per kemasan kalau tercantum. Lemak jenuh dalam gram, natrium dalam miligram, sesuai satuan yang lazim tercetak di label.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Baca panel Informasi Nilai Gizi ini dan keluarkan datanya.' },
+            { type: 'image_url', image_url: { url: image } },
+          ],
+        },
+      ],
+      LABEL_SCHEMA as unknown as Record<string, unknown>,
+      { model: SCHEMA_MODEL, maxTokens: 500 }
+    );
+  } catch (err) {
+    console.error('Label scan failed', err);
+    return c.json({ error: 'Gagal membaca label' }, 502);
+  }
+
+  if (!raw || typeof raw.calories !== 'number' || raw.calories <= 0) {
+    return c.json({ error: 'Label tidak terbaca' }, 422);
+  }
+
+  const perServing: AlgNutrients = {
+    calories: raw.calories,
+    protein: raw.protein ?? 0,
+    fat: raw.fat ?? 0,
+    saturatedFat: raw.saturatedFat ?? 0,
+    carbs: raw.carbs ?? 0,
+    sugar: raw.sugar ?? 0,
+    sodium: raw.sodium ?? 0,
+  };
+  const fiber = raw.fiber ?? 0;
+
+  const percentAlg = computeAlgPercent(perServing);
+  const warnings = buildWarnings(percentAlg);
+
+  const user = c.get('user');
+  const [targetRow, todayRow] = await Promise.all([
+    c.env.DB.prepare('SELECT calories FROM nutrition_targets WHERE user_id = ?1').bind(user.sub).first<{ calories: number }>(),
+    c.env.DB.prepare("SELECT COALESCE(SUM(calories), 0) as total FROM food_logs WHERE user_id = ?1 AND log_date = ?2")
+      .bind(user.sub, jakartaToday()).first<{ total: number }>(),
+  ]);
+  const dailyTarget = targetRow?.calories ?? 2200;
+  const remaining = Math.max(0, dailyTarget - (todayRow?.total ?? 0));
+
+  let suggestion = '';
+  try {
+    suggestion = await runText(c.env, [
+      { role: 'system', content: 'Kamu asisten gizi yang memberi satu kalimat saran singkat, suportif, dan jujur pada angka dalam Bahasa Indonesia. Tanpa markdown.' },
+      {
+        role: 'user',
+        content: [
+          `Sisa kuota kalori hari ini: ${remaining} kkal.`,
+          `Produk yang baru dipindai: ${perServing.calories} kkal per sajian.`,
+          warnings.length ? `Peringatan: ${warnings.join('; ')}.` : '',
+          'Beri satu kalimat saran singkat.',
+        ].filter(Boolean).join(' '),
+      },
+    ], { maxTokens: 100 });
+  } catch (err) {
+    console.error('Label suggestion failed', err);
+    // Insight tetap berguna tanpa kalimat saran — tidak menggagalkan seluruh respons.
+  }
+
+  const perServingFull = { ...perServing, fiber };
+  const perPack = raw.servingsPerPack && raw.servingsPerPack > 1
+    ? scaleServing(perServingFull, raw.servingsPerPack)
+    : null;
+
+  return c.json({
+    perServing: perServingFull,
+    perPack,
+    servingSize: raw.servingSize ?? null,
+    servingsPerPack: raw.servingsPerPack ?? null,
+    insight: { percentAlg, warnings, suggestion: suggestion.trim() },
+  });
 });
 
 export default foodSearch;
