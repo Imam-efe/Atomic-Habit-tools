@@ -27,6 +27,7 @@ const ICONS: Record<string, string> = {
   debt: '🤝',
   event: '📅',
   note: '📝',
+  garden: '🌱',
 };
 
 /**

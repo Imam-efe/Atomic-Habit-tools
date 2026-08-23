@@ -299,6 +299,7 @@ const FIXTURES = {
       { type: 'budget', label: 'Pengeluaran', id: 'be1', title: 'Beras 5kg', subtitle: 'Rp70.000 · Belanja Bulanan', date: TODAY, tab: 'uang' },
       { type: 'habit', label: 'Kebiasaan', id: 'h1', title: 'Olahraga pagi', subtitle: 'Streak 12 hari', date: null, tab: 'kebiasaan' },
       { type: 'note', label: 'Catatan', id: 'n2', title: 'Ide hadiah ulang tahun Aisyah: sepeda roda tiga warna pink', subtitle: null, date: TODAY, subScreen: 'notes' },
+      { type: 'garden', label: 'Kebun', id: 'gp1', title: 'Cabai pot teras', subtitle: 'Cabai Rawit', date: '2026-06-20', subScreen: 'garden' },
     ],
   },
   // Quick-add proposal card. An expense keeps the richest layout on screen:
