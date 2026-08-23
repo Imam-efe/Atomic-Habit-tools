@@ -19,6 +19,8 @@ interface DBFoodLog {
   label: string | null;
   log_date: string;
   created_at: number;
+  source: string | null;
+  barcode: string | null;
 }
 
 interface DBNutritionTarget {
@@ -79,6 +81,8 @@ nutrition.get('/', async (c) => {
       fiber: l.fiber_g ?? 0,
       label: l.label,
       date: l.log_date,
+      source: l.source,
+      barcode: l.barcode,
     })),
     target: {
       calories: finalTarget.calories,
@@ -110,6 +114,8 @@ nutrition.post('/food', async (c) => {
     fiber?: number;
     label?: string;
     date?: string;
+    source?: string;
+    barcode?: string;
   };
   const body = await c.req.json<FoodBody>().catch((): FoodBody => ({}));
 
@@ -128,8 +134,8 @@ nutrition.post('/food', async (c) => {
   const now = Math.floor(Date.now() / 1000);
 
   await c.env.DB.prepare(
-    `INSERT INTO food_logs (id, user_id, food_name, portion, calories, protein_g, carbs_g, fat_g, fiber_g, label, log_date, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+    `INSERT INTO food_logs (id, user_id, food_name, portion, calories, protein_g, carbs_g, fat_g, fiber_g, label, log_date, created_at, source, barcode)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
   ).bind(
     id, user.sub,
     body.name!.trim(),
@@ -141,7 +147,9 @@ nutrition.post('/food', async (c) => {
     body.fiber !== undefined ? parseFloat(body.fiber.toString()) : null,
     label,
     date,
-    now
+    now,
+    body.source?.trim() || null,
+    body.barcode?.trim() || null
   ).run();
 
   return c.json({
@@ -155,6 +163,8 @@ nutrition.post('/food', async (c) => {
     fiber: body.fiber ?? 0,
     label,
     date,
+    source: body.source ?? null,
+    barcode: body.barcode ?? null,
   }, 201);
 });
 
