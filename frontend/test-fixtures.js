@@ -164,6 +164,19 @@ const FIXTURES = {
     review: null,
   },
   '/api/weekly-review/list': [],
+  '/api/monthly-review': {
+    month: '2026-08', monthLabel: 'Agustus 2026',
+    stats: {
+      month: '2026-08', daysElapsed: 23, overallConsistency: 68,
+      habits: [{ name: 'Olahraga pagi', completions: 14, expected: 23, consistency: 61 }],
+      totalIncome: 12000000, totalExpense: 7400000, netProfit: 4600000,
+      netWorth: 25000000, netWorthDelta: 1200000, identityStatement: 'seorang yang disiplin',
+    },
+    narrative: 'Bulan ini aku cukup konsisten menjaga kebiasaan olahraga meski belum sempurna, dan keuanganku tetap sehat dengan sisa positif dari pemasukan.',
+  },
+  '/api/monthly-review/list': [
+    { month: '2026-07', monthLabel: 'Juli 2026', narrative: 'Bulan lalu aku mulai membangun rutinitas pagi dan berhasil menabung lebih banyak dari biasanya.' },
+  ],
   '/api/projects': [{
     id: 'p1', name: 'Rumah', goalId: null, goalName: null, goalColor: null,
     tasks: [

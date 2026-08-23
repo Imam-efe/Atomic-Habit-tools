@@ -70,7 +70,7 @@ const AUDIT = () => {
 
 const SUBSCREENS = [
   'Projects', 'Aktivitas', 'Nutrisi', 'Kalender Haid', 'Stok & Inventaris',
-  'Jadwal Anak', 'Laporan Keuangan', 'Review Mingguan', 'Heatmap Kebiasaan',
+  'Jadwal Anak', 'Laporan Keuangan', 'Review Mingguan', 'Rekap Bulanan', 'Heatmap Kebiasaan',
   'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian', 'Catatan',
 ];
 
