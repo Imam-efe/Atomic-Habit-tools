@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate } from '../lib/validate';
+import { validate, jakartaToday } from '../lib/validate';
 
 const nutrition = new Hono<AuthContext>();
 
@@ -46,11 +46,16 @@ const FOOD_LABELS = ['Sehat', 'Moderat', 'Indulge'];
 // GET /api/nutrition?date=YYYY-MM-DD
 nutrition.get('/', async (c) => {
   const user = c.get('user');
-  const date = c.req.query('date') ?? new Date().toISOString().slice(0, 10);
+  const date = c.req.query('date') ?? jakartaToday();
 
-  // Fetch food logs
+  // Fetch food logs (source/barcode live in the food_log_meta side table —
+  // absent row means manual entry, so LEFT JOIN yields NULL for both).
   const logsRes = await c.env.DB.prepare(
-    'SELECT * FROM food_logs WHERE user_id = ?1 AND log_date = ?2 ORDER BY created_at ASC'
+    `SELECT fl.*, flm.source as source, flm.barcode as barcode
+     FROM food_logs fl
+     LEFT JOIN food_log_meta flm ON flm.log_id = fl.id
+     WHERE fl.user_id = ?1 AND fl.log_date = ?2
+     ORDER BY fl.created_at ASC`
   ).bind(user.sub, date).all<DBFoodLog>();
 
   const logs = logsRes.results ?? [];
@@ -130,12 +135,12 @@ nutrition.post('/food', async (c) => {
   if (err) return c.json({ error: err }, 400);
 
   const id = nanoid();
-  const date = body.date ?? new Date().toISOString().slice(0, 10);
+  const date = body.date ?? jakartaToday();
   const now = Math.floor(Date.now() / 1000);
 
   await c.env.DB.prepare(
-    `INSERT INTO food_logs (id, user_id, food_name, portion, calories, protein_g, carbs_g, fat_g, fiber_g, label, log_date, created_at, source, barcode)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+    `INSERT INTO food_logs (id, user_id, food_name, portion, calories, protein_g, carbs_g, fat_g, fiber_g, label, log_date, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
   ).bind(
     id, user.sub,
     body.name!.trim(),
@@ -147,10 +152,16 @@ nutrition.post('/food', async (c) => {
     body.fiber !== undefined ? parseFloat(body.fiber.toString()) : null,
     label,
     date,
-    now,
-    body.source?.trim() || null,
-    body.barcode?.trim() || null
+    now
   ).run();
+
+  // Only resolver/scan-sourced entries get a meta row — a manual entry stays
+  // absent from food_log_meta, which reads back as source/barcode = null.
+  if (body.source?.trim() || body.barcode?.trim()) {
+    await c.env.DB.prepare(
+      `INSERT INTO food_log_meta (log_id, source, barcode) VALUES (?1, ?2, ?3)`
+    ).bind(id, body.source?.trim() || null, body.barcode?.trim() || null).run();
+  }
 
   return c.json({
     id,

@@ -254,6 +254,23 @@ export function Nutrition() {
     setScanning(false);
   };
 
+  const handleAiEstimate = async () => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    setScanError('');
+    setScanning(true);
+    try {
+      const res = await apiFetch<{ food: FoodSearchResult }>('/food/lookup', {
+        method: 'POST',
+        body: JSON.stringify({ name: q }),
+      });
+      applyFoodResult(res.food);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Gagal memperkirakan gizi.');
+    }
+    setScanning(false);
+  };
+
   const applyLabelScan = () => {
     if (!labelScan) return;
     const chosen = labelChoice === 'kemasan' && labelScan.perPack ? labelScan.perPack : labelScan.perServing;
@@ -264,6 +281,9 @@ export function Nutrition() {
     setFat(String(chosen.fat));
     setFiber(String(chosen.fiber));
     setFoodSource('label-scan');
+    // A label scan yields no product name; without one handleAddFood silently
+    // no-ops on its `if (!foodName.trim()) return;` guard.
+    if (!foodName.trim()) setFoodName('Produk kemasan');
     setShowAddFood(true);
     setLabelScan(null);
   };
@@ -489,6 +509,16 @@ export function Nutrition() {
             ))}
           </div>
         )}
+        {searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+          <button
+            className="text-xs font-bold py-2.5 rounded-xl"
+            style={{ background: 'var(--bg)', color: 'var(--accent)', boxShadow: 'var(--neu-raised-sm)' }}
+            onClick={handleAiEstimate}
+            disabled={scanning}
+          >
+            {scanning ? 'Memperkirakan...' : `Tidak ditemukan — perkirakan gizi "${searchQuery.trim()}" dengan AI`}
+          </button>
+        )}
         <div className="flex gap-2">
           <label
             className="flex-1 text-center py-2.5 rounded-xl text-xs font-bold cursor-pointer"
@@ -546,7 +576,7 @@ export function Nutrition() {
             </div>
             <p className="text-xs" style={{ color: 'var(--text2)' }}>
               {Math.round((labelChoice === 'kemasan' && labelScan.perPack ? labelScan.perPack : labelScan.perServing).calories)} kkal
-              {' · '}%AKG kalori {labelScan.insight.percentAlg.calories}%
+              {' · '}%AKG kalori {labelScan.insight.percentAlg.calories}% (per sajian)
             </p>
             {labelScan.insight.warnings.length > 0 && (
               <div className="flex flex-col gap-1">

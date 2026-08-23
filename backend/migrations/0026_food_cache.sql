@@ -27,7 +27,3 @@ CREATE TABLE IF NOT EXISTS food_facts_cache (
 );
 
 CREATE INDEX IF NOT EXISTS idx_food_cache_lookup ON food_facts_cache(source, lookup_key);
-
--- 'curated' | 'cache-off' | 'cache-ai' | 'off' | 'ai' | 'label-scan' | NULL (manual, entri lama)
-ALTER TABLE food_logs ADD COLUMN source TEXT;
-ALTER TABLE food_logs ADD COLUMN barcode TEXT;

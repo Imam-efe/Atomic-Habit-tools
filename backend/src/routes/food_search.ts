@@ -96,6 +96,15 @@ interface OffResponse {
   product?: OffProduct;
 }
 
+/** Parse a leading gram amount out of OFF's serving_size string ("27 g", "1 sachet (30 g)"). null if unparseable. */
+function parseServingGrams(servingSize: string | undefined | null): number | null {
+  if (!servingSize) return null;
+  const match = servingSize.match(/(\d+(?:[.,]\d+)?)\s*g\b/i);
+  if (!match) return null;
+  const grams = parseFloat(match[1].replace(',', '.'));
+  return grams > 0 ? grams : null;
+}
+
 /** Open Food Facts by barcode. Timeout 5s — jangan biarkan satu lookup menahan request pengguna. */
 async function fetchOpenFoodFacts(barcode: string): Promise<FoodResult | null> {
   const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,nutriments,serving_size`;
@@ -121,10 +130,10 @@ async function fetchOpenFoodFacts(barcode: string): Promise<FoodResult | null> {
   const n = p?.nutriments;
   if (json.status !== 1 || !p || !n || n['energy-kcal_100g'] === undefined) return null;
 
-  return {
-    name: p.product_name?.trim() || 'Produk tanpa nama',
-    brand: p.brands?.trim() || null,
-    servingSize: p.serving_size?.trim() || null,
+  // OFF's nutriments are per 100 g. Scale them to the printed serving when the
+  // serving size names a gram amount; otherwise say "per 100 g" outright rather
+  // than labelling per-100g numbers with a serving they don't describe.
+  const per100 = {
     calories: n['energy-kcal_100g'] ?? 0,
     protein: n.proteins_100g ?? 0,
     carbs: n.carbohydrates_100g ?? 0,
@@ -132,6 +141,28 @@ async function fetchOpenFoodFacts(barcode: string): Promise<FoodResult | null> {
     fiber: n.fiber_100g ?? 0,
     sodium: Math.round((n.sodium_100g ?? 0) * 1000), // gram -> mg
     sugar: n.sugars_100g ?? 0,
+  };
+
+  const servingSizeRaw = p.serving_size?.trim() || null;
+  const grams = parseServingGrams(servingSizeRaw);
+
+  const scaled = grams
+    ? {
+        calories: Math.round(per100.calories * grams / 100),
+        protein: Math.round(per100.protein * grams / 100 * 10) / 10,
+        carbs: Math.round(per100.carbs * grams / 100 * 10) / 10,
+        fat: Math.round(per100.fat * grams / 100 * 10) / 10,
+        fiber: Math.round(per100.fiber * grams / 100 * 10) / 10,
+        sodium: Math.round(per100.sodium * grams / 100),
+        sugar: Math.round(per100.sugar * grams / 100 * 10) / 10,
+      }
+    : per100;
+
+  return {
+    name: p.product_name?.trim() || 'Produk tanpa nama',
+    brand: p.brands?.trim() || null,
+    servingSize: grams ? servingSizeRaw : 'per 100 g',
+    ...scaled,
     source: 'off',
   };
 }
@@ -223,7 +254,7 @@ export async function resolveFood(
   }
 
   if (name) {
-    const curated = searchCuratedFoods(name).find(f => f.name.toLowerCase() === name.toLowerCase());
+    const curated = searchCuratedFoods(name)[0];
     if (curated) return curatedToResult(curated);
 
     const lookupKey = normalizeLookupKey(name);
