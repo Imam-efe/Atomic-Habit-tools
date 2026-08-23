@@ -33,6 +33,7 @@ const HabitHeatmap = lazy(() => import('@/screens/HabitHeatmap').then(m => ({ de
 const DebtPlanner = lazy(() => import('@/screens/DebtPlanner').then(m => ({ default: m.DebtPlanner })));
 const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
 const Achievements = lazy(() => import('@/screens/Achievements').then(m => ({ default: m.Achievements })));
+const Notes = lazy(() => import('@/screens/Notes').then(m => ({ default: m.Notes })));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -157,6 +158,7 @@ function AppShell() {
       'debt-planner': <DebtPlanner />,
       'notification-center': <NotificationCenter />,
       'achievements': <Achievements />,
+      'notes': <Notes />,
     }),
     [],
   );

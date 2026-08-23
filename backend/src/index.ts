@@ -24,6 +24,7 @@ import achievements from './routes/achievements';
 import insights from './routes/insights';
 import quickadd from './routes/quickadd';
 import search from './routes/search';
+import notes from './routes/notes';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -96,6 +97,7 @@ app.route('/api/achievements', achievements);
 app.route('/api/insights', insights);
 app.route('/api/quickadd', quickadd);
 app.route('/api/search', search);
+app.route('/api/notes', notes);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 

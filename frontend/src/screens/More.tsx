@@ -455,6 +455,7 @@ export function More() {
             { label: 'Pelunasan Utang', id: 'debt-planner', desc: 'Kalkulator snowball & avalanche payoff' },
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas' },
             { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang' },
+            { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal' },
           ].map((item, i) => (
             <div key={item.id}>
               {i > 0 && (

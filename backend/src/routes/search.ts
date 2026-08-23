@@ -46,7 +46,7 @@ search.get('/', async (c) => {
   const p = likePattern(q);
   const uid = user.sub;
 
-  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events] = await Promise.all([
+  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events, userNotes] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id, type, amount_idr, category, note, entry_date FROM budget_entries
        WHERE user_id = ?1 AND (note LIKE ?2 ESCAPE '\\' OR category LIKE ?2 ESCAPE '\\')
@@ -115,6 +115,12 @@ search.get('/', async (c) => {
     ).bind(uid, p, PER_SOURCE).all<{
       id: string; title: string; kind: string; event_date: string; event_time: string | null;
     }>(),
+
+    c.env.DB.prepare(
+      `SELECT id, body, created_at FROM notes
+       WHERE user_id = ?1 AND body LIKE ?2 ESCAPE '\\'
+       ORDER BY created_at DESC LIMIT ?3`
+    ).bind(uid, p, PER_SOURCE).all<{ id: string; body: string; created_at: number }>(),
   ]);
 
   const rp = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
@@ -201,6 +207,18 @@ search.get('/', async (c) => {
       date: ev.event_date,
       tab: 'kalender',
     })),
+    ...(userNotes.results ?? []).map(n => {
+      const firstLine = n.body.split('\n')[0].trim();
+      return {
+        type: 'note',
+        label: 'Catatan',
+        id: n.id,
+        title: firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine,
+        subtitle: n.body.length > firstLine.length ? n.body.slice(firstLine.length).trim().slice(0, 80) : null,
+        date: new Date(n.created_at * 1000).toISOString().slice(0, 10),
+        subScreen: 'notes',
+      };
+    }),
   ];
 
   // Dated hits first, newest first — a search is nearly always about something

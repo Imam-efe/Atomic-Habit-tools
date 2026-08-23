@@ -26,6 +26,7 @@ const ICONS: Record<string, string> = {
   kid: '🧒',
   debt: '🤝',
   event: '📅',
+  note: '📝',
 };
 
 /**

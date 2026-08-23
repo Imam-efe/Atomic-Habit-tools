@@ -186,6 +186,7 @@ const FIXTURES = {
       { type: 'inventory', label: 'Stok', id: 'iv1', title: 'Beras', subtitle: '5 kg · Bahan Makanan', date: '2026-09-10', subScreen: 'inventory' },
       { type: 'budget', label: 'Pengeluaran', id: 'be1', title: 'Beras 5kg', subtitle: 'Rp70.000 · Belanja Bulanan', date: TODAY, tab: 'uang' },
       { type: 'habit', label: 'Kebiasaan', id: 'h1', title: 'Olahraga pagi', subtitle: 'Streak 12 hari', date: null, tab: 'kebiasaan' },
+      { type: 'note', label: 'Catatan', id: 'n2', title: 'Ide hadiah ulang tahun Aisyah: sepeda roda tiga warna pink', subtitle: null, date: TODAY, subScreen: 'notes' },
     ],
   },
   // Quick-add proposal card. An expense keeps the richest layout on screen:
@@ -201,6 +202,22 @@ const FIXTURES = {
       event_date: TODAY, event_time: '15:00',
     },
   },
+  // Notes screen. n1 has an existing AI summary (the italic info-coloured
+  // line) and a linked habit; n2 has neither, so it still shows the
+  // "✨ Ringkas" button — both branches are in the audit's path.
+  '/api/notes': [
+    {
+      id: 'n1', body: 'Kenapa aku skip lari pagi ini\nBadan pegal karena begadang nonton bola semalam, besok tidur lebih awal.',
+      summary: 'Melewatkan lari pagi karena kurang tidur semalam.',
+      linkedHabitId: 'h1', linkedHabitName: 'Olahraga pagi', linkedGoalId: null, linkedGoalStatement: null,
+      createdAt: Math.floor(Date.now() / 1000) - 3600, updatedAt: Math.floor(Date.now() / 1000) - 3600,
+    },
+    {
+      id: 'n2', body: 'Ide hadiah ulang tahun Aisyah: sepeda roda tiga warna pink',
+      summary: null, linkedHabitId: null, linkedHabitName: null, linkedGoalId: null, linkedGoalStatement: null,
+      createdAt: Math.floor(Date.now() / 1000) - 90000, updatedAt: Math.floor(Date.now() / 1000) - 90000,
+    },
+  ],
   // Month-end projection card. `days_remaining` must stay above zero or the
   // card hides itself and the audit never measures it. `category_pace` carries
   // one over-limit row so the warning block renders too.

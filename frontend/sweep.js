@@ -71,7 +71,7 @@ const AUDIT = () => {
 const SUBSCREENS = [
   'Projects', 'Aktivitas', 'Nutrisi', 'Kalender Haid', 'Stok & Inventaris',
   'Jadwal Anak', 'Laporan Keuangan', 'Review Mingguan', 'Heatmap Kebiasaan',
-  'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian',
+  'Pelunasan Utang', 'Pusat Notifikasi', 'Pencapaian', 'Catatan',
 ];
 
 /** Root-level overlays, opened from the Beranda command bar. */
