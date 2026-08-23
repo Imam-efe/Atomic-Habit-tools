@@ -18,6 +18,7 @@
 - Angka ALG dari `Peraturan BPOM No. 26/2021`: **energi (2150 kkal), protein (60g), lemak total (67g), karbohidrat (325g) sudah diverifikasi** lewat pencarian web sesi brainstorming. **Lemak jenuh (20g), gula (50g), natrium (1500mg) BELUM diverifikasi dari teks regulasi asli** (jaringan sesi ini memblokir situs BPOM) — nilai dari ingatan model, konservatif, ditandai jelas di kode. Jangan hapus tanda ini saat implementasi kecuali sudah benar-benar dicocokkan ke dokumen primer.
 - Angka gizi di `foods_id.ts` adalah estimasi praktis per porsi rumah tangga lazim, bukan hasil pengambilan langsung dari database TKPI Kemenkes sesi ini (jaringan diblokir juga untuk situs itu) — tandai hal ini di header file, sama seperti catatan `plants.ts` soal angka pertanian.
 - Tidak ada test framework di repo ini (`backend/package.json` dan `frontend/package.json` tidak punya vitest/jest, CI tidak menjalankan test apapun). Untuk logic murni (matematika %AKG, pencarian kurasi) tulis test nyata dan jalankan langsung dengan `node --experimental-strip-types` (Node 22, tanpa dependency baru) — ini genuinely dijalankan, bukan ditulis lalu dibuang. Untuk route Hono yang butuh D1/AI binding sungguhan, verifikasi ikuti konvensi repo yang sudah ada: `tsc --noEmit` bersih + review manual + `sweep.js`; panggilan live ke Open Food Facts baru bisa diverifikasi setelah deploy produksi (dicatat eksplisit, tidak diklaim beres sebelumnya).
+- **(Ditemukan saat preflight, sudah diperbaiki di `backend/tsconfig.json`):** file `.test.ts` mengimpor modulnya sendiri dengan ekstensi eksplisit (`./foods_id.ts`) karena Node ESM butuh itu untuk resolusi langsung — tapi `tsc --noEmit` menolak ekstensi `.ts` di import path kecuali `allowImportingTsExtensions` menyala. Opsi itu sudah ditambahkan ke `backend/tsconfig.json` (aman dipasang berdampingan dengan `noEmit: true` yang sudah ada, disyaratkan justru oleh kombinasi itu). Test file JUGA tidak memakai `node:assert` — backend tidak punya `@types/node`, jadi `tsc --noEmit` gagal resolve modul itu meski `node` sendiri jalan fine; kedua test file di Task 3 dan Task 4 memakai helper `check`/`checkEqual` lokal sebagai gantinya. Jangan kembalikan ke `node:assert` atau menghapus `allowImportingTsExtensions` kecuali kedua isu ini diselesaikan dengan cara lain.
 - Semua teks user-facing dalam Bahasa Indonesia, mengikuti konvensi repo.
 
 ---
@@ -172,6 +173,7 @@ git commit -m "feat: add food_facts_cache table and food_logs source/barcode col
 **Files:**
 - Create: `backend/src/data/foods_id.ts`
 - Test: `backend/src/data/foods_id.test.ts`
+- Already modified during plan preflight (not your job, just context): `backend/tsconfig.json` gained `"allowImportingTsExtensions": true` — needed for `tsc --noEmit` to accept the `.ts`-extension import your test file uses. It should already be committed on this branch; if it isn't, add that line to `compilerOptions` before continuing.
 
 **Interfaces:**
 - Produces: `export interface CuratedFood { id, name, aliases, servingLabel, calories, protein, carbs, fat, fiber, sodium, sugar }`, `export const CURATED_FOODS: CuratedFood[]`, `export function searchCuratedFoods(query: string, foods?: CuratedFood[]): CuratedFood[]`.
@@ -181,23 +183,34 @@ git commit -m "feat: add food_facts_cache table and food_logs source/barcode col
 Create `backend/src/data/foods_id.test.ts`:
 
 ```typescript
-import assert from 'node:assert/strict';
 import { searchCuratedFoods, CURATED_FOODS } from './foods_id.ts';
 
+// Backend tidak punya @types/node (lihat Global Constraints) — 'node:assert'
+// tidak resolvable di bawah tsc --noEmit meski jalan fine di runtime node.
+// Helper lokal ini menghindari import itu sepenuhnya, jadi tsc tetap bersih.
+function check(condition: boolean, message: string): void {
+  if (!condition) throw new Error(`FAIL: ${message}`);
+}
+function checkEqual(actual: unknown, expected: unknown, message: string): void {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`FAIL: ${message} — got ${a}, expected ${e}`);
+}
+
 // Nama penuh cocok.
-assert.equal(searchCuratedFoods('nasi goreng').some(f => f.id === 'nasi-goreng'), true);
+check(searchCuratedFoods('nasi goreng').some(f => f.id === 'nasi-goreng'), 'nasi goreng ditemukan');
 // Alias cocok (nama dagang umum).
-assert.equal(searchCuratedFoods('indomie').some(f => f.id === 'mie-goreng-instan'), true);
+check(searchCuratedFoods('indomie').some(f => f.id === 'mie-goreng-instan'), 'alias indomie ditemukan');
 // Query kosong -> array kosong, bukan seluruh katalog.
-assert.deepEqual(searchCuratedFoods(''), []);
+checkEqual(searchCuratedFoods(''), [], 'query kosong');
 // Query tidak cocok apa pun -> array kosong.
-assert.deepEqual(searchCuratedFoods('xyz-tidak-ada-di-katalog'), []);
+checkEqual(searchCuratedFoods('xyz-tidak-ada-di-katalog'), [], 'query tidak cocok');
 // Tidak ada id duplikat di katalog.
 const ids = CURATED_FOODS.map(f => f.id);
-assert.equal(new Set(ids).size, ids.length);
+checkEqual(new Set(ids).size, ids.length, 'tidak ada id duplikat');
 // Setiap entri punya angka gizi non-negatif.
 for (const f of CURATED_FOODS) {
-  assert.ok(f.calories >= 0 && f.protein >= 0 && f.carbs >= 0 && f.fat >= 0 && f.fiber >= 0 && f.sodium >= 0 && f.sugar >= 0, `angka negatif di ${f.id}`);
+  check(f.calories >= 0 && f.protein >= 0 && f.carbs >= 0 && f.fat >= 0 && f.fiber >= 0 && f.sodium >= 0 && f.sugar >= 0, `angka negatif di ${f.id}`);
 }
 
 console.log(`foods_id.test.ts OK — ${CURATED_FOODS.length} entri`);
@@ -336,28 +349,40 @@ git commit -m "feat: add curated Indonesian food catalog for nutrition resolver 
 Create `backend/src/lib/nutrition_insight.test.ts`:
 
 ```typescript
-import assert from 'node:assert/strict';
 import { ALG_UMUM, computeAlgPercent, buildWarnings, scaleServing } from './nutrition_insight.ts';
 
+// Backend tidak punya @types/node (lihat Global Constraints) — 'node:assert'
+// tidak resolvable di bawah tsc --noEmit meski jalan fine di runtime node.
+// Helper lokal ini menghindari import itu sepenuhnya, jadi tsc tetap bersih.
+function check(condition: boolean, message: string): void {
+  if (!condition) throw new Error(`FAIL: ${message}`);
+}
+function checkEqual(actual: unknown, expected: unknown, message: string): void {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`FAIL: ${message} — got ${a}, expected ${e}`);
+}
+
 // Separuh acuan kalori -> 50%.
-assert.equal(
+checkEqual(
   computeAlgPercent({ calories: ALG_UMUM.calories / 2, protein: 0, fat: 0, saturatedFat: 0, carbs: 0, sugar: 0, sodium: 0 }).calories,
-  50
+  50,
+  'separuh acuan kalori = 50%'
 );
 
 // Natrium di atas ambang 20% ALG -> masuk warnings, menyebut "Natrium".
 const highSodium = computeAlgPercent({ calories: 100, protein: 1, fat: 1, saturatedFat: 1, carbs: 10, sugar: 1, sodium: 500 });
-assert.ok(buildWarnings(highSodium).some(w => w.includes('Natrium')));
+check(buildWarnings(highSodium).some(w => w.includes('Natrium')), 'natrium tinggi memicu warning');
 
 // Semua di bawah ambang -> tidak ada warning.
 const lowEverything = computeAlgPercent({ calories: 100, protein: 1, fat: 1, saturatedFat: 1, carbs: 10, sugar: 1, sodium: 50 });
-assert.deepEqual(buildWarnings(lowEverything), []);
+checkEqual(buildWarnings(lowEverything), [], 'semua di bawah ambang = tanpa warning');
 
 // scaleServing mengalikan tiap field numerik.
-assert.deepEqual(scaleServing({ calories: 100, protein: 2 }, 3), { calories: 300, protein: 6 });
+checkEqual(scaleServing({ calories: 100, protein: 2 }, 3), { calories: 300, protein: 6 }, 'scaleServing mengalikan tiap field');
 // servingsPerPack tidak valid (0, undefined) -> null, bukan dikalikan 0.
-assert.equal(scaleServing({ calories: 100 }, 0), null);
-assert.equal(scaleServing({ calories: 100 }, undefined), null);
+checkEqual(scaleServing({ calories: 100 }, 0), null, 'servingsPerPack 0 -> null');
+checkEqual(scaleServing({ calories: 100 }, undefined), null, 'servingsPerPack undefined -> null');
 
 console.log('nutrition_insight.test.ts OK');
 ```
