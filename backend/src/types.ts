@@ -6,6 +6,8 @@ export interface Env {
   VAPID_SUBJECT: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
+  COCOCLOUD_API_KEY?: string;
+  COCOCLOUD_CERT_ID?: string;
 }
 
 export interface JWTPayload {
