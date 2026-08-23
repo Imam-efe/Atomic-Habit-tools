@@ -79,7 +79,7 @@ const OVERLAYS = [
   { name: 'Pencarian Global', open: 'Cari apa saja', placeholder: 'Cari transaksi', type: 'beras' },
   // `then` drives the parse so the editable proposal card is on screen — the
   // empty state alone would leave most of this overlay's text unaudited.
-  { name: 'Catat Cepat', open: 'Catat cepat', placeholder: 'beli kopi', type: 'beli kopi 25rb', then: 'Baca' },
+  { name: 'Catat Cepat', open: 'Catat cepat', placeholder: 'beli kopi', type: 'meeting jam 3 sore besok', then: 'Baca' },
 ];
 
 (async () => {

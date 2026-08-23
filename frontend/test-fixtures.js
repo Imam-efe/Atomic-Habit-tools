@@ -190,12 +190,15 @@ const FIXTURES = {
   },
   // Quick-add proposal card. An expense keeps the richest layout on screen:
   // amount, category select and note are all editable before saving.
+  // Calendar intent — the newest QuickAdd branch, so this is the one worth
+  // auditing this pass; expense/habit/inventory render the same shared
+  // tokens and were unchanged and already proven passing.
   '/api/quickadd/parse': {
-    intent: 'expense',
-    text: 'beli kopi 25rb',
-    entry: {
-      type: 'expense', amount: 25000, category: 'Makanan & Minuman',
-      note: 'Kopi', date: TODAY, bank_account_id: 'b1', bank_name: 'BCA',
+    intent: 'calendar',
+    text: 'meeting jam 3 sore besok',
+    event: {
+      title: 'Meeting', note: null, kind: 'event',
+      event_date: TODAY, event_time: '15:00',
     },
   },
   // Month-end projection card. `days_remaining` must stay above zero or the

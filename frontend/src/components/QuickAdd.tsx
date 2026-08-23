@@ -47,13 +47,28 @@ interface ItemProposal {
   unit: string;
 }
 
+interface EventProposal {
+  title: string;
+  note: string | null;
+  kind: 'task' | 'event' | 'reminder';
+  event_date: string;
+  event_time: string | null;
+}
+
 type ParseResponse =
   | { intent: 'expense' | 'income'; text: string; entry: EntryProposal }
   | { intent: 'habit'; text: string; habit: { id: string; name: string } }
   | { intent: 'inventory'; text: string; item: ItemProposal }
+  | { intent: 'calendar'; text: string; event: EventProposal }
   | { intent: 'unknown'; text: string };
 
-const EXAMPLES = ['beli kopi 25rb', 'gaji masuk 5jt', 'olahraga selesai', 'beli beras 5 kg'];
+const CALENDAR_KIND_LABELS: Record<EventProposal['kind'], string> = {
+  task: 'Tugas',
+  event: 'Acara',
+  reminder: 'Pengingat',
+};
+
+const EXAMPLES = ['beli kopi 25rb', 'gaji masuk 5jt', 'olahraga selesai', 'meeting jam 3 sore besok'];
 
 export function QuickAdd() {
   const { overlay, startListening, close } = useCommandStore();
@@ -71,6 +86,10 @@ export function QuickAdd() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [note, setNote] = useState('');
+  const [eventTitle, setEventTitle] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventTime, setEventTime] = useState('');
+  const [eventKind, setEventKind] = useState<EventProposal['kind']>('task');
 
   const inputRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<VoiceSession | null>(null);
@@ -85,6 +104,10 @@ export function QuickAdd() {
     setAmount('');
     setCategory('');
     setNote('');
+    setEventTitle('');
+    setEventDate('');
+    setEventTime('');
+    setEventKind('task');
   };
 
   const handleClose = () => {
@@ -155,6 +178,11 @@ export function QuickAdd() {
       } else if (res.intent === 'inventory') {
         setNote(res.item.name);
         setAmount(String(res.item.quantity));
+      } else if (res.intent === 'calendar') {
+        setEventTitle(res.event.title);
+        setEventDate(res.event.event_date);
+        setEventTime(res.event.event_time ?? '');
+        setEventKind(res.event.kind);
       }
     } catch {
       setError('Gagal memproses. Coba kalimat yang lebih sederhana atau catat manual.');
@@ -206,6 +234,23 @@ export function QuickAdd() {
             unit: result.item.unit,
           }),
         });
+      } else if (result.intent === 'calendar') {
+        if (!eventTitle.trim() || !eventDate) {
+          setError('Judul dan tanggal wajib diisi.');
+          setSaving(false);
+          return;
+        }
+        await apiFetch('/calendar', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: eventTitle.trim(),
+            kind: eventKind,
+            event_date: eventDate,
+            event_time: eventTime || undefined,
+          }),
+        });
+        notifyDataChanged('kalender');
+        setTab('kalender');
       }
       handleClose();
     } catch {
@@ -433,6 +478,64 @@ export function QuickAdd() {
                           className="w-full bg-transparent outline-none text-[15px]"
                           style={{ color: 'var(--text)' }}
                         />
+                      </>
+                    )}
+
+                    {result.intent === 'calendar' && (
+                      <>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          {(['task', 'event', 'reminder'] as const).map((k) => (
+                            <button
+                              key={k}
+                              onClick={() => setEventKind(k)}
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              style={{
+                                background: eventKind === k ? 'var(--accentFill)' : 'var(--surface)',
+                                color: eventKind === k ? '#fff' : 'var(--text2)',
+                                boxShadow: eventKind === k ? 'none' : 'var(--neu-inset)',
+                              }}
+                            >
+                              {CALENDAR_KIND_LABELS[k]}
+                            </button>
+                          ))}
+                        </div>
+
+                        <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
+                          Judul
+                        </label>
+                        <input
+                          value={eventTitle}
+                          onChange={(e) => setEventTitle(e.target.value)}
+                          className="w-full bg-transparent outline-none text-[15px] font-semibold mb-2"
+                          style={{ color: 'var(--text)' }}
+                        />
+
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
+                              Tanggal
+                            </label>
+                            <input
+                              type="date"
+                              value={eventDate}
+                              onChange={(e) => setEventDate(e.target.value)}
+                              className="w-full bg-transparent outline-none text-[14px]"
+                              style={{ color: 'var(--text)' }}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
+                              Jam (opsional)
+                            </label>
+                            <input
+                              type="time"
+                              value={eventTime}
+                              onChange={(e) => setEventTime(e.target.value)}
+                              className="w-full bg-transparent outline-none text-[14px]"
+                              style={{ color: 'var(--text)' }}
+                            />
+                          </div>
+                        </div>
                       </>
                     )}
                   </div>

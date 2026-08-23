@@ -16,7 +16,7 @@ quickadd.use('/*', requireAuth);
  * /budget, /habits/:id/toggle and /inventory endpoints.
  */
 
-type Intent = 'expense' | 'income' | 'habit' | 'inventory' | 'unknown';
+type Intent = 'expense' | 'income' | 'habit' | 'inventory' | 'calendar' | 'unknown';
 
 interface RawParse {
   intent?: string;
@@ -28,15 +28,21 @@ interface RawParse {
   quantity?: number;
   unit?: string;
   bank_hint?: string;
+  calendar_title?: string;
+  calendar_date?: string;
+  calendar_time?: string;
+  calendar_kind?: string;
 }
+
+const CALENDAR_KINDS = ['task', 'event', 'reminder'] as const;
 
 const PARSE_SCHEMA = {
   type: 'object',
   properties: {
     intent: {
       type: 'string',
-      enum: ['expense', 'income', 'habit', 'inventory', 'unknown'],
-      description: 'expense/income untuk transaksi uang, habit kalau menyelesaikan kebiasaan, inventory kalau menambah stok barang',
+      enum: ['expense', 'income', 'habit', 'inventory', 'calendar', 'unknown'],
+      description: 'expense/income untuk transaksi uang, habit kalau menyelesaikan kebiasaan, inventory kalau menambah stok barang, calendar kalau menjadwalkan sesuatu di masa depan',
     },
     amount: { type: 'number', description: 'Nominal rupiah, angka penuh tanpa titik. 25rb = 25000' },
     category: { type: 'string', description: 'Salah satu kategori dari daftar yang diberikan' },
@@ -46,6 +52,10 @@ const PARSE_SCHEMA = {
     quantity: { type: 'number', description: 'Jumlah barang, hanya untuk intent inventory' },
     unit: { type: 'string', description: 'Satuan barang, misal kg/pcs/liter' },
     bank_hint: { type: 'string', description: 'Nama rekening/bank yang disebutkan, kosongkan kalau tidak ada' },
+    calendar_title: { type: 'string', description: 'Judul acara/tugas/pengingat, hanya untuk intent calendar' },
+    calendar_date: { type: 'string', description: 'Tanggal dalam format YYYY-MM-DD, dihitung dari tanggal hari ini yang diberikan. Hanya untuk intent calendar' },
+    calendar_time: { type: 'string', description: 'Jam dalam format HH:MM 24 jam, kosongkan kalau tidak disebutkan. Hanya untuk intent calendar' },
+    calendar_kind: { type: 'string', enum: CALENDAR_KINDS, description: 'task untuk hal yang harus dikerjakan, event untuk acara, reminder untuk pengingat. Hanya untuk intent calendar' },
   },
   required: ['intent'],
 } as const;
@@ -169,6 +179,7 @@ quickadd.post('/parse', async (c) => {
               : 'Pengguna belum punya kebiasaan terdaftar.',
             banks.length > 0 ? `Rekening pengguna: ${banks.map(b => b.name).join(', ')}.` : '',
             'Nominal selalu angka penuh dalam rupiah: "25rb" jadi 25000, "1,5jt" jadi 1500000.',
+            `Hari ini tanggal ${jakartaToday()}. Untuk intent calendar, hitung calendar_date dari tanggal ini — "besok" berarti hari ini + 1 hari, "minggu depan" + 7 hari, dst.`,
             'Kalau kalimat tidak jelas maksudnya, pakai intent "unknown".',
           ].filter(Boolean).join(' '),
         },
@@ -184,8 +195,8 @@ quickadd.post('/parse', async (c) => {
 
   if (!parsed) return c.json({ intent: 'unknown' as Intent, text });
 
-  const intent: Intent = (['expense', 'income', 'habit', 'inventory'] as const).includes(
-    parsed.intent as Intent & ('expense' | 'income' | 'habit' | 'inventory')
+  const intent: Intent = (['expense', 'income', 'habit', 'inventory', 'calendar'] as const).includes(
+    parsed.intent as Intent & ('expense' | 'income' | 'habit' | 'inventory' | 'calendar')
   )
     ? (parsed.intent as Intent)
     : 'unknown';
@@ -204,6 +215,32 @@ quickadd.post('/parse', async (c) => {
         name: parsed.item_name ?? parsed.note ?? text,
         quantity: parsed.quantity && parsed.quantity > 0 ? parsed.quantity : 1,
         unit: parsed.unit ?? 'pcs',
+      },
+    });
+  }
+
+  if (intent === 'calendar') {
+    const title = parsed.calendar_title?.trim() || text;
+    const dateOk = parsed.calendar_date && /^\d{4}-\d{2}-\d{2}$/.test(parsed.calendar_date)
+      && parsed.calendar_date >= jakartaToday();
+    if (!dateOk) return c.json({ intent: 'unknown' as Intent, text });
+
+    const time = parsed.calendar_time && /^\d{2}:\d{2}$/.test(parsed.calendar_time)
+      ? parsed.calendar_time
+      : null;
+    const kind = CALENDAR_KINDS.includes(parsed.calendar_kind as (typeof CALENDAR_KINDS)[number])
+      ? parsed.calendar_kind!
+      : 'task';
+
+    return c.json({
+      intent,
+      text,
+      event: {
+        title,
+        note: parsed.note ?? null,
+        kind,
+        event_date: parsed.calendar_date,
+        event_time: time,
       },
     });
   }

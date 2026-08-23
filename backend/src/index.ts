@@ -34,7 +34,7 @@ import scheduledNotifications, {
 // queueNotificationEvent is declared locally below; importing it too shadowed
 // the local one and made the whole backend fail `tsc`.
 import { sendPushToUser } from './lib/push';
-import calendar from './routes/calendar';
+import calendar, { occursOn, type CalendarRow } from './routes/calendar';
 import holidays from './routes/holidays';
 import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
@@ -148,6 +148,73 @@ async function triggerReminders(env: Env) {
     });
 
     await sendPushToUser(env, row.user_id, { title, body, url: '/kebiasaan' });
+  }
+}
+
+/** "HH:MM" the given minutes before `eventTime`, or null if that crosses into the previous day. */
+function reminderClockTime(eventTime: string, minutesBefore: number): string | null {
+  const [h, m] = eventTime.split(':').map(Number);
+  const total = h * 60 + m - minutesBefore;
+  if (total < 0) return null;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// Push a calendar event's own reminder — remind_minutes_before was captured
+// by the form since the feature shipped, but nothing ever read it until now.
+// Fires once per (event, occurrence date): a repeating event reminds on
+// every occurrence, not just once ever, via calendar_reminder_sent.
+async function triggerCalendarReminders(env: Env) {
+  const now = new Date();
+  const jakartaTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const hhmm = `${String(jakartaTime.getUTCHours()).padStart(2, '0')}:${String(jakartaTime.getUTCMinutes()).padStart(2, '0')}`;
+  const today = jakartaToday();
+
+  const due = await env.DB.prepare(`
+    SELECT DISTINCT ce.id, ce.user_id, ce.title, ce.note, ce.event_date, ce.event_time,
+           ce.repeat_rule, ce.repeat_until, ce.remind_minutes_before
+    FROM calendar_events ce
+    JOIN push_subscriptions s ON ce.user_id = s.user_id
+    WHERE ce.remind_minutes_before IS NOT NULL
+      AND ce.event_time IS NOT NULL
+      AND ce.is_done = 0
+  `).all<{
+    id: string; user_id: string; title: string; note: string | null;
+    event_date: string; event_time: string; repeat_rule: string;
+    repeat_until: string | null; remind_minutes_before: number;
+  }>();
+
+  for (const row of due.results ?? []) {
+    // Simplification, deliberate: a reminder whose minutes-before crosses
+    // back into the previous day (e.g. 60 min before a 00:30 event) never
+    // fires. Same-day reminders are the overwhelming common case; matching
+    // "yesterday evening" against "today's occurrence" is a second lookup
+    // this doesn't attempt.
+    const fireAt = reminderClockTime(row.event_time, row.remind_minutes_before);
+    if (fireAt !== hhmm) continue;
+
+    const occursToday = row.repeat_rule === 'none'
+      ? row.event_date === today
+      : occursOn(row as unknown as CalendarRow, today);
+    if (!occursToday) continue;
+
+    // The unique (event_id, occurrence_date) key makes a repeat tick, or an
+    // overlapping run, a no-op rather than a double send.
+    try {
+      await env.DB.prepare(
+        'INSERT INTO calendar_reminder_sent (event_id, occurrence_date) VALUES (?1, ?2)'
+      ).bind(row.id, today).run();
+    } catch {
+      continue;
+    }
+
+    const title = '📅 Pengingat Kalender';
+    const body = row.note ? `${row.title} — ${row.note}` : row.title;
+
+    await queueNotificationEvent(env, row.user_id, 'calendar_reminder', title, body, {
+      eventId: row.id,
+      url: '/kalender',
+    });
+    await sendPushToUser(env, row.user_id, { title, body, url: '/kalender' });
   }
 }
 
@@ -434,6 +501,7 @@ const handler = {
   async scheduled(event: any, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(Promise.all([
       triggerReminders(env),
+      triggerCalendarReminders(env).catch((err) => console.error('Calendar reminder push failed', err)),
       processScheduledNotifications(env),
       processRecurringBudget(env),
       triggerExpiryAlerts(env),
