@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { compressImage } from '@/lib/image';
 import { NUTRITION_MACROS } from '@/constants/colors';
 
 interface FoodLog {
@@ -16,7 +17,41 @@ interface FoodLog {
   fiber: number;
   label: string | null;
   date: string;
+  source?: string | null;
+  barcode?: string | null;
 }
+
+interface FoodSearchResult {
+  name: string;
+  brand: string | null;
+  servingSize: string | null;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sodium: number;
+  sugar: number;
+  source: 'curated' | 'cache-off' | 'cache-ai' | 'off' | 'ai';
+}
+
+interface AlgPercent {
+  calories: number; protein: number; fat: number; saturatedFat: number;
+  carbs: number; sugar: number; sodium: number;
+}
+
+interface LabelScanResult {
+  perServing: AlgPercent & { fiber: number };
+  perPack: (AlgPercent & { fiber: number }) | null;
+  servingSize: string | null;
+  servingsPerPack: number | null;
+  insight: { percentAlg: AlgPercent; warnings: string[]; suggestion: string };
+}
+
+const SOURCE_BADGE: Record<string, string> = {
+  curated: 'Terkurasi', 'cache-off': 'Terverifikasi', off: 'Terverifikasi',
+  'cache-ai': 'Perkiraan AI', ai: 'Perkiraan AI', 'label-scan': 'Dari label',
+};
 
 interface NutritionData {
   foodLogs: FoodLog[];
@@ -62,6 +97,15 @@ export function Nutrition() {
   const [targetFib, setTargetFib] = useState('');
   const [savingTarget, setSavingTarget] = useState(false);
 
+  // Search & scan state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<FoodSearchResult[]>([]);
+  const [foodSource, setFoodSource] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+  const [labelScan, setLabelScan] = useState<LabelScanResult | null>(null);
+  const [labelChoice, setLabelChoice] = useState<'sajian' | 'kemasan'>('sajian');
+
   const load = async () => {
     setLoading(true);
     try {
@@ -79,6 +123,20 @@ export function Nutrition() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) { setSearchResults([]); return; }
+    const handle = setTimeout(async () => {
+      try {
+        const res = await apiFetch<{ results: FoodSearchResult[] }>(`/food/search?q=${encodeURIComponent(q)}`);
+        setSearchResults(res.results);
+      } catch {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
+
   const handleAddFood = async () => {
     if (!foodName.trim()) return;
     setSavingFood(true);
@@ -94,6 +152,7 @@ export function Nutrition() {
           fat: fat ? parseFloat(fat) : 0,
           fiber: fiber ? parseFloat(fiber) : 0,
           label: foodLabel,
+          source: foodSource ?? undefined,
         }),
       });
       load();
@@ -104,6 +163,7 @@ export function Nutrition() {
       setCarbs('');
       setFat('');
       setFiber('');
+      setFoodSource(null);
       setShowAddFood(false);
     } catch {}
     setSavingFood(false);
@@ -129,6 +189,83 @@ export function Nutrition() {
       }
     }
     await apiFetch(`/nutrition/food/${id}`, { method: 'DELETE' }).catch(() => load());
+  };
+
+  const applyFoodResult = (food: FoodSearchResult) => {
+    setFoodName(food.name);
+    setPortion(food.servingSize ?? '');
+    setCalories(String(Math.round(food.calories)));
+    setProtein(String(food.protein));
+    setCarbs(String(food.carbs));
+    setFat(String(food.fat));
+    setFiber(String(food.fiber));
+    setFoodSource(food.source);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowAddFood(true);
+  };
+
+  const handleBarcodeFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanError('');
+    setScanning(true);
+    try {
+      if (typeof BarcodeDetector === 'undefined') {
+        setScanError('Perangkat tidak mendukung scan barcode. Coba scan label sebagai gantinya.');
+        setScanning(false);
+        return;
+      }
+      const bitmap = await createImageBitmap(file);
+      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+      const codes = await detector.detect(bitmap);
+      if (!codes.length) {
+        setScanError('Barcode tidak terdeteksi. Coba scan label sebagai gantinya.');
+        setScanning(false);
+        return;
+      }
+      const res = await apiFetch<{ food: FoodSearchResult }>('/food/lookup', {
+        method: 'POST',
+        body: JSON.stringify({ barcode: codes[0].rawValue }),
+      });
+      applyFoodResult(res.food);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Gagal memindai barcode.');
+    }
+    setScanning(false);
+  };
+
+  const handleLabelFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanError('');
+    setScanning(true);
+    try {
+      const image = await compressImage(file);
+      const res = await apiFetch<LabelScanResult>('/food/scan-label', {
+        method: 'POST',
+        body: JSON.stringify({ image }),
+      });
+      setLabelScan(res);
+      setLabelChoice('sajian');
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Gagal membaca label.');
+    }
+    setScanning(false);
+  };
+
+  const applyLabelScan = () => {
+    if (!labelScan) return;
+    const chosen = labelChoice === 'kemasan' && labelScan.perPack ? labelScan.perPack : labelScan.perServing;
+    setPortion(labelChoice === 'kemasan' ? 'Seluruh kemasan' : (labelScan.servingSize ?? '1 sajian'));
+    setCalories(String(Math.round(chosen.calories)));
+    setProtein(String(chosen.protein));
+    setCarbs(String(chosen.carbs));
+    setFat(String(chosen.fat));
+    setFiber(String(chosen.fiber));
+    setFoodSource('label-scan');
+    setShowAddFood(true);
+    setLabelScan(null);
   };
 
   const handleSaveTarget = async () => {
@@ -318,6 +455,122 @@ export function Nutrition() {
                 className="px-4 py-2.5 rounded-xl text-sm font-semibold"
                 style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
                 onClick={() => setShowEditTarget(false)}
+              >
+                Batal
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Cari & Scan */}
+      <div className="rounded-[18px] p-4 mb-4 flex flex-col gap-3" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+        <input
+          className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+          style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
+          placeholder="Cari makanan... misal nasi goreng"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+        {searchResults.length > 0 && (
+          <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto">
+            {searchResults.map((r, i) => (
+              <button
+                key={i}
+                className="flex items-center justify-between px-3 py-2 rounded-xl text-left text-sm"
+                style={{ background: 'var(--bg)' }}
+                onClick={() => applyFoodResult(r)}
+              >
+                <span style={{ color: 'var(--text)' }}>{r.name}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md" style={{ background: 'var(--track)', color: 'var(--text2)' }}>
+                  {SOURCE_BADGE[r.source] ?? r.source}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <label
+            className="flex-1 text-center py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+            style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+          >
+            {scanning ? 'Memindai...' : '📷 Scan Label'}
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleLabelFile} disabled={scanning} />
+          </label>
+          <label
+            className="flex-1 text-center py-2.5 rounded-xl text-xs font-bold cursor-pointer"
+            style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+          >
+            {scanning ? 'Memindai...' : '▮▮ Scan Barcode'}
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBarcodeFile} disabled={scanning} />
+          </label>
+        </div>
+        {scanError && <p className="text-xs font-semibold text-[var(--neg)]">{scanError}</p>}
+      </div>
+
+      {/* Hasil Scan Label — pilih per sajian / per kemasan sebelum simpan */}
+      <AnimatePresence>
+        {labelScan && (
+          <motion.div
+            className="rounded-[18px] p-4 mb-4 flex flex-col gap-3"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={collapse}
+          >
+            <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>Hasil Scan Label</p>
+            <div className="flex gap-2">
+              <button
+                className="flex-1 py-2 rounded-xl text-xs font-bold"
+                style={{
+                  background: labelChoice === 'sajian' ? 'var(--accentFill)' : 'var(--bg)',
+                  color: labelChoice === 'sajian' ? 'white' : 'var(--text2)',
+                }}
+                onClick={() => setLabelChoice('sajian')}
+              >
+                Per Sajian ({labelScan.servingSize ?? '?'})
+              </button>
+              <button
+                className="flex-1 py-2 rounded-xl text-xs font-bold"
+                style={{
+                  background: labelChoice === 'kemasan' ? 'var(--accentFill)' : 'var(--bg)',
+                  color: labelChoice === 'kemasan' ? 'white' : 'var(--text2)',
+                  opacity: labelScan.perPack ? 1 : 0.4,
+                }}
+                onClick={() => labelScan.perPack && setLabelChoice('kemasan')}
+                disabled={!labelScan.perPack}
+              >
+                Seluruh Kemasan{labelScan.servingsPerPack ? ` (${labelScan.servingsPerPack}x)` : ''}
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text2)' }}>
+              {Math.round((labelChoice === 'kemasan' && labelScan.perPack ? labelScan.perPack : labelScan.perServing).calories)} kkal
+              {' · '}%AKG kalori {labelScan.insight.percentAlg.calories}%
+            </p>
+            {labelScan.insight.warnings.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {labelScan.insight.warnings.map((w, i) => (
+                  <p key={i} className="text-xs font-semibold" style={{ color: 'var(--warn)' }}>⚠ {w}</p>
+                ))}
+              </div>
+            )}
+            {labelScan.insight.suggestion && (
+              <p className="text-xs italic" style={{ color: 'var(--text3)' }}>{labelScan.insight.suggestion}</p>
+            )}
+            <div className="flex gap-2">
+              <motion.button
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
+                style={{ background: 'var(--accentFill)' }}
+                onClick={applyLabelScan}
+                whileTap={{ scale: 0.97 }}
+              >
+                Pakai Angka Ini
+              </motion.button>
+              <button
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold"
+                style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                onClick={() => setLabelScan(null)}
               >
                 Batal
               </button>
@@ -569,6 +822,7 @@ export function Nutrition() {
                         </p>
                         <p className="text-[11px] mt-0.5" style={{ color: 'var(--text3)' }}>
                           {food.portion} · {food.protein}g protein
+                          {food.source && SOURCE_BADGE[food.source] === 'Perkiraan AI' && ' · perkiraan AI'}
                         </p>
                       </div>
 
