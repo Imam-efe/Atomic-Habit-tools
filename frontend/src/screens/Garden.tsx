@@ -130,8 +130,16 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 
 const METHODS = ['benih', 'bibit', 'stek', 'umbi'];
 
+/**
+ * Hari ini menurut jam Jakarta, bukan UTC.
+ *
+ * Backend mencatat dan menghitung jadwal dengan jakartaToday(). Memakai
+ * toISOString() polos di sini membuat perawatan yang dicatat antara 00:00 dan
+ * 07:00 WIB tersimpan bertanggal kemarin — jadwal siram berikutnya lalu maju
+ * sehari, dan tanaman yang baru disiram tetap tampil telat.
+ */
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 }
 
 function formatDate(iso: string): string {

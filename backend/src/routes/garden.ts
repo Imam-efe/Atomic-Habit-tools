@@ -411,25 +411,45 @@ garden.put('/:id', async (c) => {
   };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
-  const status = PLANTING_STATUSES.includes(body.status as (typeof PLANTING_STATUSES)[number])
-    ? body.status!
-    : 'tumbuh';
+  // Hanya field yang benar-benar dikirim yang ditulis. Versi sebelumnya
+  // menulis kelimanya tanpa syarat, jadi mengubah nama panggilan saja ikut
+  // mengosongkan lokasi dan catatan — dan status apa pun (termasuk 'panen'
+  // atau 'selesai') diturunkan diam-diam kembali ke 'tumbuh'.
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  const set = (column: string, value: unknown) => {
+    binds.push(value);
+    sets.push(`${column} = ?${binds.length}`);
+  };
 
-  const res = await c.env.DB.prepare(`
-    UPDATE garden_plantings
-    SET nickname = ?1, location = ?2, quantity = ?3, status = ?4, note = ?5
-    WHERE id = ?6 AND user_id = ?7
-  `).bind(
-    body.nickname?.trim() || null,
-    body.location?.trim() || null,
-    body.quantity && body.quantity > 0 ? Math.round(body.quantity) : 1,
-    status,
-    body.note?.trim() || null,
-    id, user.sub
-  ).run();
+  if (body.nickname !== undefined) set('nickname', body.nickname.trim() || null);
+  if (body.location !== undefined) set('location', body.location.trim() || null);
+  if (body.note !== undefined) set('note', body.note.trim() || null);
+  if (typeof body.quantity === 'number' && body.quantity > 0) {
+    set('quantity', Math.round(body.quantity));
+  }
+  if (body.status !== undefined) {
+    if (!PLANTING_STATUSES.includes(body.status as (typeof PLANTING_STATUSES)[number])) {
+      return c.json({ error: `status harus salah satu dari: ${PLANTING_STATUSES.join(', ')}` }, 400);
+    }
+    set('status', body.status);
+  }
+
+  if (sets.length === 0) return c.json({ error: 'tidak ada yang diubah' }, 400);
+
+  binds.push(id, user.sub);
+  const res = await c.env.DB.prepare(
+    `UPDATE garden_plantings SET ${sets.join(', ')}
+     WHERE id = ?${binds.length - 1} AND user_id = ?${binds.length}`
+  ).bind(...binds).run();
 
   if (res.meta.changes === 0) return c.json({ error: 'tanaman tidak ditemukan' }, 404);
-  return c.json({ id, status });
+
+  const updated = await c.env.DB.prepare(
+    'SELECT status FROM garden_plantings WHERE id = ?1 AND user_id = ?2'
+  ).bind(id, user.sub).first<{ status: string }>();
+
+  return c.json({ id, status: updated?.status ?? null });
 });
 
 // DELETE /api/garden/:id
