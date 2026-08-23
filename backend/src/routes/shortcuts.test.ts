@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { validateDescription } from '../lib/shortcut-validation';
 import { generateShortcutPlist } from '../lib/shortcut-ai';
+import { getErrorResponse } from '../lib/shortcut-errors';
+import { createRateLimitChecker } from '../lib/shortcut-ratelimit';
+import { signShortcut } from '../lib/shortcut-signing';
 
 describe('validateDescription', () => {
   it('accepts valid 3-500 char description', () => {
