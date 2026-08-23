@@ -458,6 +458,7 @@ export function More() {
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas' },
             { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang' },
             { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal' },
+            { label: 'Pembuat Shortcut', id: 'shortcuts', desc: 'Generator iOS Shortcuts dari deskripsi natural' },
           ].map((item, i) => (
             <div key={item.id}>
               {i > 0 && (

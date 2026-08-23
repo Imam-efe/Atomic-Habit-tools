@@ -36,6 +36,7 @@ const DebtPlanner = lazy(() => import('@/screens/DebtPlanner').then(m => ({ defa
 const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
 const Achievements = lazy(() => import('@/screens/Achievements').then(m => ({ default: m.Achievements })));
 const Notes = lazy(() => import('@/screens/Notes').then(m => ({ default: m.Notes })));
+const Shortcuts = lazy(() => import('@/screens/Shortcuts'));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -163,6 +164,7 @@ function AppShell() {
       'notification-center': <NotificationCenter />,
       'achievements': <Achievements />,
       'notes': <Notes />,
+      'shortcuts': <Shortcuts />,
     }),
     [],
   );
