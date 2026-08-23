@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { press, springs } from '@/tokens/motion';
@@ -73,10 +74,38 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
 
 export function TabBar() {
   const { activeTab, setTab } = useUIStore();
+  const navRef = useRef<HTMLElement>(null);
+
+  /*
+   * Publish the bar's real height so screens can pad exactly past it.
+   *
+   * The height is not a constant worth hardcoding: env(safe-area-inset-bottom)
+   * adds to it on a device with a home indicator, and the icon/label block
+   * grows again when the user scales text up. Measuring means .pb-tab-safe is
+   * right on every device instead of tracking a copy of one device's number,
+   * which is how the screens ended up 12px short on an iPhone.
+   */
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const publish = () => {
+      document.documentElement.style.setProperty('--tab-bar-height', `${nav.offsetHeight}px`);
+    };
+    publish();
+
+    // ResizeObserver is unavailable in some older WebViews; the CSS fallback in
+    // index.css already covers that case, so the measurement is best-effort.
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <nav
-      className="tab-bar-layer fixed bottom-0 left-0 right-0 z-50 flex items-end justify-around px-2"
+      ref={navRef}
+      className="tab-bar-layer fixed bottom-0 left-0 right-0 flex items-end justify-around px-2"
       style={{
         background: 'var(--blur)',
         // 22px cost noticeably more than it showed. The backdrop is re-sampled

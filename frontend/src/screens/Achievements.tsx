@@ -34,7 +34,7 @@ export function Achievements() {
   }, []);
 
   return (
-    <div className="min-h-screen px-5 pt-14 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-14 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       <div className="flex items-center gap-3 mb-6">
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center"

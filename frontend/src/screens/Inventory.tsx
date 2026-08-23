@@ -265,7 +265,7 @@ export function Inventory() {
   });
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <button
@@ -450,7 +450,7 @@ export function Inventory() {
       <AnimatePresence>
         {buyingItem && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-sheet flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

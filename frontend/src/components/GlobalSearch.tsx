@@ -120,7 +120,7 @@ export function GlobalSearch() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-16"
+          className="fixed inset-0 z-command flex items-start justify-center px-4 pt-16"
           style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)' }}
           onClick={close}
         >

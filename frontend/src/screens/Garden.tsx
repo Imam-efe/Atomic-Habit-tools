@@ -422,7 +422,7 @@ export function Garden() {
   const today = data?.today ?? todayISO();
 
   return (
-    <div className="min-h-screen px-5 pt-14 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-14 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <motion.button
@@ -829,7 +829,7 @@ export function Garden() {
       <AnimatePresence>
         {openPlant && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-sheet flex items-end justify-center bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setOpenPlant(null)}
           >
@@ -937,7 +937,7 @@ export function Garden() {
       <AnimatePresence>
         {plantingFor && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-sheet flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
             <motion.div
@@ -1093,7 +1093,7 @@ function DiagnosePanel(props: {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-sheet flex items-end justify-center bg-black/60 backdrop-blur-sm"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onClose}
     >

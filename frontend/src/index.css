@@ -198,6 +198,61 @@ textarea::placeholder {
   transform: translateZ(0);
   backface-visibility: hidden;
   isolation: isolate;
+  z-index: var(--z-tab-bar);
+}
+
+/* ---------------------------------------------------------------------------
+ * Layering and tab clearance
+ *
+ * The tab bar is fixed over every screen, so two things have to hold: nothing
+ * a screen renders may be painted *under* it, and no screen may end its
+ * content *behind* it.
+ *
+ * Both used to be hand-maintained per file and both drifted. Modal sheets were
+ * written at z-40 and z-50 against a z-50 bar — the z-40 ones lost outright,
+ * and the z-50 ones lost the tie because App.tsx renders TabBar after the
+ * screens, so the bar painted over an open sheet's own controls. The named
+ * scale below removes the guesswork: a sheet is always above the bar, and the
+ * root command overlays are always above a sheet.
+ * ------------------------------------------------------------------------- */
+:root {
+  --z-tab-bar: 50;
+  --z-sheet: 60;
+  --z-command: 70;
+
+  /*
+   * Overwritten by TabBar with its measured height on mount. This fallback only
+   * has to survive first paint, but it still tracks the safe-area inset so it
+   * is never an underestimate on a device with a home indicator.
+   */
+  --tab-bar-height: calc(90px + env(safe-area-inset-bottom, 0px));
+}
+
+.z-sheet {
+  z-index: var(--z-sheet);
+}
+
+.z-command {
+  z-index: var(--z-command);
+}
+
+/*
+ * Bottom padding that clears the tab bar exactly.
+ *
+ * The bar is not a fixed 90px: it grows by env(safe-area-inset-bottom) on a
+ * device with a home indicator, and again when the user scales text up. The
+ * screens previously padded a flat pb-28 (112px), which happened to clear a
+ * 90px bar on a desktop viewport and was 12px short on an iPhone — so the last
+ * row of every screen sat under the blur. Tracking the measured height keeps
+ * the gap correct on both instead of encoding one device's number.
+ */
+.pb-tab-safe {
+  padding-bottom: calc(var(--tab-bar-height) + 1.25rem);
+}
+
+/* For sheets that now sit above the bar: clear the home indicator, nothing more. */
+.pb-safe {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* ---------------------------------------------------------------------------
@@ -224,8 +279,24 @@ textarea::placeholder {
  * is a single style toggle. The compositor runs opacity/transform off the
  * main thread even while React is busy.
  */
+/*
+ * `backwards`, not `both`, and the distinction matters well beyond this
+ * animation.
+ *
+ * An element an animation still affects creates a stacking context. With
+ * `both` the forwards fill never stops applying, so every screen stayed a
+ * stacking context for its whole life — and a modal sheet rendered inside one
+ * is composited at the screen's level no matter what z-index it carries. That
+ * is why an open sheet was painted over by the tab bar even after the sheets
+ * were raised above it: the number was never being compared against the bar's.
+ *
+ * The forwards fill bought nothing here, because this animation's `to` state
+ * (opacity 1, transform none) is already the element's resting state. Dropping
+ * to `backwards` leaves the entrance identical and lets the stacking context
+ * end with the animation.
+ */
 .screen-enter {
-  animation: fyScreen 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fyScreen 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* Card entrance — the shadow grows in, so the card appears to rise. */

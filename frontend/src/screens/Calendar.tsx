@@ -236,7 +236,7 @@ export function Calendar() {
   const monthDoneCount = events.filter((e) => e.kind === 'task' && e.is_done).length;
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>
           Kalender

@@ -197,7 +197,7 @@ export function Projects() {
   };
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header / Back button */}
       <div className="flex items-center justify-between mb-4">
         <button
