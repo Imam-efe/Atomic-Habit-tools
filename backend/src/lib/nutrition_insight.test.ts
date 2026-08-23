@@ -33,4 +33,12 @@ checkEqual(scaleServing({ calories: 100, protein: 2 }, 3), { calories: 300, prot
 checkEqual(scaleServing({ calories: 100 }, 0), null, 'servingsPerPack 0 -> null');
 checkEqual(scaleServing({ calories: 100 }, undefined), null, 'servingsPerPack undefined -> null');
 
+// Tepat di ambang (20%) -> TIDAK warning (bukti >, bukan >=).
+const atThreshold = computeAlgPercent({ calories: 0, protein: 0, fat: 0, saturatedFat: 0, carbs: 0, sugar: 0, sodium: 300 }); // 300/1500*100 = 20
+checkEqual(buildWarnings(atThreshold), [], 'tepat 20% ALG tidak memicu warning');
+
+// Sedikit di atas ambang (21%) -> warning muncul.
+const justOverThreshold = computeAlgPercent({ calories: 0, protein: 0, fat: 0, saturatedFat: 0, carbs: 0, sugar: 0, sodium: 315 }); // 315/1500*100 = 21
+check(buildWarnings(justOverThreshold).some(w => w.includes('Natrium')), '21% ALG memicu warning');
+
 console.log('nutrition_insight.test.ts OK');
