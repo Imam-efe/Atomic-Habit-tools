@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { compressImage } from '@/lib/image';
 import { useUIStore } from '@/stores/uiStore';
 
 interface Plant {
@@ -155,32 +156,6 @@ function relativeLabel(iso: string, today: string): string {
   if (diff === 1) return 'besok';
   if (diff > 1) return `${diff} hari lagi`;
   return `telat ${Math.abs(diff)} hari`;
-}
-
-/** Kecilkan foto sebelum dikirim — model vision tidak butuh resolusi penuh. */
-function compressImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('gagal membaca file'));
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('gagal memuat gambar'));
-      img.onload = () => {
-        const max = 1200;
-        let { width, height } = img;
-        if (width > height && width > max) { height *= max / width; width = max; }
-        else if (height >= width && height > max) { width *= max / height; height = max; }
-
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 export function Garden() {
