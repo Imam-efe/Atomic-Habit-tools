@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, lazy } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -85,8 +85,9 @@ function TabPane({
 const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'goals', 'uang', 'lainnya']);
 
 function AppShell() {
-  const { activeTab, subScreen, goBack, setTab } = useUIStore();
+  const { activeTab, subScreen, goBack, setTab, setSubScreen } = useUIStore();
   const isOnline = useOnline();
+  const location = useLocation();
 
   // Lands a Home Screen shortcut (manifest.json `shortcuts`) on its target tab.
   // Runs once on mount; the param is stripped right after so back/refresh don't replay it.
@@ -98,6 +99,14 @@ function AppShell() {
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
+
+  // Handle URL-based navigation to sub-screens (e.g., /shortcuts)
+  useEffect(() => {
+    const pathname = location.pathname;
+    if (pathname === '/shortcuts') {
+      setSubScreen('shortcuts');
+    }
+  }, [location.pathname, setSubScreen]);
 
   useEffect(() => {
     let startX = 0;

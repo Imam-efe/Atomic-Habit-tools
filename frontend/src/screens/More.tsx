@@ -443,22 +443,22 @@ export function More() {
           style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
         >
           {[
-            { label: 'Projects', id: 'projects', desc: 'Kelola tugas & project terkait goal' },
-            { label: 'Aktivitas', id: 'activity', desc: 'Pelacakan waktu & alokasi harian' },
-            { label: 'Nutrisi', id: 'nutrition', desc: 'Log makanan & hitung kkal / protein' },
-            { label: 'Kalender Haid', id: 'menstrual', desc: 'Pelacakan menstruasi & masa subur' },
-            { label: 'Stok & Inventaris', id: 'inventory', desc: 'Manajemen stok makanan & produk' },
-            { label: 'Jadwal Anak', id: 'kids-schedule', desc: 'Jadwal pelajaran, rutinitas & aktivitas anak' },
-            { label: 'Laporan Keuangan', id: 'financial-report', desc: 'Rekap Laba Rugi, Neraca, & Utang' },
-            { label: 'Review Mingguan', id: 'weekly-review', desc: 'Refleksi kebiasaan & penyesuaian mingguan' },
-            { label: 'Rekap Bulanan', id: 'monthly-review', desc: 'Narasi AI bulanan: kebiasaan, keuangan & identitas' },
-            { label: 'Kebun', id: 'garden', desc: 'Kebun sayur & buah: jadwal siram, pupuk, panen & diagnosis AI' },
-            { label: 'Heatmap Kebiasaan', id: 'habit-heatmap', desc: 'Visualisasi 52 minggu konsistensi kebiasaan' },
-            { label: 'Pelunasan Utang', id: 'debt-planner', desc: 'Kalkulator snowball & avalanche payoff' },
-            { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas' },
-            { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang' },
-            { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal' },
-            { label: 'Pembuat Shortcut', id: 'shortcuts', desc: 'Generator iOS Shortcuts dari deskripsi natural' },
+            { label: 'Projects', id: 'projects', desc: 'Kelola tugas & project terkait goal', path: null },
+            { label: 'Aktivitas', id: 'activity', desc: 'Pelacakan waktu & alokasi harian', path: null },
+            { label: 'Nutrisi', id: 'nutrition', desc: 'Log makanan & hitung kkal / protein', path: null },
+            { label: 'Kalender Haid', id: 'menstrual', desc: 'Pelacakan menstruasi & masa subur', path: null },
+            { label: 'Stok & Inventaris', id: 'inventory', desc: 'Manajemen stok makanan & produk', path: null },
+            { label: 'Jadwal Anak', id: 'kids-schedule', desc: 'Jadwal pelajaran, rutinitas & aktivitas anak', path: null },
+            { label: 'Laporan Keuangan', id: 'financial-report', desc: 'Rekap Laba Rugi, Neraca, & Utang', path: null },
+            { label: 'Review Mingguan', id: 'weekly-review', desc: 'Refleksi kebiasaan & penyesuaian mingguan', path: null },
+            { label: 'Rekap Bulanan', id: 'monthly-review', desc: 'Narasi AI bulanan: kebiasaan, keuangan & identitas', path: null },
+            { label: 'Kebun', id: 'garden', desc: 'Kebun sayur & buah: jadwal siram, pupuk, panen & diagnosis AI', path: null },
+            { label: 'Heatmap Kebiasaan', id: 'habit-heatmap', desc: 'Visualisasi 52 minggu konsistensi kebiasaan', path: null },
+            { label: 'Pelunasan Utang', id: 'debt-planner', desc: 'Kalkulator snowball & avalanche payoff', path: null },
+            { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas', path: null },
+            { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang', path: null },
+            { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal', path: null },
+            { label: 'Pembuat Shortcut', id: 'shortcuts', desc: 'Generator iOS Shortcuts dari deskripsi natural', path: '/shortcuts' },
           ].map((item, i) => (
             <div key={item.id}>
               {i > 0 && (
@@ -466,7 +466,7 @@ export function More() {
               )}
               <motion.button
                 className="w-full flex items-center justify-between px-4 py-3.5 text-left"
-                onClick={() => setSubScreen(item.id)}
+                onClick={() => item.path ? navigate(item.path) : setSubScreen(item.id)}
                 whileTap={{ scale: 0.98 }}
                 transition={springs.snappy}
               >
