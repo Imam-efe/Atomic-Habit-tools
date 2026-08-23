@@ -95,7 +95,7 @@ export function HabitHeatmap() {
 
   return (
     <div
-      className="min-h-screen px-5 pt-14 pb-28"
+      className="min-h-screen px-5 pt-14 pb-tab-safe"
       style={{ background: 'var(--bg)' }}
     >
       <div className="flex items-center gap-3 mb-6">

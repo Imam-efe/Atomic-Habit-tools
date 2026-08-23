@@ -9,6 +9,17 @@ monthlyReview.use('/*', requireAuth);
 
 const MONTH_NAMES = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
+/**
+ * `?month=` datang mentah dari URL. Tanpa cek ini, "abc" melewati
+ * split('-').map(Number) jadi NaN dan menular ke seluruh perhitungan:
+ * label terbaca "undefined NaN" dan setiap angka konsistensi jadi null.
+ */
+function isMonth(s: unknown): s is string {
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}$/.test(s)) return false;
+  const m = Number(s.slice(5, 7));
+  return m >= 1 && m <= 12;
+}
+
 function monthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   return `${MONTH_NAMES[m - 1]} ${y}`;
@@ -104,7 +115,11 @@ async function computeMonthStats(db: D1Database, userId: string, month: string):
 // GET /api/monthly-review?month=YYYY-MM (defaults to current month)
 monthlyReview.get('/', async (c) => {
   const user = c.get('user');
-  const month = c.req.query('month') || jakartaToday().slice(0, 7);
+  const requested = c.req.query('month');
+  if (requested !== undefined && !isMonth(requested)) {
+    return c.json({ error: 'month harus format YYYY-MM' }, 400);
+  }
+  const month = requested || jakartaToday().slice(0, 7);
 
   const [stats, saved] = await Promise.all([
     computeMonthStats(c.env.DB, user.sub, month),
@@ -128,6 +143,9 @@ monthlyReview.get('/list', async (c) => {
 monthlyReview.post('/generate', async (c) => {
   const user = c.get('user');
   const body = await c.req.json<{ month?: string }>().catch(() => null);
+  if (body?.month !== undefined && !isMonth(body.month)) {
+    return c.json({ error: 'month harus format YYYY-MM' }, 400);
+  }
   const month = body?.month || jakartaToday().slice(0, 7);
 
   const stats = await computeMonthStats(c.env.DB, user.sub, month);

@@ -17,6 +17,30 @@ interface NoteRow {
   updated_at: number;
 }
 
+/**
+ * Turunkan id tautan yang bukan milik pengguna jadi null.
+ *
+ * Foreign key di migrasi hanya memastikan baris itu ADA, bukan bahwa ia milik
+ * pengguna yang sama — tanpa cek ini sebuah catatan bisa menyimpan id habit
+ * atau goal orang lain, dan namanya ikut terbaca saat catatan ditampilkan.
+ */
+async function ownedLinks(
+  db: D1Database,
+  userId: string,
+  habitId: string | undefined,
+  goalId: string | undefined
+): Promise<{ habitId: string | null; goalId: string | null }> {
+  const [habit, goal] = await Promise.all([
+    habitId
+      ? db.prepare('SELECT id FROM habits WHERE id = ?1 AND user_id = ?2').bind(habitId, userId).first<{ id: string }>()
+      : Promise.resolve(null),
+    goalId
+      ? db.prepare('SELECT id FROM goals WHERE id = ?1 AND user_id = ?2').bind(goalId, userId).first<{ id: string }>()
+      : Promise.resolve(null),
+  ]);
+  return { habitId: habit?.id ?? null, goalId: goal?.id ?? null };
+}
+
 // GET /api/notes — newest first
 notes.get('/', async (c) => {
   const user = c.get('user');
@@ -24,8 +48,8 @@ notes.get('/', async (c) => {
     `SELECT n.id, n.body, n.summary, n.linked_habit_id, n.linked_goal_id, n.created_at, n.updated_at,
             h.name as habit_name, g.identity_statement as goal_statement
      FROM notes n
-     LEFT JOIN habits h ON h.id = n.linked_habit_id
-     LEFT JOIN goals g ON g.id = n.linked_goal_id
+     LEFT JOIN habits h ON h.id = n.linked_habit_id AND h.user_id = ?1
+     LEFT JOIN goals g ON g.id = n.linked_goal_id AND g.user_id = ?1
      WHERE n.user_id = ?1
      ORDER BY n.created_at DESC`
   ).bind(user.sub).all<NoteRow & { habit_name: string | null; goal_statement: string | null }>();
@@ -55,15 +79,16 @@ notes.post('/', async (c) => {
   const id = nanoid();
   const now = Math.floor(Date.now() / 1000);
   const text = body.body!.trim();
+  const links = await ownedLinks(c.env.DB, user.sub, body.linkedHabitId, body.linkedGoalId);
 
   await c.env.DB.prepare(
     `INSERT INTO notes (id, user_id, body, linked_habit_id, linked_goal_id, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`
-  ).bind(id, user.sub, text, body.linkedHabitId || null, body.linkedGoalId || null, now).run();
+  ).bind(id, user.sub, text, links.habitId, links.goalId, now).run();
 
   return c.json({
     id, body: text, summary: null,
-    linkedHabitId: body.linkedHabitId || null, linkedGoalId: body.linkedGoalId || null,
+    linkedHabitId: links.habitId, linkedGoalId: links.goalId,
     createdAt: now, updatedAt: now,
   }, 201);
 });
@@ -80,17 +105,18 @@ notes.put('/:id', async (c) => {
 
   const now = Math.floor(Date.now() / 1000);
   const text = body.body!.trim();
+  const links = await ownedLinks(c.env.DB, user.sub, body.linkedHabitId, body.linkedGoalId);
 
   // Editing the body invalidates any prior AI summary — it would silently
   // describe text that no longer exists otherwise.
   const res = await c.env.DB.prepare(
     `UPDATE notes SET body = ?1, summary = NULL, linked_habit_id = ?2, linked_goal_id = ?3, updated_at = ?4
      WHERE id = ?5 AND user_id = ?6`
-  ).bind(text, body.linkedHabitId || null, body.linkedGoalId || null, now, id, user.sub).run();
+  ).bind(text, links.habitId, links.goalId, now, id, user.sub).run();
 
   if (res.meta.changes === 0) return c.json({ error: 'note not found' }, 404);
 
-  return c.json({ id, body: text, summary: null, linkedHabitId: body.linkedHabitId || null, linkedGoalId: body.linkedGoalId || null, updatedAt: now });
+  return c.json({ id, body: text, summary: null, linkedHabitId: links.habitId, linkedGoalId: links.goalId, updatedAt: now });
 });
 
 // DELETE /api/notes/:id
@@ -116,7 +142,11 @@ notes.post('/:id/summarize', async (c) => {
   ).bind(id, user.sub).first<{ body: string }>();
   if (!note) return c.json({ error: 'note not found' }, 404);
 
+  // Sudah jadi ringkasannya sendiri — tetap disimpan, supaya tombol "Ringkas"
+  // tidak muncul lagi setelah halaman dimuat ulang.
   if (note.body.length <= 120) {
+    await c.env.DB.prepare('UPDATE notes SET summary = ?1 WHERE id = ?2 AND user_id = ?3')
+      .bind(note.body, id, user.sub).run();
     return c.json({ summary: note.body });
   }
 

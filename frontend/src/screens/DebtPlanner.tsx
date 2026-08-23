@@ -151,7 +151,7 @@ export function DebtPlanner() {
 
   return (
     <div
-      className="min-h-screen px-5 pt-14 pb-28"
+      className="min-h-screen px-5 pt-14 pb-tab-safe"
       style={{ background: 'var(--bg)' }}
     >
       {/* Header */}
@@ -333,7 +333,7 @@ export function DebtPlanner() {
         {payForm && (
           <>
             <motion.div
-              className="fixed inset-0 z-40"
+              className="fixed inset-0 z-sheet"
               style={{ background: 'rgba(0,0,0,0.5)' }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -341,7 +341,7 @@ export function DebtPlanner() {
               onClick={() => setPayForm(null)}
             />
             <motion.div
-              className="fixed left-0 right-0 bottom-0 z-50 max-w-[430px] mx-auto rounded-t-[28px] px-5 pt-5 pb-28"
+              className="fixed left-0 right-0 bottom-0 z-sheet max-w-[430px] mx-auto rounded-t-[28px] px-5 pt-5 pb-safe"
               style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}

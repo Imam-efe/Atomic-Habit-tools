@@ -704,7 +704,7 @@ export function Budget() {
   const cats = type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>
@@ -751,7 +751,7 @@ export function Budget() {
       <AnimatePresence>
         {showOcrModal && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/70 backdrop-blur-md"
+            className="fixed inset-0 z-sheet flex items-center justify-center p-5 bg-black/70 backdrop-blur-md"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1477,7 +1477,7 @@ export function Budget() {
 
           return (
             <motion.div
-              className="fixed inset-0 z-50 max-w-[430px] mx-auto flex flex-col"
+              className="fixed inset-0 z-sheet max-w-[430px] mx-auto flex flex-col"
               style={{ background: 'var(--bg)' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
@@ -1557,7 +1557,7 @@ export function Budget() {
         {viewEntry && (
           <>
             <motion.div
-              className="fixed inset-0 z-40"
+              className="fixed inset-0 z-sheet"
               style={{ background: 'rgba(0,0,0,0.5)' }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1565,7 +1565,7 @@ export function Budget() {
               onClick={() => { setViewEntry(null); setEditMode(false); }}
             />
             <motion.div
-              className="fixed bottom-0 left-0 right-0 z-50 max-w-[430px] mx-auto rounded-t-[24px] p-5 pb-28"
+              className="fixed bottom-0 left-0 right-0 z-sheet max-w-[430px] mx-auto rounded-t-[24px] p-5 pb-safe"
               style={{ background: 'var(--surface)', boxShadow: 'var(--neu-sheet)', maxHeight: '88vh', overflowY: 'auto' }}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}

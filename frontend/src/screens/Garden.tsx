@@ -130,8 +130,16 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 
 const METHODS = ['benih', 'bibit', 'stek', 'umbi'];
 
+/**
+ * Hari ini menurut jam Jakarta, bukan UTC.
+ *
+ * Backend mencatat dan menghitung jadwal dengan jakartaToday(). Memakai
+ * toISOString() polos di sini membuat perawatan yang dicatat antara 00:00 dan
+ * 07:00 WIB tersimpan bertanggal kemarin — jadwal siram berikutnya lalu maju
+ * sehari, dan tanaman yang baru disiram tetap tampil telat.
+ */
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 }
 
 function formatDate(iso: string): string {
@@ -414,7 +422,7 @@ export function Garden() {
   const today = data?.today ?? todayISO();
 
   return (
-    <div className="min-h-screen px-5 pt-14 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-14 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <motion.button
@@ -821,7 +829,7 @@ export function Garden() {
       <AnimatePresence>
         {openPlant && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-sheet flex items-end justify-center bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setOpenPlant(null)}
           >
@@ -929,7 +937,7 @@ export function Garden() {
       <AnimatePresence>
         {plantingFor && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-sheet flex items-center justify-center p-5 bg-black/60 backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
             <motion.div
@@ -1085,7 +1093,7 @@ function DiagnosePanel(props: {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-sheet flex items-end justify-center bg-black/60 backdrop-blur-sm"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onClose}
     >

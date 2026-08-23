@@ -305,7 +305,7 @@ export function More() {
   };
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       <h1
         className="text-3xl font-extrabold tracking-tight mb-6"
         style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}

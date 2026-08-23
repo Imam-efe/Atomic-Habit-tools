@@ -272,7 +272,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen px-5 pt-16 pb-28" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       <AnimatePresence>
         {identityFlash && (
           <motion.div
@@ -370,7 +370,7 @@ export function Dashboard() {
         <AnimatePresence>
           {showInsights && (
             <motion.div
-              className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-sheet flex items-end justify-center bg-black/60 backdrop-blur-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
