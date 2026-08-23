@@ -21,6 +21,7 @@ import financeReport from './routes/finance_report';
 import netWorth from './routes/net_worth';
 import weeklyReview, { getMondayOf } from './routes/weekly_review';
 import monthlyReview from './routes/monthly_review';
+import garden, { computeCareState, lastActions, resolvePlants, type PlantingRow } from './routes/garden';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
 import quickadd from './routes/quickadd';
@@ -89,6 +90,7 @@ app.route('/api/finance-report', financeReport);
 app.route('/api/net-worth', netWorth);
 app.route('/api/weekly-review', weeklyReview);
 app.route('/api/monthly-review', monthlyReview);
+app.route('/api/garden', garden);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
 app.route('/api/habit-stacks', habitStacks);
@@ -498,6 +500,91 @@ async function processStreakFreezes(env: Env) {
   await grantStreakFreezes(env.DB, jakartaToday());
 }
 
+// Pengingat perawatan kebun, satu push agregat per pengguna tiap pagi.
+//
+// Jadwalnya diturunkan dari log perawatan (computeCareState), bukan dari kolom
+// "next_water" yang disimpan — jadi mencatat siram lewat aplikasi langsung
+// menggeser pengingat besoknya tanpa ada state kedua yang bisa basi.
+// Dedup lewat garden_care_alert_sent (planting_id, alert_date): sekali
+// diingatkan per tanaman per hari, walau cron menyala tiap menit.
+async function triggerGardenCare(env: Env) {
+  const jakartaHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  if (jakartaHour !== 7) return;
+
+  const today = jakartaToday();
+
+  // Hanya pengguna yang punya push subscription — sisanya tidak ada gunanya dihitung.
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT g.user_id
+    FROM garden_plantings g
+    JOIN push_subscriptions s ON s.user_id = g.user_id
+    WHERE g.status IN ('tumbuh', 'panen')
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const [rows, lastMap] = await Promise.all([
+      env.DB.prepare(
+        `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+                planted_date, expected_harvest_date, status, note
+         FROM garden_plantings WHERE user_id = ?1 AND status IN ('tumbuh', 'panen')`
+      ).bind(userId).all<PlantingRow>(),
+      lastActions(env.DB, userId),
+    ]);
+
+    const plantings = rows.results ?? [];
+    if (plantings.length === 0) continue;
+
+    const plantMap = await resolvePlants(
+      env.DB,
+      [...new Set(plantings.map(p => p.plant_id).filter((id): id is string => !!id))]
+    );
+
+    const water: string[] = [];
+    const fertilize: string[] = [];
+    const harvest: string[] = [];
+    const touched: string[] = [];
+
+    for (const p of plantings) {
+      const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
+      const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
+      const label = p.nickname || plant?.name || p.custom_name || 'Tanaman';
+
+      const dueWater = care.nextWater !== null && care.nextWater <= today;
+      const dueFertilize = care.nextFertilize !== null && care.nextFertilize <= today;
+      if (!dueWater && !dueFertilize && !care.harvestReady) continue;
+
+      // Sudah diingatkan hari ini? INSERT gagal karena primary key, lalu dilewati.
+      try {
+        await env.DB.prepare(
+          'INSERT INTO garden_care_alert_sent (planting_id, alert_date) VALUES (?1, ?2)'
+        ).bind(p.id, today).run();
+      } catch {
+        continue;
+      }
+
+      if (dueWater) water.push(label);
+      if (dueFertilize) fertilize.push(label);
+      if (care.harvestReady) harvest.push(label);
+      touched.push(p.id);
+    }
+
+    if (touched.length === 0) continue;
+
+    const parts: string[] = [];
+    if (water.length) parts.push(`💧 Siram: ${water.join(', ')}`);
+    if (fertilize.length) parts.push(`🌿 Pupuk: ${fertilize.join(', ')}`);
+    if (harvest.length) parts.push(`🧺 Siap panen: ${harvest.join(', ')}`);
+
+    const title = harvest.length > 0 ? '🧺 Ada yang siap dipanen!' : '🌱 Kebun perlu dirawat';
+    const body = parts.join('\n');
+
+    await queueNotificationEvent(env, userId, 'garden_care', title, body, {
+      water, fertilize, harvest, url: '/lainnya',
+    });
+    await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -511,6 +598,7 @@ const handler = {
       triggerExpiryAlerts(env),
       triggerStreakAtRisk(env),
       triggerWeeklyRecap(env),
+      triggerGardenCare(env).catch((err) => console.error('Garden care push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       // Holiday feed. Sunday only — the decree changes once a year, so a daily
       // pull would be noise. A failure leaves the previous cache in place.
@@ -525,6 +613,10 @@ const handler = {
       env.DB.prepare(
         "DELETE FROM notification_deliveries WHERE fired_at < unixepoch() - 30 * 86400"
       ).run().catch((err) => console.error('Delivery history cleanup failed', err)),
+      // Dedup pengingat kebun hanya perlu berlaku untuk hari berjalan
+      env.DB.prepare(
+        "DELETE FROM garden_care_alert_sent WHERE sent_at < unixepoch() - 7 * 86400"
+      ).run().catch((err) => console.error('Garden alert cleanup failed', err)),
     ]));
   }
 };

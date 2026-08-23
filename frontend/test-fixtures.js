@@ -177,6 +177,92 @@ const FIXTURES = {
   '/api/monthly-review/list': [
     { month: '2026-07', monthLabel: 'Juli 2026', narrative: 'Bulan lalu aku mulai membangun rutinitas pagi dan berhasil menabung lebih banyak dari biasanya.' },
   ],
+  // Kebun. Bentuknya mengikuti GET /api/garden di backend/src/routes/garden.ts —
+  // `plantings` dan `summary` wajib ada, kalau tidak layarnya crash saat map().
+  '/api/garden': {
+    today: TODAY,
+    plantings: [
+      {
+        id: 'gp1', plantId: 'cabai-rawit', name: 'Cabai Rawit', emoji: '🌶️',
+        category: 'sayuran-buah', latinName: 'Capsicum frutescens',
+        nickname: 'Cabai pot teras', location: 'Teras depan', quantity: 3,
+        plantingMethod: 'bibit', plantedDate: '2026-06-20',
+        expectedHarvestDate: '2026-09-03', status: 'tumbuh', note: null,
+        care: {
+          lastWater: '2026-08-21', nextWater: '2026-08-23', waterOverdueDays: 0,
+          lastFertilize: '2026-08-10', nextFertilize: '2026-08-24', fertilizeOverdueDays: 0,
+          lastHarvest: null, nextHarvest: '2026-09-03', harvestReady: false,
+          ageDays: 64, growthPercent: 85,
+        },
+      },
+      {
+        id: 'gp2', plantId: 'kangkung', name: 'Kangkung', emoji: '🥬',
+        category: 'sayuran-daun', latinName: 'Ipomoea aquatica',
+        nickname: null, location: 'Kebun belakang', quantity: 12,
+        plantingMethod: 'benih', plantedDate: '2026-07-25',
+        expectedHarvestDate: '2026-08-19', status: 'tumbuh', note: 'Sebar rapat di bedeng kecil',
+        care: {
+          lastWater: '2026-08-20', nextWater: '2026-08-21', waterOverdueDays: 2,
+          lastFertilize: null, nextFertilize: '2026-08-08', fertilizeOverdueDays: 15,
+          lastHarvest: null, nextHarvest: '2026-08-19', harvestReady: true,
+          ageDays: 29, growthPercent: 100,
+        },
+      },
+    ],
+    summary: { total: 2, active: 2, needWater: 1, needFertilize: 1, readyToHarvest: 1 },
+  },
+  '/api/garden/schedule': {
+    today: TODAY,
+    horizonDays: 14,
+    overdue: [
+      { plantingId: 'gp2', name: 'Kangkung', emoji: '🥬', nickname: null, location: 'Kebun belakang', action: 'siram', dueDate: '2026-08-21', overdueDays: 2 },
+      { plantingId: 'gp2', name: 'Kangkung', emoji: '🥬', nickname: null, location: 'Kebun belakang', action: 'panen', dueDate: '2026-08-19', overdueDays: 4 },
+    ],
+    todayDue: [
+      { plantingId: 'gp1', name: 'Cabai Rawit', emoji: '🌶️', nickname: 'Cabai pot teras', location: 'Teras depan', action: 'siram', dueDate: TODAY, overdueDays: 0 },
+    ],
+    upcoming: [
+      { plantingId: 'gp1', name: 'Cabai Rawit', emoji: '🌶️', nickname: 'Cabai pot teras', location: 'Teras depan', action: 'pupuk', dueDate: '2026-08-24', overdueDays: 0 },
+    ],
+  },
+  '/api/garden/catalog': {
+    categories: [
+      { id: 'sayuran-daun', label: 'Sayuran Daun' },
+      { id: 'sayuran-buah', label: 'Sayuran Buah' },
+      { id: 'umbi', label: 'Umbi & Akar' },
+      { id: 'rempah', label: 'Rempah & Herbal' },
+      { id: 'buah', label: 'Buah' },
+    ],
+    total: 66,
+    plants: [
+      {
+        id: 'kangkung', name: 'Kangkung', latinName: 'Ipomoea aquatica',
+        category: 'sayuran-daun', emoji: '🥬', daysToHarvest: [25, 30],
+        repeatHarvest: true, harvestEveryDays: 14,
+        waterIntervalDays: 1, waterNote: 'Suka air. Media jangan sampai kering, siram pagi dan sore saat kemarau.',
+        fertilizeIntervalDays: 14, fertilizer: 'Pupuk kandang + urea tipis, atau POC daun',
+        sunlight: 'penuh', spacingCm: 10, potLiter: 5, difficulty: 'mudah',
+        season: 'Sepanjang tahun', altitude: 'rendah sampai menengah',
+        pests: ['ulat grayak', 'kutu daun'], companions: ['bayam', 'sawi'],
+        propagation: 'Sebar benih langsung, tidak perlu semai',
+        harvestNote: 'Potong 3–5 cm di atas pangkal supaya tumbuh tunas baru.',
+        tips: 'Paling cocok untuk pemula. Daun menguning biasanya kurang nitrogen, bukan kurang air.',
+      },
+      {
+        id: 'cabai-rawit', name: 'Cabai Rawit', latinName: 'Capsicum frutescens',
+        category: 'sayuran-buah', emoji: '🌶️', daysToHarvest: [75, 90],
+        repeatHarvest: true, harvestEveryDays: 7,
+        waterIntervalDays: 2, waterNote: 'Rutin tapi tidak becek. Genangan bikin busuk akar.',
+        fertilizeIntervalDays: 14, fertilizer: 'NPK seimbang, tinggi kalium saat berbuah',
+        sunlight: 'penuh', spacingCm: 50, potLiter: 10, difficulty: 'sedang',
+        season: 'Awal kemarau', altitude: 'rendah sampai tinggi',
+        pests: ['trips', 'lalat buah', 'antraknosa'], companions: ['kemangi', 'bawang merah'],
+        propagation: 'Semai 3–4 minggu, pindah tanam',
+        harvestNote: 'Petik dengan tangkainya. Panen rutin memicu buah baru.',
+        tips: 'Buang tunas air di bawah cabang Y pertama.',
+      },
+    ],
+  },
   '/api/projects': [{
     id: 'p1', name: 'Rumah', goalId: null, goalName: null, goalColor: null,
     tasks: [
