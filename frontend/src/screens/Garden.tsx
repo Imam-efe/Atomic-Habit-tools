@@ -114,6 +114,13 @@ interface CareLog {
   note: string | null;
 }
 
+interface Photo {
+  id: string;
+  image: string;
+  taken_date: string;
+  note: string | null;
+}
+
 interface Diagnosis {
   diagnosis: string;
   confidence: string;
@@ -216,6 +223,15 @@ export function Garden() {
   const [insight, setInsight] = useState<string>('');
   const [insightLoading, setInsightLoading] = useState(false);
 
+  // Jurnal foto — timeline pertumbuhan per tanaman.
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Tanya AI bebas dengan konteks tanaman yang sedang dibuka.
+  const [askQuestion, setAskQuestion] = useState('');
+  const [askAnswer, setAskAnswer] = useState('');
+  const [asking, setAsking] = useState(false);
+
   // Diagnosis. `diagnoseOpen` terpisah dari `diagnoseFor` karena panel ini
   // juga bisa dibuka tanpa tanaman tertentu (tombol 🔬 di header).
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
@@ -292,6 +308,17 @@ export function Garden() {
     }
   };
 
+  const loadPhotos = async (plantingId: string) => {
+    try {
+      const res = await apiFetch<{ photos: Photo[] }>(`/garden/${plantingId}/photos`);
+      // Timeline dibaca kiri-ke-kanan dari semai ke sekarang — kebalikan
+      // dari urutan endpoint (terbaru dulu) yang cocok untuk daftar riwayat.
+      setPhotos([...res.photos].reverse());
+    } catch {
+      setPhotos([]);
+    }
+  };
+
   const toggleDetail = (plantingId: string) => {
     if (openPlanting === plantingId) {
       setOpenPlanting(null);
@@ -299,7 +326,43 @@ export function Garden() {
     }
     setOpenPlanting(plantingId);
     setInsight('');
+    setAskQuestion('');
+    setAskAnswer('');
     loadCareLogs(plantingId);
+    loadPhotos(plantingId);
+  };
+
+  const handleAsk = async (plantingId: string) => {
+    const question = askQuestion.trim();
+    if (!question) return;
+    setAsking(true);
+    setAskAnswer('');
+    try {
+      const res = await apiFetch<{ answer: string }>(`/garden/${plantingId}/ask`, {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+      });
+      setAskAnswer(res.answer);
+    } catch {
+      setAskAnswer('Gagal menjawab. Coba lagi nanti.');
+    }
+    setAsking(false);
+  };
+
+  const handleAddJournalPhoto = async (plantingId: string, file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const image = await compressImage(file);
+      await apiFetch(`/garden/${plantingId}/photos`, {
+        method: 'POST',
+        body: JSON.stringify({ image, date: todayISO() }),
+      });
+      await loadPhotos(plantingId);
+    } catch {
+      // Diam saja — jurnal foto bersifat opsional, kegagalan tidak boleh
+      // mengganggu alur perawatan utama yang lebih penting.
+    }
+    setUploadingPhoto(false);
   };
 
   const handleInsight = async (plantingId: string) => {
@@ -661,6 +724,36 @@ export function Garden() {
                           </p>
                         </div>
 
+                        {/* Tanya AI bebas — konteksnya tanaman yang sama seperti Insight */}
+                        <div className="rounded-xl p-3" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>
+                            💬 Tanya soal tanaman ini
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              className="flex-1 px-2.5 py-2 rounded-lg text-[11px] outline-none"
+                              style={{ background: 'var(--surface)', color: 'var(--text)' }}
+                              placeholder="Contoh: kenapa daunnya menguning?"
+                              value={askQuestion}
+                              onChange={(e) => setAskQuestion(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAsk(p.id); }}
+                            />
+                            <button
+                              className="neu-cta px-3 py-2 rounded-lg text-[10px] font-bold text-white flex-shrink-0"
+                              style={{ background: 'var(--accentFill)', opacity: asking || !askQuestion.trim() ? 0.6 : 1 }}
+                              onClick={() => handleAsk(p.id)}
+                              disabled={asking || !askQuestion.trim()}
+                            >
+                              {asking ? '...' : 'Tanya'}
+                            </button>
+                          </div>
+                          {askAnswer && (
+                            <p className="text-[11px] leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
+                              {askAnswer}
+                            </p>
+                          )}
+                        </div>
+
                         {/* Riwayat perawatan */}
                         {careLogs.length > 0 && (
                           <div>
@@ -680,6 +773,59 @@ export function Garden() {
                             </div>
                           </div>
                         )}
+
+                        {/* Jurnal foto — timeline pertumbuhan */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: 'var(--text3)' }}>
+                              📷 Jurnal Foto
+                            </p>
+                            <label
+                              className="text-[10px] font-bold cursor-pointer"
+                              style={{ color: uploadingPhoto ? 'var(--text3)' : 'var(--accent)' }}
+                            >
+                              {uploadingPhoto ? 'Mengunggah...' : '+ Tambah'}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingPhoto}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleAddJournalPhoto(p.id, file);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
+                          {photos.length === 0 ? (
+                            <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+                              Belum ada foto. Rekam pertumbuhannya dari semai sampai panen.
+                            </p>
+                          ) : (
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                              {photos.map((photo) => {
+                                const dayNum = Math.round(
+                                  (new Date(`${photo.taken_date}T00:00:00`).getTime() -
+                                    new Date(`${p.plantedDate}T00:00:00`).getTime()) / 86400000
+                                );
+                                return (
+                                  <div key={photo.id} className="flex-shrink-0 flex flex-col items-center gap-1">
+                                    <img
+                                      src={photo.image}
+                                      alt={`Hari ke-${dayNum}`}
+                                      className="w-16 h-16 rounded-xl object-cover"
+                                      style={{ boxShadow: 'var(--neu-raised-sm)' }}
+                                    />
+                                    <span className="text-[9px]" style={{ color: 'var(--text3)' }}>
+                                      hari ke-{dayNum}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
 
                         <div className="flex gap-2">
                           <button

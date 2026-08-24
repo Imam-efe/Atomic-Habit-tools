@@ -990,4 +990,81 @@ garden.post('/:id/insight', async (c) => {
   return c.json({ plantingId, name, care, insight });
 });
 
+// POST /api/garden/:id/ask — tanya bebas dengan konteks tanaman ini (#20)
+//
+// /insight menulis satu paragraf yang sama tiap dipanggil. Ini beda: pertanyaan
+// pengguna sendiri, dijawab dengan konteks tanaman yang sama seperti /insight,
+// bukan jawaban generik yang bisa didapat dari mesin pencari mana pun.
+garden.post('/:id/ask', async (c) => {
+  const user = c.get('user');
+  const plantingId = c.req.param('id');
+  const today = jakartaToday();
+
+  const body = await c.req.json<{ question?: string }>().catch((): { question?: string } => ({}));
+  const question = body.question?.trim();
+  if (!question) return c.json({ error: 'question wajib diisi' }, 400);
+  if (question.length > 500) return c.json({ error: 'pertanyaan terlalu panjang, maksimal 500 karakter' }, 400);
+
+  const row = await c.env.DB.prepare(
+    `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+            planted_date, expected_harvest_date, status, note
+     FROM garden_plantings WHERE id = ?1 AND user_id = ?2`
+  ).bind(plantingId, user.sub).first<PlantingRow>();
+  if (!row) return c.json({ error: 'tanaman tidak ditemukan' }, 404);
+
+  const plant = row.plant_id ? (await resolvePlants(c.env.DB, [row.plant_id])).get(row.plant_id) : undefined;
+
+  const counts = await c.env.DB.prepare(`
+    SELECT action, COUNT(*) AS n, MAX(action_date) AS last_date
+    FROM garden_care_log WHERE planting_id = ?1 GROUP BY action
+  `).bind(plantingId).all<{ action: string; n: number; last_date: string }>();
+
+  const byAction = new Map((counts.results ?? []).map(r => [r.action, r]));
+  const care = computeCareState(
+    row,
+    plant,
+    {
+      siram: byAction.get('siram')?.last_date,
+      pupuk: byAction.get('pupuk')?.last_date,
+      panen: byAction.get('panen')?.last_date,
+    },
+    today
+  );
+
+  const name = plant?.name ?? row.custom_name ?? 'tanaman';
+  const context = [
+    `Tanaman: ${name}${plant?.latinName ? ` (${plant.latinName})` : ''}.`,
+    `Ditanam ${row.planted_date}, umur ${care.ageDays} hari, status ${row.status}.`,
+    row.location ? `Lokasi: ${row.location}.` : '',
+    plant ? `Anjuran katalog: siram tiap ${plant.waterIntervalDays} hari, pupuk tiap ${plant.fertilizeIntervalDays} hari, panen sekitar ${plant.daysToHarvest[0]}–${plant.daysToHarvest[1]} hari.` : '',
+    `Riwayat: disiram ${byAction.get('siram')?.n ?? 0} kali (terakhir ${care.lastWater ?? 'belum pernah'}), dipupuk ${byAction.get('pupuk')?.n ?? 0} kali (terakhir ${care.lastFertilize ?? 'belum pernah'}), dipanen ${byAction.get('panen')?.n ?? 0} kali.`,
+    care.waterOverdueDays > 0 ? `Penyiraman telat ${care.waterOverdueDays} hari.` : '',
+    care.fertilizeOverdueDays > 0 ? `Pemupukan telat ${care.fertilizeOverdueDays} hari.` : '',
+    care.harvestReady ? 'Sudah masuk perkiraan waktu panen.' : '',
+  ].filter(Boolean).join('\n');
+
+  let answer = '';
+  try {
+    answer = await runText(
+      c.env,
+      [
+        {
+          role: 'system',
+          content: 'Kamu pendamping berkebun untuk pekebun rumahan Indonesia. Jawab pertanyaan pengguna tentang SATU tanaman ini memakai konteks yang diberikan. Jawaban singkat (2-4 kalimat), spesifik pada data yang ada, Bahasa Indonesia, tanpa markdown. Kalau pertanyaannya di luar konteks tanaman ini atau butuh data yang tidak tersedia, katakan itu daripada mengarang.',
+        },
+        { role: 'user', content: `${context}\n\nPertanyaan: ${question}` },
+      ],
+      { maxTokens: 350 }
+    );
+  } catch (err) {
+    console.error('Garden ask failed', err);
+    return c.json({ error: 'Gagal menjawab pertanyaan' }, 502);
+  }
+
+  answer = answer.trim();
+  if (!answer) return c.json({ error: 'Gagal menjawab pertanyaan' }, 502);
+
+  return c.json({ plantingId, question, answer });
+});
+
 export default garden;

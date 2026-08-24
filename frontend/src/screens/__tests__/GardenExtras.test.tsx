@@ -248,6 +248,49 @@ describe('GardenPlanner', () => {
     expect(screen.queryByText(/Waspada hama/)).not.toBeInTheDocument();
   });
 
+  it('mengecek kecocokan susun-tanam dari tanaman yang dipilih', async () => {
+    const fetchMock = routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/layout': {
+        totalAreaNeededM2: 0.72,
+        fitsInBed: null,
+        conflicts: [{ plantId: 'cabai-rawit', name: 'Cabai Rawit', withPlantId: 'kangkung', withName: 'Kangkung' }],
+        goodPairs: [],
+        isolate: ['cabai-rawit', 'kangkung'],
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<GardenPlanner plantings={plantings} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Bedeng A' }));
+    await user.click(screen.getByRole('button', { name: 'Cabai pot' }));
+    await user.click(screen.getByRole('button', { name: 'Cek kecocokan' }));
+
+    const post = fetchMock.mock.calls.find(([url, init]) =>
+      String(url).includes('/garden/layout') && (init as RequestInit)?.method === 'POST'
+    );
+    expect(post).toBeDefined();
+    expect(JSON.parse((post![1] as RequestInit).body as string)).toEqual({
+      candidates: [
+        { plantId: 'kangkung', quantity: 1 },
+        { plantId: 'cabai-rawit', quantity: 1 },
+      ],
+    });
+
+    expect(await screen.findByText(/Cabai Rawit sebaiknya dipisah dari Kangkung/)).toBeInTheDocument();
+  });
+
+  it('tombol cek kecocokan nonaktif dengan kurang dari dua pilihan', async () => {
+    vi.stubGlobal('fetch', routeFetch(emptyPlannerRoutes));
+    render(<GardenPlanner plantings={plantings} />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Bedeng A' }));
+    expect(screen.getByRole('button', { name: 'Cek kecocokan' })).toBeDisabled();
+  });
+
   it('menandai semai yang sudah terlewat', async () => {
     vi.stubGlobal('fetch', routeFetch({
       ...emptyPlannerRoutes,
@@ -303,7 +346,11 @@ describe('GardenPlanner', () => {
   });
 });
 
+// Urutan pencocokan penting: '/garden/economics/yearly' sebelum
+// '/garden/economics' — keduanya awalan yang sama, dan routeFetch mencocokkan
+// dengan substring pertama yang cocok berurutan.
 const emptyRecordRoutes = {
+  '/garden/economics/yearly': { years: [], breakEvenYear: null, cumulativeNet: 0 },
   '/garden/economics': {
     perPlanting: [], totalCost: 0, totalValue: 0, totalNet: 0, sharedCost: 0, missingPrices: [],
   },
@@ -469,6 +516,40 @@ describe('GardenRecords', () => {
 
     await screen.findByText('🧾 Catat biaya');
     expect(screen.queryByText(/Perkiraan panen berikutnya/)).not.toBeInTheDocument();
+  });
+
+  it('menampilkan status balik modal tahunan', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyRecordRoutes,
+      '/garden/economics': {
+        perPlanting: [], totalCost: 100_000, totalValue: 500_000, totalNet: 400_000, sharedCost: 0, missingPrices: [],
+      },
+      '/garden/economics/yearly': {
+        years: [{ year: 2026, cost: 100_000, value: 500_000, net: 400_000, cumulativeNet: 400_000 }],
+        breakEvenYear: 2026,
+        cumulativeNet: 400_000,
+      },
+    }));
+
+    render(<GardenRecords plantings={plantings} />);
+    expect(await screen.findByText(/Sudah balik modal sejak 2026/)).toBeInTheDocument();
+  });
+
+  it('menampilkan belum balik modal dengan kumulatif negatif yang benar', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyRecordRoutes,
+      '/garden/economics': {
+        perPlanting: [], totalCost: 500_000, totalValue: 100_000, totalNet: -400_000, sharedCost: 0, missingPrices: [],
+      },
+      '/garden/economics/yearly': {
+        years: [{ year: 2026, cost: 500_000, value: 100_000, net: -400_000, cumulativeNet: -400_000 }],
+        breakEvenYear: null,
+        cumulativeNet: -400_000,
+      },
+    }));
+
+    render(<GardenRecords plantings={plantings} />);
+    expect(await screen.findByText(/Belum balik modal — kumulatif masih −Rp400\.000/)).toBeInTheDocument();
   });
 
   it('mengirim biaya umum tanpa penanaman tertentu', async () => {

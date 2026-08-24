@@ -10,7 +10,7 @@ import {
   RAIN_SKIP_MM,
   RAIN_SOAKED_MM,
 } from './garden_weather';
-import { summarizeEconomics } from './garden_economics';
+import { summarizeEconomics, computeBreakEven } from './garden_economics';
 import { findSuccessionDue, sowLeadDays } from './garden_succession';
 
 describe('shouldSkipWatering', () => {
@@ -264,5 +264,46 @@ describe('findSuccessionDue', () => {
         '2026-08-24'
       )
     ).toEqual([]);
+  });
+});
+
+describe('computeBreakEven', () => {
+  it('menandai tahun pertama kumulatif net tidak lagi negatif', () => {
+    const result = computeBreakEven([
+      { year: 2024, cost: 500_000, value: 100_000 }, // net -400.000, kumulatif -400.000
+      { year: 2025, cost: 100_000, value: 300_000 }, // net +200.000, kumulatif -200.000
+      { year: 2026, cost: 50_000, value: 400_000 }, // net +350.000, kumulatif +150.000
+    ]);
+    expect(result.breakEvenYear).toBe(2026);
+    expect(result.cumulativeNet).toBe(150_000);
+  });
+
+  it('null kalau belum pernah balik modal', () => {
+    const result = computeBreakEven([
+      { year: 2024, cost: 500_000, value: 100_000 },
+      { year: 2025, cost: 100_000, value: 50_000 },
+    ]);
+    expect(result.breakEvenYear).toBeNull();
+    expect(result.cumulativeNet).toBeLessThan(0);
+  });
+
+  it('tahun pertama sudah untung langsung ditandai balik modal', () => {
+    const result = computeBreakEven([{ year: 2026, cost: 50_000, value: 200_000 }]);
+    expect(result.breakEvenYear).toBe(2026);
+  });
+
+  it('mengurutkan tahun walau input tidak berurutan', () => {
+    const result = computeBreakEven([
+      { year: 2026, cost: 0, value: 100_000 },
+      { year: 2024, cost: 500_000, value: 0 },
+      { year: 2025, cost: 0, value: 300_000 },
+    ]);
+    expect(result.years.map((y) => y.year)).toEqual([2024, 2025, 2026]);
+    // Kumulatif tetap dihitung berurutan waktu meski input acak.
+    expect(result.years[1].cumulativeNet).toBe(-200_000);
+  });
+
+  it('array kosong menghasilkan ringkasan kosong tanpa error', () => {
+    expect(computeBreakEven([])).toEqual({ years: [], breakEvenYear: null, cumulativeNet: 0 });
   });
 });

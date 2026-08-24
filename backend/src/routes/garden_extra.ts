@@ -15,12 +15,13 @@ import { companionAdvice, findGardenConflicts } from '../lib/garden_companion';
 import { plantingCalendar, seasonOfMonth } from '../lib/garden_season';
 import { fitInArea, fitInBed, potFit } from '../lib/garden_space';
 import { getRain, getWaterBalance, shouldSkipWatering, wateringNote } from '../lib/garden_weather';
-import { summarizeEconomics } from '../lib/garden_economics';
+import { summarizeEconomics, computeBreakEven, type YearlyTotal } from '../lib/garden_economics';
 import { findSuccessionDue, type ActivePlanting } from '../lib/garden_succession';
 import { predictYield, type HarvestSample } from '../lib/garden_yield';
 import { findFailurePatterns, type FailedPlanting } from '../lib/garden_failure_patterns';
 import { checkRotation, type LocationPlanting } from '../lib/garden_rotation';
 import { assessPestRisk, findAtRiskPlantings, type RiskCandidate } from '../lib/garden_pest_risk';
+import { planBedLayout, type BedCandidate } from '../lib/garden_layout';
 import { computeCareState, lastActions, resolvePlants, type PlantingRow } from './garden';
 
 const extra = new Hono<AuthContext>();
@@ -302,6 +303,59 @@ extra.get('/economics', async (c) => {
   );
 
   return c.json(summary);
+});
+
+// GET /api/garden/economics/yearly — apakah kebun ini sudah balik modal
+extra.get('/economics/yearly', async (c) => {
+  const user = c.get('user');
+
+  const [plantingRows, costRows, harvestRows, priceRows] = await Promise.all([
+    c.env.DB.prepare(
+      'SELECT id, plant_id, custom_name FROM garden_plantings WHERE user_id = ?1'
+    ).bind(user.sub).all<{ id: string; plant_id: string | null; custom_name: string | null }>(),
+    c.env.DB.prepare(
+      'SELECT amount_idr, cost_date FROM garden_costs WHERE user_id = ?1'
+    ).bind(user.sub).all<{ amount_idr: number; cost_date: string }>(),
+    c.env.DB.prepare(
+      "SELECT planting_id, amount, unit, action_date FROM garden_care_log WHERE user_id = ?1 AND action = 'panen' AND amount IS NOT NULL"
+    ).bind(user.sub).all<{ planting_id: string; amount: number; unit: string | null; action_date: string }>(),
+    c.env.DB.prepare(
+      'SELECT plant_key, price_idr, unit FROM garden_plant_price WHERE user_id = ?1'
+    ).bind(user.sub).all<{ plant_key: string; price_idr: number; unit: string }>(),
+  ]);
+
+  const plantKeyByPlanting = new Map<string, string>();
+  for (const row of plantingRows.results ?? []) {
+    plantKeyByPlanting.set(row.id, row.plant_id ?? (row.custom_name ?? '').toLowerCase());
+  }
+  const priceByKey = new Map((priceRows.results ?? []).map((r) => [r.plant_key, r]));
+
+  const byYear = new Map<number, { cost: number; value: number }>();
+  const bump = (year: number, delta: { cost?: number; value?: number }) => {
+    const entry = byYear.get(year) ?? { cost: 0, value: 0 };
+    entry.cost += delta.cost ?? 0;
+    entry.value += delta.value ?? 0;
+    byYear.set(year, entry);
+  };
+
+  for (const row of costRows.results ?? []) {
+    const year = Number(row.cost_date.slice(0, 4));
+    if (Number.isInteger(year)) bump(year, { cost: row.amount_idr });
+  }
+
+  // Sama seperti /economics: harga yang belum diisi tidak ditebak, jadi
+  // panennya tidak ikut menyumbang nilai tahun itu sampai harganya diisi.
+  for (const row of harvestRows.results ?? []) {
+    const plantKey = plantKeyByPlanting.get(row.planting_id);
+    const price = plantKey ? priceByKey.get(plantKey) : undefined;
+    if (!price || price.unit !== (row.unit ?? 'kg')) continue;
+
+    const year = Number(row.action_date.slice(0, 4));
+    if (Number.isInteger(year)) bump(year, { value: Math.round(row.amount * price.price_idr) });
+  }
+
+  const totals: YearlyTotal[] = [...byYear.entries()].map(([year, t]) => ({ year, cost: t.cost, value: t.value }));
+  return c.json(computeBreakEven(totals));
 });
 
 // ──────────────────────────── #4 HAMA ────────────────────────────
@@ -739,6 +793,28 @@ extra.get('/pest-risk', async (c) => {
     reason: assessment.reason,
     warnings: findAtRiskPlantings(assessment.keywords, candidates),
   });
+});
+
+// ────────────────── #17 SUSUN-TANAM ──────────────────
+
+// POST /api/garden/layout — { candidates: [{plantId, quantity}], bedAreaM2? }
+extra.post('/layout', async (c) => {
+  const body = await c.req
+    .json<{ candidates?: Array<{ plantId?: string; quantity?: number }>; bedAreaM2?: number }>()
+    .catch(() => null);
+  if (!body?.candidates?.length) return c.json({ error: 'candidates wajib diisi' }, 400);
+
+  const candidates: BedCandidate[] = body.candidates
+    .filter((entry): entry is { plantId: string; quantity?: number } => typeof entry.plantId === 'string')
+    .map((entry) => ({
+      plantId: entry.plantId,
+      quantity: typeof entry.quantity === 'number' && entry.quantity > 0 ? Math.round(entry.quantity) : 1,
+    }));
+  if (candidates.length === 0) return c.json({ error: 'candidates wajib diisi' }, 400);
+
+  const bedAreaM2 = typeof body.bedAreaM2 === 'number' && body.bedAreaM2 > 0 ? body.bedAreaM2 : null;
+
+  return c.json(planBedLayout(candidates, PLANTS, bedAreaM2));
 });
 
 export default extra;

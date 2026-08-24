@@ -109,6 +109,21 @@ interface PestRiskResponse {
   warnings: Array<{ plantingId: string; label: string; matchedPests: string[] }>;
 }
 
+interface LayoutPair {
+  plantId: string;
+  name: string;
+  withPlantId: string;
+  withName: string;
+}
+
+interface LayoutSuggestion {
+  totalAreaNeededM2: number;
+  fitsInBed: boolean | null;
+  conflicts: LayoutPair[];
+  goodPairs: LayoutPair[];
+  isolate: string[];
+}
+
 interface SpaceResponse {
   name: string;
   spacingCm: number;
@@ -131,6 +146,13 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
   const [widthM, setWidthM] = useState('1');
   const [potLiter, setPotLiter] = useState('10');
   const [space, setSpace] = useState<SpaceResponse | null>(null);
+
+  // Susun-tanam: cek kecocokan beberapa tanaman sekaligus untuk satu bedeng.
+  const [layoutSelected, setLayoutSelected] = useState<string[]>([]);
+  const [layoutResult, setLayoutResult] = useState<LayoutSuggestion | null>(null);
+  const uniquePlantOptions = [
+    ...new Map(plantings.filter((p) => p.plantId).map((p) => [p.plantId!, p.label])).entries(),
+  ].map(([plantId, label]) => ({ plantId, label }));
 
   // Lokasi kebun — picker disembunyikan begitu lokasi sudah diatur, tapi
   // selalu bisa dibuka lagi lewat tombol "Ubah lokasi". Sebelumnya begitu
@@ -191,6 +213,27 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       );
     } catch (err) {
       setError(describeError(err, 'Gagal menghitung ruang.'));
+    }
+  };
+
+  const toggleLayoutPlant = (plantId: string) => {
+    setLayoutSelected((prev) =>
+      prev.includes(plantId) ? prev.filter((id) => id !== plantId) : [...prev, plantId]
+    );
+    setLayoutResult(null);
+  };
+
+  const checkLayout = async () => {
+    if (layoutSelected.length < 2) return;
+    try {
+      setLayoutResult(
+        await apiFetch<LayoutSuggestion>('/garden/layout', {
+          method: 'POST',
+          body: JSON.stringify({ candidates: layoutSelected.map((plantId) => ({ plantId, quantity: 1 })) }),
+        })
+      );
+    } catch (err) {
+      setError(describeError(err, 'Gagal menghitung susunan tanam.'));
     }
   };
 
@@ -423,6 +466,63 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
           )}
         </AnimatePresence>
       </Card>
+
+      {uniquePlantOptions.length >= 2 && (
+        <Card title="🧩 Cocok ditanam bareng?" delay={0.2}>
+          <div className="flex flex-wrap gap-2">
+            {uniquePlantOptions.map((opt) => {
+              const selected = layoutSelected.includes(opt.plantId);
+              return (
+                <button
+                  key={opt.plantId}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{
+                    background: selected ? 'var(--accentFill)' : 'var(--bg)',
+                    color: selected ? 'white' : 'var(--text2)',
+                    boxShadow: selected ? 'none' : 'var(--neu-raised-sm)',
+                  }}
+                  onClick={() => toggleLayoutPlant(opt.plantId)}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <motion.button
+            className="py-2.5 rounded-xl text-xs font-semibold text-white"
+            style={{ background: layoutSelected.length >= 2 ? 'var(--accentFill)' : 'var(--track)' }}
+            onClick={checkLayout}
+            disabled={layoutSelected.length < 2}
+            whileTap={layoutSelected.length >= 2 ? { scale: 0.97 } : {}}
+            transition={springs.snappy}
+          >
+            Cek kecocokan
+          </motion.button>
+
+          {layoutResult && (
+            <div className="flex flex-col gap-2">
+              <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                Total butuh ~{layoutResult.totalAreaNeededM2} m²
+              </div>
+              {layoutResult.conflicts.length === 0 && layoutResult.goodPairs.length === 0 && (
+                <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                  Tidak ada hubungan pendamping yang tercatat antar pilihan ini — aman ditanam bareng.
+                </div>
+              )}
+              {layoutResult.conflicts.map((pair, i) => (
+                <div key={i} className="text-xs" style={{ color: '#ff3b30' }}>
+                  ⚠️ {pair.name} sebaiknya dipisah dari {pair.withName}
+                </div>
+              ))}
+              {layoutResult.goodPairs.map((pair, i) => (
+                <div key={i} className="text-xs" style={{ color: '#34c759' }}>
+                  ✓ {pair.name} cocok berdampingan dengan {pair.withName}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -496,6 +596,12 @@ interface RotationWarning {
   message: string;
 }
 
+interface BreakEven {
+  years: Array<{ year: number; cost: number; value: number; net: number; cumulativeNet: number }>;
+  breakEvenYear: number | null;
+  cumulativeNet: number;
+}
+
 interface Seed {
   id: string;
   name: string;
@@ -520,6 +626,7 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
   const [predictions, setPredictions] = useState<YieldPrediction[]>([]);
   const [failurePatterns, setFailurePatterns] = useState<FailurePattern[]>([]);
   const [rotationWarnings, setRotationWarnings] = useState<RotationWarning[]>([]);
+  const [breakEven, setBreakEven] = useState<BreakEven | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [costPlanting, setCostPlanting] = useState('');
@@ -535,13 +642,14 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
 
   const reload = async () => {
     try {
-      const [eco, pest, seed, yieldRes, failureRes, rotationRes] = await Promise.all([
+      const [eco, pest, seed, yieldRes, failureRes, rotationRes, breakEvenRes] = await Promise.all([
         apiFetch<Economics>('/garden/economics'),
         apiFetch<PestData>('/garden/pests'),
         apiFetch<{ seeds: Seed[] }>('/garden/seeds'),
         apiFetch<{ predictions: YieldPrediction[] }>('/garden/yield-prediction'),
         apiFetch<{ patterns: FailurePattern[] }>('/garden/failure-patterns'),
         apiFetch<{ warnings: RotationWarning[] }>('/garden/rotation-check'),
+        apiFetch<BreakEven>('/garden/economics/yearly'),
       ]);
       setEconomics(eco);
       setPests(pest);
@@ -549,6 +657,7 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
       setPredictions(yieldRes.predictions);
       setFailurePatterns(failureRes.patterns);
       setRotationWarnings(rotationRes.warnings);
+      setBreakEven(breakEvenRes);
     } catch (err) {
       setError(describeError(err, 'Gagal memuat catatan.'));
     }
@@ -663,6 +772,17 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
             <div className="text-xs" style={{ color: 'var(--text3)' }}>
               Belum ada harga pasar untuk: {economics.missingPrices.join(', ')}. Panennya tidak
               dihitung supaya angkanya tidak menyesatkan.
+            </div>
+          )}
+
+          {breakEven && breakEven.years.length > 0 && (
+            <div className="text-xs pt-1" style={{ color: 'var(--text3)', borderTop: '1px solid var(--sep)' }}>
+              {/* Cek tanda cumulativeNet langsung, bukan cuma breakEvenYear —
+                  sempat balik modal lalu rugi lagi tahun berikutnya tetap
+                  harus tampil sebagai belum balik modal saat ini. */}
+              {breakEven.cumulativeNet >= 0
+                ? `📈 Sudah balik modal${breakEven.breakEvenYear ? ` sejak ${breakEven.breakEvenYear}` : ''} — kumulatif +${rupiah(breakEven.cumulativeNet)}`
+                : `📉 Belum balik modal — kumulatif masih −${rupiah(Math.abs(breakEven.cumulativeNet))}`}
             </div>
           )}
         </Card>
