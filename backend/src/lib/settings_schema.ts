@@ -81,6 +81,12 @@ export const SETTINGS: SettingDef[] = [
 
   toggle('notify.succession', 'notifikasi', 'Semai Berikutnya', true, 'Tanam bergilir agar panen bersambung.'),
 
+  // Dipisah dari Perawatan Kebun: keduanya berangkat dari kebun yang sama tapi
+  // menuntut hal berbeda. Sebelumnya keduanya menumpang satu sakelar, sehingga
+  // mematikan pengingat panen berarti ikut mematikan pengingat siram.
+  toggle('notify.harvest_due', 'notifikasi', 'Menjelang Panen', true, 'Perkiraan panen dalam 3 hari ke depan.'),
+  toggle('notify.garden_followup', 'notifikasi', 'Tindak Lanjut Kebun', true, 'Penilaian penanganan hama dan bibit siap pindah.'),
+
   toggle('notify.expiry', 'notifikasi', 'Stok Mau Kedaluwarsa', true),
   hour('notify.expiry.hour', 'Jam kirim Stok Kedaluwarsa', 8),
 

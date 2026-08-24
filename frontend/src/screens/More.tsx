@@ -261,9 +261,21 @@ export function More() {
   };
 
   const handleExportData = async () => {
+    // Foto jurnal kebun disimpan sebagai data URL, jadi satu tanaman yang
+    // rajin difoto bisa membuat berkas ekspor membengkak sampai gagal diunduh.
+    // Karena itu ditanyakan, bukan diputuskan diam-diam ke salah satu arah.
+    const withPhotos = window.confirm(
+      'Sertakan foto jurnal kebun?\n\n' +
+      'OK — foto ikut, berkas jauh lebih besar dan bisa gagal di perangkat lama.\n' +
+      'Batal — semua data lain tetap ikut, tanpa foto.'
+    );
+
     setExportingData(true);
     try {
-      const data = await apiFetch<Record<string, unknown>>('/export', { method: 'GET' });
+      const data = await apiFetch<Record<string, unknown> & { skipped_tables?: string[] }>(
+        `/export${withPhotos ? '?photos=1' : ''}`,
+        { method: 'GET' }
+      );
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -271,7 +283,15 @@ export function More() {
       a.download = `fayolla-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       window.URL.revokeObjectURL(url);
-      alert('Data berhasil diekspor.');
+
+      // Apa yang tidak ikut disebut terang-terangan: backup yang diam-diam
+      // tidak lengkap lebih berbahaya daripada yang mengaku tidak lengkap.
+      const skipped = data.skipped_tables ?? [];
+      alert(
+        skipped.length > 0
+          ? 'Data berhasil diekspor, tanpa foto jurnal kebun.'
+          : 'Data berhasil diekspor, termasuk foto jurnal kebun.'
+      );
     } catch (error) {
       alert('Gagal mengekspor data.');
       console.error(error);

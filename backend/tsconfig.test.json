@@ -1,0 +1,15 @@
+{
+  // Pemeriksaan tipe untuk berkas uji.
+  //
+  // Terpisah dari tsconfig.json karena uji rute menjalankan migrasi sungguhan
+  // lewat node:sqlite, sementara kode Worker harus tetap tidak boleh menyentuh
+  // API Node sama sekali. Dua tujuan itu memerlukan dua daftar `types`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "node"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/**/*.test.ts", "src/test/**/*.ts"],
+  "exclude": []
+}

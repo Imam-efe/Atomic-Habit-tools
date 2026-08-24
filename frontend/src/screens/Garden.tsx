@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { GardenPlanner, GardenRecords, type PlantingOption } from './GardenExtras';
 import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
+import { isNetworkError, newClientId, queueFor } from '@/lib/offlineQueue';
+import { useAuthStore } from '@/stores/authStore';
 
 interface Plant {
   id: string;
@@ -279,6 +281,14 @@ export function Garden() {
   // Cetak label — pilih tanaman & jumlah, di-pack ke layout A4.
   const [labelPrintOpen, setLabelPrintOpen] = useState(false);
 
+  // Catatan yang belum terkirim karena jaringan mati. Antrean terikat akun
+  // aktif: pindah akun tidak boleh membuat catatan milik akun lain ikut
+  // terkirim dengan token yang salah.
+  const userId = useAuthStore((s) => s.session?.user.id ?? '');
+  const queue = useMemo(() => queueFor(userId), [userId]);
+  const [pendingWrites, setPendingWrites] = useState(0);
+  useEffect(() => { setPendingWrites(queue.size()); }, [queue]);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -321,6 +331,30 @@ export function Garden() {
     return () => window.removeEventListener('fayolla:tab-shown', onShown);
   }, []);
 
+  // Kirim ulang catatan yang tertahan begitu jaringan kembali. Dicoba juga
+  // sekali saat layar dibuka, karena peristiwa `online` bisa terjadi ketika
+  // aplikasi sedang tertutup dan tidak akan terulang.
+  useEffect(() => {
+    let cancelled = false;
+
+    const flush = async () => {
+      if (queue.size() === 0) return;
+      const result = await queue.flush((path, body) =>
+        apiFetch(path, { method: 'POST', body: JSON.stringify(body) })
+      );
+      if (cancelled) return;
+      setPendingWrites(result.remaining);
+      if (result.sent > 0) load();
+    };
+
+    flush();
+    window.addEventListener('online', flush);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', flush);
+    };
+  }, [queue]);
+
   const handleCare = async (plantingId: string, action: string) => {
     // Panen boleh dicatat tanpa jumlah, tapi kalau diisi, dikirim ke backend
     // supaya hasil panen otomatis masuk ke Inventaris.
@@ -345,15 +379,32 @@ export function Garden() {
       }),
     });
 
+    // clientId dibuat di sini, bukan di server: kalau permintaan ini gagal
+    // karena jaringan lalu dikirim ulang dari antrean, server mengenali id
+    // yang sama dan mengabaikan kiriman kedua alih-alih mencatat siram dobel.
+    const clientId = newClientId();
+    const path = `/garden/${plantingId}/care`;
+    const body = { action, date: todayISO(), ...(amount ? { amount, unit: 'kg' } : {}) };
+
     try {
-      await apiFetch(`/garden/${plantingId}/care`, {
-        method: 'POST',
-        body: JSON.stringify({ action, date: todayISO(), ...(amount ? { amount, unit: 'kg' } : {}) }),
-      });
+      await apiFetch(path, { method: 'POST', body: JSON.stringify({ ...body, clientId }) });
       load();
       if (openPlanting === plantingId) loadCareLogs(plantingId);
-    } catch {
-      load();
+    } catch (err) {
+      if (isNetworkError(err)) {
+        // Offline: catatan disimpan dan dikirim saat jaringan kembali. Layar
+        // sengaja TIDAK dimuat ulang — pembaruan optimistis di atas adalah
+        // gambaran paling jujur dari keadaan sekarang.
+        //
+        // Antrean menolak permintaan yang isinya persis sama, jadi mengetuk
+        // ulang setelah aplikasi dibuka kembali (saat layar memuat data lama
+        // dari server dan tanamannya kembali terlihat belum disiram) tidak
+        // menambah catatan kedua.
+        queue.enqueue({ clientId, path, body, queuedAt: Date.now() });
+        setPendingWrites(queue.size());
+      } else {
+        load();
+      }
     }
   };
 
@@ -570,6 +621,14 @@ export function Garden() {
           <p className="text-xs mt-0.5" style={{ color: 'var(--text2)' }}>
             Sayur & buah: jadwal siram, pupuk, panen
           </p>
+          {/* Catatan yang tertahan disebut apa adanya. Diam-diam menyimpan
+              tanpa memberi tahu membuat pengguna mengira datanya hilang, lalu
+              mencatat ulang hal yang sama. */}
+          {pendingWrites > 0 && (
+            <p className="text-[10px] mt-0.5" style={{ color: 'var(--warn)' }}>
+              📴 {pendingWrites} catatan menunggu jaringan — akan terkirim otomatis
+            </p>
+          )}
         </div>
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base"

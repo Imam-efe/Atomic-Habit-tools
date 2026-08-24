@@ -914,6 +914,8 @@ extra.post('/sowings', async (c) => {
   type Body = {
     plantId?: string; name?: string; brand?: string;
     sownDate?: string; seedCount?: number; note?: string;
+    /** Stok benih yang dipakai; kalau diisi, jumlahnya ikut berkurang. */
+    seedId?: string;
   };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
@@ -929,16 +931,59 @@ extra.post('/sowings', async (c) => {
     ? body.sownDate
     : jakartaToday();
 
-  const id = nanoid();
-  await c.env.DB.prepare(
-    `INSERT INTO garden_sowings (id, user_id, plant_id, name, seed_brand, sown_date, seed_count, note)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
-  ).bind(
-    id, user.sub, body.plantId?.trim() || null, name,
-    body.brand?.trim() || null, sownDate, seedCount, body.note?.trim() || null
-  ).run();
+  /**
+   * Menyemai memakai benih dari laci, jadi stoknya berkurang.
+   *
+   * Sebelum ini dua fitur yang jelas berpasangan tidak pernah saling bicara:
+   * pengguna mencatat semai 20 butir dan stok benihnya tetap utuh, sampai
+   * angka di layar Catatan berhenti berhubungan dengan isi laci sungguhan.
+   *
+   * Satuan stok benih bebas (bungkus, gram, butir), sehingga pengurangan
+   * hanya bisa dilakukan jujur kalau satuannya memang butir. Untuk satuan
+   * lain, stok dibiarkan dan itu dilaporkan lewat `seedStockAdjusted: false`
+   * daripada mengarang konversi bungkus-ke-butir yang tidak pernah benar.
+   */
+  let seedStockAdjusted = false;
+  if (body.seedId) {
+    const seed = await c.env.DB.prepare(
+      'SELECT unit FROM garden_seeds WHERE id = ?1 AND user_id = ?2'
+    ).bind(body.seedId, user.sub).first<{ unit: string }>();
 
-  return c.json({ id, ok: true });
+    if (!seed) return c.json({ error: 'stok benih tidak ditemukan' }, 404);
+    seedStockAdjusted = seed.unit.toLowerCase() === 'butir';
+  }
+
+  const id = nanoid();
+  const statements = [
+    c.env.DB.prepare(
+      `INSERT INTO garden_sowings (id, user_id, plant_id, name, seed_brand, sown_date, seed_count, note)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+    ).bind(
+      id, user.sub, body.plantId?.trim() || null, name,
+      body.brand?.trim() || null, sownDate, seedCount, body.note?.trim() || null
+    ),
+  ];
+
+  if (seedStockAdjusted) {
+    // Dijalankan lewat batch bersama INSERT di atas supaya keduanya satu
+    // transaksi: stok yang berkurang tanpa catatan semainya adalah benih yang
+    // hilang dari laci menurut aplikasi tapi tidak pernah ditanam menurut
+    // catatan, dan tidak ada layar yang bisa menjelaskan selisihnya.
+    //
+    // Pengurangannya dihitung di dalam SQL, bukan dari angka yang dibaca
+    // sebelumnya, supaya dua semai yang tercatat hampir bersamaan tidak saling
+    // menimpa hasil. MAX(0, ...) menjaga stok tidak pernah minus: angka yang
+    // tercatat bisa saja sudah tidak akurat, dan minus hanya menambah bingung.
+    statements.push(
+      c.env.DB.prepare(
+        'UPDATE garden_seeds SET quantity = MAX(0, quantity - ?1) WHERE id = ?2 AND user_id = ?3'
+      ).bind(seedCount, body.seedId, user.sub)
+    );
+  }
+
+  await c.env.DB.batch(statements);
+
+  return c.json({ id, ok: true, seedStockAdjusted });
 });
 
 // PATCH /api/garden/sowings/:id — catat hasil kecambah atau pindah tanam

@@ -57,6 +57,12 @@ import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
 import { daysBetween } from './lib/daily';
+import {
+  triggerBillRadar,
+  triggerKidsPrep,
+  triggerMissTwice,
+  triggerMorningBrief,
+} from './lib/daily_push';
 
 /**
  * Jeda sebelum bibit yang baru berkecambah layak diingatkan untuk dipindah.
@@ -68,12 +74,6 @@ const TRANSPLANT_READY_DAYS = 7;
 
 /** Sejauh mana ke depan panen layak diingatkan. Terlalu jauh berarti diabaikan. */
 const HARVEST_NOTICE_DAYS = 3;
-import {
-  triggerBillRadar,
-  triggerKidsPrep,
-  triggerMissTwice,
-  triggerMorningBrief,
-} from './lib/daily_push';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -761,9 +761,13 @@ async function triggerGardenFollowUp(env: Env) {
 
   for (const { user_id: userId } of users.results ?? []) {
     const settings = await loadSettings(env.DB, userId);
+    // Dua sakelar, bukan satu. Sakelar induk Perawatan Kebun tetap dihormati:
+    // pengguna yang sudah mematikannya tidak boleh tiba-tiba menerima jenis
+    // push baru hanya karena sakelar barunya berdefault menyala. Sakelar
+    // sendiri memungkinkan mematikan tindak lanjut tanpa ikut mematikan siram.
     if (!bool(settings, 'notify.garden_care')) continue;
-    // Ikut jam perawatan kebun, alasan yang sama dengan semai: satu waktu
-    // buka ponsel untuk semua urusan kebun.
+    if (!bool(settings, 'notify.garden_followup')) continue;
+    // Jamnya ikut Perawatan Kebun — satu waktu buka ponsel untuk semua urusan kebun.
     if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
 
     const [pestRows, sowRows] = await Promise.all([
@@ -842,7 +846,9 @@ async function triggerHarvestDue(env: Env) {
 
   for (const { user_id: userId } of users.results ?? []) {
     const settings = await loadSettings(env.DB, userId);
+    // Alasan sama dengan tindak lanjut: sakelar induk tetap berlaku.
     if (!bool(settings, 'notify.garden_care')) continue;
+    if (!bool(settings, 'notify.harvest_due')) continue;
     if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
 
     const [plantingRes, careRes] = await Promise.all([

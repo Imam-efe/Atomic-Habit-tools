@@ -617,7 +617,11 @@ async function addHarvestToInventory(
 garden.post('/:id/care', async (c) => {
   const user = c.get('user');
   const plantingId = c.req.param('id');
-  type Body = { action?: string; date?: string; amount?: number; unit?: string; note?: string };
+  type Body = {
+    action?: string; date?: string; amount?: number; unit?: string; note?: string;
+    /** Id dari klien, dipakai antrean offline supaya kiriman ulang tidak menggandakan log. */
+    clientId?: string;
+  };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
   if (!CARE_ACTIONS.includes(body.action as CareAction)) {
@@ -631,17 +635,56 @@ garden.post('/:id/care', async (c) => {
   if (!owned) return c.json({ error: 'tanaman tidak ditemukan' }, 404);
 
   const date = isISODate(body.date) ? body.date : jakartaToday();
-  const id = nanoid();
 
-  await c.env.DB.prepare(`
-    INSERT INTO garden_care_log (id, user_id, planting_id, action, action_date, amount, unit, note)
+  /**
+   * Kunci utama boleh datang dari klien.
+   *
+   * Perawatan dicatat di kebun, tempat sinyal paling buruk, jadi antrean
+   * offline pasti akan mengirim ulang permintaan yang sebenarnya sudah sampai.
+   * Dengan id dari klien plus INSERT OR IGNORE, kiriman kedua menjadi tidak
+   * berpengaruh, bukan log siram kedua di hari yang sama.
+   *
+   * Formatnya dibatasi supaya id liar tidak bisa menabrak baris milik siapa
+   * pun; INSERT tetap membawa user_id, jadi menebak id orang lain hanya
+   * menghasilkan baris yang diabaikan.
+   */
+  const clientId = body.clientId?.trim();
+  let id = clientId && /^[A-Za-z0-9_-]{8,64}$/.test(clientId) ? clientId : nanoid();
+
+  const amount = typeof body.amount === 'number' && body.amount > 0 ? body.amount : null;
+  const unit = body.unit?.trim() || null;
+  const note = body.note?.trim() || null;
+
+  const insert = (rowId: string) => c.env.DB.prepare(`
+    INSERT OR IGNORE INTO garden_care_log (id, user_id, planting_id, action, action_date, amount, unit, note)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-  `).bind(
-    id, user.sub, plantingId, action, date,
-    typeof body.amount === 'number' && body.amount > 0 ? body.amount : null,
-    body.unit?.trim() || null,
-    body.note?.trim() || null
-  ).run();
+  `).bind(rowId, user.sub, plantingId, action, date, amount, unit, note).run();
+
+  let inserted = await insert(id);
+
+  if (inserted.meta.changes === 0) {
+    // Nol perubahan berarti id itu sudah dipakai — tapi belum tentu oleh
+    // kiriman ulang pengguna ini. Id dari klien bisa saja kebetulan (atau
+    // sengaja) menabrak baris milik orang lain, dan melaporkannya sebagai
+    // "sudah tercatat" berarti berkata sukses sambil tidak menyimpan apa pun.
+    const owner = await c.env.DB.prepare(
+      'SELECT user_id, planting_id FROM garden_care_log WHERE id = ?1'
+    ).bind(id).first<{ user_id: string; planting_id: string }>();
+
+    if (owner?.user_id === user.sub && owner.planting_id === plantingId) {
+      // Kiriman ulang yang sah: tidak ada efek samping yang boleh diulang,
+      // jadi status tanaman dan stok Inventaris tidak disentuh.
+      return c.json({ id, action, date, stockItemId: null, duplicate: true }, 200);
+    }
+
+    // Tabrakan dengan baris asing: catatan ini tetap harus tersimpan, hanya
+    // dengan id yang dibuat server.
+    id = nanoid();
+    inserted = await insert(id);
+    if (inserted.meta.changes === 0) {
+      return c.json({ error: 'gagal menyimpan catatan perawatan' }, 500);
+    }
+  }
 
   // Panen pertama menaikkan status jadi 'panen' — sinyal ke UI bahwa tanaman
   // ini sudah produktif, dan untuk yang sekali cabut jadi penanda siklus usai.
@@ -654,9 +697,9 @@ garden.post('/:id/care', async (c) => {
   // di log kebun, padahal 2 kg tomat hasil panen ya stok dapur — dan begitu
   // masuk Inventaris ia ikut terpantau fitur Selamatkan Bahan.
   let stockItemId: string | null = null;
-  if (action === 'panen' && typeof body.amount === 'number' && body.amount > 0) {
+  if (action === 'panen' && amount !== null) {
     stockItemId = await addHarvestToInventory(
-      c.env.DB, user.sub, plantingId, id, body.amount, body.unit?.trim() || null, date
+      c.env.DB, user.sub, plantingId, id, amount, unit, date
     );
   }
 
