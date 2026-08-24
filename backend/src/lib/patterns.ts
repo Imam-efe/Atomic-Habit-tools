@@ -58,6 +58,8 @@ function mean(values: number[]): number {
  */
 function comparAtMedian(
   days: DayRecord[],
+  minDays: number,
+  minGap: number,
   pick: (d: DayRecord) => number | null | undefined,
   id: string,
   phrase: (lowPct: number, highPct: number, threshold: number) => string,
@@ -67,10 +69,10 @@ function comparAtMedian(
     (d) => d.completionRate !== null && pick(d) !== null && pick(d) !== undefined
   );
 
-  if (usable.length < MIN_DAYS_PER_SIDE * 2) {
+  if (usable.length < minDays * 2) {
     return {
       id,
-      reason: `Butuh minimal ${MIN_DAYS_PER_SIDE * 2} hari dengan data lengkap, baru ada ${usable.length}.`,
+      reason: `Butuh minimal ${minDays * 2} hari dengan data lengkap, baru ada ${usable.length}.`,
     };
   }
 
@@ -79,8 +81,8 @@ function comparAtMedian(
   const low = sorted.slice(0, mid);
   const high = sorted.slice(sorted.length % 2 === 1 ? mid + 1 : mid);
 
-  if (low.length < MIN_DAYS_PER_SIDE || high.length < MIN_DAYS_PER_SIDE) {
-    return { id, reason: `Butuh minimal ${MIN_DAYS_PER_SIDE} hari di tiap sisi.` };
+  if (low.length < minDays || high.length < minDays) {
+    return { id, reason: `Butuh minimal ${minDays} hari di tiap sisi.` };
   }
 
   // Semua nilai sama berarti tidak ada yang bisa dibandingkan — misalnya
@@ -94,7 +96,7 @@ function comparAtMedian(
   const highPct = Math.round(mean(high.map((d) => d.completionRate as number)) * 100);
   const gap = Math.abs(highPct - lowPct);
 
-  if (gap < MIN_GAP_POINTS) {
+  if (gap < minGap) {
     return { id, reason: `Selisihnya cuma ${gap} poin, terlalu kecil untuk disebut pola.` };
   }
 
@@ -114,12 +116,19 @@ function isPattern(value: Pattern | { id: string; reason: string }): value is Pa
  * Semua perbandingan yang tersedia. Yang lolos ambang jadi pola; sisanya
  * dilaporkan sebagai kekurangan data, bukan dihilangkan diam-diam.
  */
-export function findPatterns(days: DayRecord[]): PatternResult {
+export function findPatterns(
+  days: DayRecord[],
+  limits: { minDaysPerSide?: number; minGapPoints?: number } = {}
+): PatternResult {
+  const minDays = limits.minDaysPerSide ?? MIN_DAYS_PER_SIDE;
+  const minGap = limits.minGapPoints ?? MIN_GAP_POINTS;
   const daysAnalysed = days.filter((d) => d.completionRate !== null).length;
 
   const candidates = [
     comparAtMedian(
       days,
+      minDays,
+      minGap,
       (d) => d.sleepMinutes,
       'sleep',
       (lowPct, highPct) =>
@@ -130,6 +139,8 @@ export function findPatterns(days: DayRecord[]): PatternResult {
     ),
     comparAtMedian(
       days,
+      minDays,
+      minGap,
       (d) => d.steps,
       'steps',
       (lowPct, highPct) =>
@@ -140,6 +151,8 @@ export function findPatterns(days: DayRecord[]): PatternResult {
     ),
     comparAtMedian(
       days,
+      minDays,
+      minGap,
       (d) => d.spend,
       'spend',
       (lowPct, highPct) =>

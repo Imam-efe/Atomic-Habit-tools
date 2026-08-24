@@ -28,6 +28,7 @@ import gardenExtra from './routes/garden_extra';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
+import { loadSettings, num, bool } from './lib/settings';
 import { PLANT_BY_ID } from './data/plants';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
@@ -35,6 +36,7 @@ import quickadd from './routes/quickadd';
 import search from './routes/search';
 import notes from './routes/notes';
 import daily from './routes/daily';
+import settingsRoute from './routes/settings';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -122,6 +124,7 @@ app.route('/api/quickadd', quickadd);
 app.route('/api/search', search);
 app.route('/api/notes', notes);
 app.route('/api/daily', daily);
+app.route('/api/settings', settingsRoute);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -528,9 +531,7 @@ async function processStreakFreezes(env: Env) {
 // Dedup lewat garden_care_alert_sent (planting_id, alert_date): sekali
 // diingatkan per tanaman per hari, walau cron menyala tiap menit.
 async function triggerGardenCare(env: Env) {
-  const jakartaHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
-  if (jakartaHour !== 7) return;
-
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
   // Hanya pengguna yang punya push subscription — sisanya tidak ada gunanya dihitung.
@@ -542,6 +543,12 @@ async function triggerGardenCare(env: Env) {
   `).all<{ user_id: string }>();
 
   for (const { user_id: userId } of users.results ?? []) {
+    // Jam dan sakelar diperiksa per pengguna: dua orang bisa memilih jam
+    // berbeda, dan cron menyala tiap menit sehingga semua jam terlewati.
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.garden_care')) continue;
+    if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
+
     // Cuaca diambil sekali per pengguna, bukan per tanaman: satu kebun ada di
     // satu lokasi, dan Open-Meteo dibatasi kuota harian.
     const location = await env.DB.prepare(
@@ -555,8 +562,13 @@ async function triggerGardenCare(env: Env) {
     // Tidak tahu cuaca bukan berarti kering. Tanpa data, pengingat berjalan
     // seperti sebelumnya — melewatkan siram karena tebakan lebih berbahaya
     // daripada menyiram saat sudah agak basah.
-    const rainVerdict = rain ? shouldSkipWatering(rain) : { skip: false, reason: '' };
-    const rainNote = rain ? wateringNote(rain) : null;
+    const rainVerdict = rain
+      ? shouldSkipWatering(rain, {
+          skipMm: num(settings, 'garden.rain_skip_mm'),
+          soakedMm: num(settings, 'garden.rain_soaked_mm'),
+        })
+      : { skip: false, reason: '' };
+    const rainNote = rain ? wateringNote(rain, num(settings, 'garden.rain_skip_mm')) : null;
 
     const [rows, lastMap] = await Promise.all([
       env.DB.prepare(
@@ -634,8 +646,7 @@ async function triggerGardenCare(env: Env) {
 // ponsel. Dedup lewat daily_alert_sent — semai bukan urusan per tanaman,
 // melainkan satu keputusan sekali sehari.
 async function triggerSuccession(env: Env) {
-  if (new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours() !== 7) return;
-
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
   const users = await env.DB.prepare(`
@@ -646,6 +657,12 @@ async function triggerSuccession(env: Env) {
   `).all<{ user_id: string }>();
 
   for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.succession')) continue;
+    // Ikut jam perawatan kebun — dua push kebun di jam berbeda hanya
+    // menggandakan gangguan tanpa menambah informasi.
+    if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
+
     const rows = await env.DB.prepare(
       `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
               planted_date, expected_harvest_date, status, note
@@ -671,7 +688,7 @@ async function triggerSuccession(env: Env) {
       };
     });
 
-    const due = findSuccessionDue(active, PLANT_BY_ID, today, 0);
+    const due = findSuccessionDue(active, PLANT_BY_ID, today, num(settings, 'garden.succession_days'));
     if (due.length === 0) continue;
 
     const lines = due.map(d => {

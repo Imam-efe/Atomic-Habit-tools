@@ -12,6 +12,7 @@ import {
 import { suggestRecipes, type AiRunner } from '../lib/rescue';
 import { findClashes, type TimedEvent, type TimedHabit } from '../lib/reschedule';
 import { findPatterns, type DayRecord } from '../lib/patterns';
+import { loadSettings, num, bool } from '../lib/settings';
 
 /**
  * Agenda tidak menyimpan durasi (lihat 0015_calendar.sql), jadi pengecekan
@@ -28,15 +29,22 @@ daily.use('/*', requireAuth);
 // GET /api/daily/safe-to-spend — boleh habis berapa hari ini
 daily.get('/safe-to-spend', async (c) => {
   const user = c.get('user');
-  return c.json(await computeSafeToSpend(c.env.DB, user.sub, jakartaToday()));
+  const settings = await loadSettings(c.env.DB, user.sub);
+  return c.json(
+    await computeSafeToSpend(c.env.DB, user.sub, jakartaToday(), bool(settings, 'money.subtract_bills'))
+  );
 });
 
 // GET /api/daily/bills — tagihan jatuh tempo dan rekening yang menutupi
 daily.get('/bills', async (c) => {
   const user = c.get('user');
-  const within = Number(c.req.query('within') ?? 3);
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const override = Number(c.req.query('within'));
   return c.json(
-    await getBillRadar(c.env.DB, user.sub, jakartaToday(), Number.isFinite(within) ? within : 3)
+    await getBillRadar(
+      c.env.DB, user.sub, jakartaToday(),
+      Number.isFinite(override) ? override : num(settings, 'money.bill_horizon_days')
+    )
   );
 });
 
@@ -61,11 +69,13 @@ daily.get('/brief', async (c) => {
 
   // Satu putaran paralel: tiap bagian berdiri sendiri, dan brief yang menunggu
   // enam kueri berurutan akan terasa lambat justru di layar pertama pagi hari.
+  const settings = await loadSettings(c.env.DB, user.sub);
+
   const [safeToSpend, billRadar, missed, expiring, kidsToday, habitRows, events] = await Promise.all([
-    computeSafeToSpend(c.env.DB, user.sub, today),
-    getBillRadar(c.env.DB, user.sub, today),
+    computeSafeToSpend(c.env.DB, user.sub, today, bool(settings, 'money.subtract_bills')),
+    getBillRadar(c.env.DB, user.sub, today, num(settings, 'money.bill_horizon_days')),
     getMissedYesterday(c.env.DB, user.sub, today),
-    getExpiringItems(c.env.DB, user.sub, today),
+    getExpiringItems(c.env.DB, user.sub, today, num(settings, 'inventory.expiry_days')),
     getKidsFor(c.env.DB, user.sub, today),
     c.env.DB.prepare(
       `SELECT h.id, h.name, h.action_time, h.streak,
@@ -116,7 +126,10 @@ daily.get('/brief', async (c) => {
 // POST /api/daily/rescue — usul masakan dari stok yang mau kedaluwarsa
 daily.post('/rescue', async (c) => {
   const user = c.get('user');
-  const items = await getExpiringItems(c.env.DB, user.sub, jakartaToday());
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const items = await getExpiringItems(
+    c.env.DB, user.sub, jakartaToday(), num(settings, 'inventory.expiry_days')
+  );
 
   if (items.length === 0) {
     return c.json({ items: [], recipes: [], message: 'Tidak ada stok yang mendesak. 🎉' });
@@ -145,6 +158,8 @@ daily.get('/reschedule', async (c) => {
   const user = c.get('user');
   const date = c.req.query('date') ?? jakartaToday();
 
+  const settings = await loadSettings(c.env.DB, user.sub);
+
   const [habitRows, eventRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id, name, action_time, two_min FROM habits
@@ -170,10 +185,17 @@ daily.get('/reschedule', async (c) => {
   const events: TimedEvent[] = (eventRows.results ?? []).map((row) => ({
     title: row.title,
     time: row.event_time,
-    durationMin: ASSUMED_EVENT_MINUTES,
+    durationMin: num(settings, 'calendar.default_event_minutes'),
   }));
 
-  return c.json({ date, suggestions: findClashes(habits, events) });
+  return c.json({
+    date,
+    suggestions: findClashes(habits, events, {
+      startMin: num(settings, 'habit.day_start') * 60,
+      endMin: num(settings, 'habit.day_end') * 60,
+      slotMin: num(settings, 'habit.slot_minutes'),
+    }),
+  });
 });
 
 // GET /api/daily/shutdown — ritual Tutup Hari untuk satu tanggal
@@ -245,6 +267,7 @@ daily.post('/shutdown', async (c) => {
 // GET /api/daily/patterns — hubungan antar modul, atau kejujuran soal data kurang
 daily.get('/patterns', async (c) => {
   const user = c.get('user');
+  const settings = await loadSettings(c.env.DB, user.sub);
   const today = jakartaToday();
   const since = shiftDate(today, -Number(c.req.query('days') ?? 60));
 
@@ -311,7 +334,12 @@ daily.get('/patterns', async (c) => {
     ensure(row.date).completionRate = Math.min(1, row.done / habitCount);
   }
 
-  return c.json(findPatterns([...byDate.values()]));
+  return c.json(
+    findPatterns([...byDate.values()], {
+      minDaysPerSide: num(settings, 'patterns.min_days'),
+      minGapPoints: num(settings, 'patterns.min_gap'),
+    })
+  );
 });
 
 export default daily;

@@ -38,7 +38,13 @@ export function daysInMonth(month: string): number {
 export async function computeSafeToSpend(
   db: D1Database,
   userId: string,
-  today: string
+  today: string,
+  /**
+   * Potong tagihan yang belum jatuh tempo dari sisa. Bisa dimatikan lewat
+   * pengaturan: sebagian orang lebih suka melihat sisa apa adanya dan
+   * mengingat tagihan sendiri.
+   */
+  subtractBills = true
 ): Promise<SafeToSpend> {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
@@ -78,7 +84,7 @@ export async function computeSafeToSpend(
   const monthlyLimit = limitRow?.total ?? 0;
   const spent = spentRow?.total ?? 0;
   const spentToday = todayRow?.total ?? 0;
-  const upcomingBills = billRow?.total ?? 0;
+  const upcomingBills = subtractBills ? (billRow?.total ?? 0) : 0;
 
   const remaining = monthlyLimit - spent - upcomingBills;
   const daysLeft = daysInMonth(month) - Number(today.slice(8, 10)) + 1;

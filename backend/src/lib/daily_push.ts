@@ -13,6 +13,7 @@ import { claimDailyAlert, releaseDailyAlert, type AlertKind } from './daily_aler
 import { computeSafeToSpend } from './safe_to_spend';
 import { getBillRadar, getKidsFor, getMissedYesterday, getExpiringItems, shiftDate } from './daily';
 import { jakartaToday } from './validate';
+import { loadSettingsFor, bool, num, type ResolvedSettings } from './settings';
 
 /** Jam Jakarta saat ini (0..23). */
 export function jakartaHour(): number {
@@ -35,6 +36,32 @@ async function pushableUsers(env: Env): Promise<string[]> {
     'SELECT DISTINCT user_id FROM push_subscriptions'
   ).all<{ user_id: string }>();
   return (rows.results ?? []).map((r) => r.user_id);
+}
+
+/**
+ * Pengguna yang mengaktifkan alert ini, pada jam yang mereka pilih.
+ *
+ * Jam diperiksa per pengguna, bukan sekali di awal fungsi: dua orang bisa
+ * memilih jam berbeda untuk alert yang sama, dan cron menyala tiap menit
+ * sehingga tiap jam pasti terlewati.
+ */
+async function recipientsFor(
+  env: Env,
+  enabledKey: string,
+  hourKey: string | null
+): Promise<Array<{ userId: string; settings: ResolvedSettings }>> {
+  const ids = await pushableUsers(env);
+  if (ids.length === 0) return [];
+
+  const settingsById = await loadSettingsFor(env.DB, ids);
+  const now = jakartaHour();
+
+  return ids
+    .map((userId) => ({ userId, settings: settingsById.get(userId)! }))
+    .filter(({ settings }) => {
+      if (!bool(settings, enabledKey)) return false;
+      return hourKey === null || num(settings, hourKey) === now;
+    });
 }
 
 /**
@@ -86,11 +113,10 @@ async function sendDaily(
 
 /** Radar Tagihan — pagi, H-3 sebelum jatuh tempo. */
 export async function triggerBillRadar(env: Env): Promise<void> {
-  if (jakartaHour() !== 8) return;
   const today = jakartaToday();
 
-  for (const userId of await pushableUsers(env)) {
-    const radar = await getBillRadar(env.DB, userId, today);
+  for (const { userId, settings } of await recipientsFor(env, 'notify.bill_radar', 'notify.bill_radar.hour')) {
+    const radar = await getBillRadar(env.DB, userId, today, num(settings, 'money.bill_horizon_days'));
     if (radar.bills.length === 0) continue;
 
     const overdue = radar.bills.filter((b) => b.daysUntil < 0);
@@ -123,11 +149,10 @@ export async function triggerBillRadar(env: Env): Promise<void> {
 
 /** Besok Anak — malam, sebelum tidur, saat masih sempat menyiapkan. */
 export async function triggerKidsPrep(env: Env): Promise<void> {
-  if (jakartaHour() !== 19) return;
   const today = jakartaToday();
   const tomorrow = shiftDate(today, 1);
 
-  for (const userId of await pushableUsers(env)) {
+  for (const { userId } of await recipientsFor(env, 'notify.kids_prep', 'notify.kids_prep.hour')) {
     const items = await getKidsFor(env.DB, userId, tomorrow);
     if (items.length === 0) continue;
 
@@ -163,10 +188,9 @@ export async function triggerKidsPrep(env: Env): Promise<void> {
  * hari, bukan mengabarkan kegagalan saat sudah tidak sempat berbuat apa-apa.
  */
 export async function triggerMissTwice(env: Env): Promise<void> {
-  if (jakartaHour() !== 9) return;
   const today = jakartaToday();
 
-  for (const userId of await pushableUsers(env)) {
+  for (const { userId } of await recipientsFor(env, 'notify.miss_twice', 'notify.miss_twice.hour')) {
     const missed = await getMissedYesterday(env.DB, userId, today);
     if (missed.length === 0) continue;
 
@@ -191,10 +215,9 @@ export async function triggerMissTwice(env: Env): Promise<void> {
 
 /** Pagi Ini — satu ringkasan lintas modul, menggantikan buka enam layar. */
 export async function triggerMorningBrief(env: Env): Promise<void> {
-  if (jakartaHour() !== 6) return;
   const today = jakartaToday();
 
-  for (const userId of await pushableUsers(env)) {
+  for (const { userId, settings } of await recipientsFor(env, 'notify.morning_brief', 'notify.morning_brief.hour')) {
     const [habitRow, events, safe, expiring, kids] = await Promise.all([
       env.DB.prepare(
         `SELECT COUNT(*) AS total,
@@ -213,7 +236,7 @@ export async function triggerMorningBrief(env: Env): Promise<void> {
         .bind(userId, today)
         .first<{ n: number }>(),
       computeSafeToSpend(env.DB, userId, today),
-      getExpiringItems(env.DB, userId, today),
+      getExpiringItems(env.DB, userId, today, num(settings, 'inventory.expiry_days')),
       getKidsFor(env.DB, userId, today),
     ]);
 

@@ -59,14 +59,19 @@ function overlaps(aStart: number, aLen: number, bStart: number, bLen: number): b
 export function findFreeSlot(
   preferred: number,
   busy: Array<{ start: number; len: number }>,
-  stepMin = 30
+  stepMin = 30,
+  window: { startMin?: number; endMin?: number; slotMin?: number } = {}
 ): number | null {
-  const isFree = (start: number) =>
-    start >= DAY_START &&
-    start + HABIT_MINUTES <= DAY_END &&
-    !busy.some((b) => overlaps(start, HABIT_MINUTES, b.start, b.len));
+  const dayStart = window.startMin ?? DAY_START;
+  const dayEnd = window.endMin ?? DAY_END;
+  const slot = window.slotMin ?? HABIT_MINUTES;
 
-  for (let delta = stepMin; delta <= DAY_END - DAY_START; delta += stepMin) {
+  const isFree = (start: number) =>
+    start >= dayStart &&
+    start + slot <= dayEnd &&
+    !busy.some((b) => overlaps(start, slot, b.start, b.len));
+
+  for (let delta = stepMin; delta <= dayEnd - dayStart; delta += stepMin) {
     if (isFree(preferred - delta)) return preferred - delta;
     if (isFree(preferred + delta)) return preferred + delta;
   }
@@ -74,14 +79,19 @@ export function findFreeSlot(
 }
 
 /** Kebiasaan berjadwal yang bertabrakan dengan agenda, beserta usulannya. */
-export function findClashes(habits: TimedHabit[], events: TimedEvent[]): Suggestion[] {
+export function findClashes(
+  habits: TimedHabit[],
+  events: TimedEvent[],
+  window: { startMin?: number; endMin?: number; slotMin?: number } = {}
+): Suggestion[] {
+  const slot = window.slotMin ?? HABIT_MINUTES;
   const busy = events.map((e) => ({ start: toMinutes(e.time), len: e.durationMin }));
 
   const suggestions: Suggestion[] = [];
   for (const habit of habits) {
     const start = toMinutes(habit.time);
     const clash = events.find((e) =>
-      overlaps(start, HABIT_MINUTES, toMinutes(e.time), e.durationMin)
+      overlaps(start, slot, toMinutes(e.time), e.durationMin)
     );
     if (!clash) continue;
 
@@ -89,16 +99,16 @@ export function findClashes(habits: TimedHabit[], events: TimedEvent[]): Suggest
     // tidak sekadar memindahkan tabrakan ke kebiasaan berikutnya.
     const otherHabits = habits
       .filter((h) => h.id !== habit.id)
-      .map((h) => ({ start: toMinutes(h.time), len: HABIT_MINUTES }));
+      .map((h) => ({ start: toMinutes(h.time), len: slot }));
 
-    const slot = findFreeSlot(start, [...busy, ...otherHabits]);
+    const freeSlot = findFreeSlot(start, [...busy, ...otherHabits], 30, window);
 
     suggestions.push({
       habitId: habit.id,
       habitName: habit.name,
       currentTime: habit.time,
       clashesWith: clash.title,
-      suggestedTime: slot === null ? null : toClock(slot),
+      suggestedTime: freeSlot === null ? null : toClock(freeSlot),
       fallbackTwoMin: habit.twoMin,
     });
   }

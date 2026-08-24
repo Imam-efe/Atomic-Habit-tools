@@ -45,20 +45,26 @@ export interface WateringVerdict {
  * Tidak pernah melewatkan tanpa alasan yang bisa dibaca: pengguna harus tahu
  * kenapa pengingatnya diam, kalau tidak fitur ini terasa seperti kerusakan.
  */
-export function shouldSkipWatering(rain: DailyRain): WateringVerdict {
-  if (rain.yesterday >= RAIN_SOAKED_MM) {
+export function shouldSkipWatering(
+  rain: DailyRain,
+  limits: { skipMm?: number; soakedMm?: number } = {}
+): WateringVerdict {
+  const skipMm = limits.skipMm ?? RAIN_SKIP_MM;
+  const soakedMm = limits.soakedMm ?? RAIN_SOAKED_MM;
+
+  if (rain.yesterday >= soakedMm) {
     return {
       skip: true,
       reason: `Kemarin hujan ${Math.round(rain.yesterday)} mm — tanah masih jenuh, menyiram sekarang berisiko busuk akar.`,
     };
   }
-  if (rain.today >= RAIN_SKIP_MM) {
+  if (rain.today >= skipMm) {
     return {
       skip: true,
       reason: `Hari ini diperkirakan hujan ${Math.round(rain.today)} mm — cukup menggantikan siram.`,
     };
   }
-  if (rain.yesterday >= RAIN_SKIP_MM) {
+  if (rain.yesterday >= skipMm) {
     return {
       skip: true,
       reason: `Kemarin sudah hujan ${Math.round(rain.yesterday)} mm.`,
@@ -68,8 +74,8 @@ export function shouldSkipWatering(rain: DailyRain): WateringVerdict {
 }
 
 /** Catatan tambahan untuk pengingat yang tetap dikirim. */
-export function wateringNote(rain: DailyRain): string | null {
-  if (rain.tomorrow >= RAIN_SKIP_MM) {
+export function wateringNote(rain: DailyRain, skipMm: number = RAIN_SKIP_MM): string | null {
+  if (rain.tomorrow >= skipMm) {
     return `Besok diperkirakan hujan ${Math.round(rain.tomorrow)} mm — siram secukupnya saja.`;
   }
   // Tiga hari kering berturut-turut layak disebut supaya penyiraman ditambah.
