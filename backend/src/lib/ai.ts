@@ -39,6 +39,8 @@ export async function runText(
   messages: AiMessage[],
   opts: { model?: string; maxTokens?: number } = {}
 ): Promise<string> {
+  if (!env.AI) throw new Error('AI binding not available');
+
   const res = (await (env.AI as unknown as LooseAi).run(opts.model ?? TEXT_MODEL, {
     messages,
     max_tokens: opts.maxTokens ?? 300,
