@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
+import { CITIES_ID } from '@/data/cities_id';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -154,32 +155,52 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
     };
   }, []);
 
+  const saveLocation = async (latitude: number, longitude: number, label?: string) => {
+    setSavingLocation(true);
+    setError(null);
+    try {
+      await apiFetch('/garden/location', {
+        method: 'POST',
+        body: JSON.stringify({ latitude, longitude, label }),
+      });
+      setWeather(await apiFetch<WeatherResponse>('/garden/weather'));
+    } catch (err) {
+      setError(describeError(err, 'Gagal menyimpan lokasi.'));
+    }
+    setSavingLocation(false);
+  };
+
   const useMyLocation = () => {
     if (!navigator.geolocation) {
-      setError('Perangkat ini tidak mendukung deteksi lokasi.');
+      setError('Perangkat ini tidak mendukung deteksi lokasi. Pilih kota di bawah.');
       return;
     }
     setSavingLocation(true);
+    setError(null);
+
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          await apiFetch('/garden/location', {
-            method: 'POST',
-            body: JSON.stringify({
-              latitude: Number(pos.coords.latitude.toFixed(4)),
-              longitude: Number(pos.coords.longitude.toFixed(4)),
-            }),
-          });
-          setWeather(await apiFetch<WeatherResponse>('/garden/weather'));
-        } catch (err) {
-          setError(describeError(err, 'Gagal menyimpan lokasi.'));
-        }
+      (pos) =>
+        saveLocation(
+          Number(pos.coords.latitude.toFixed(4)),
+          Number(pos.coords.longitude.toFixed(4))
+        ),
+      (err) => {
+        // Dibedakan per kode. Melaporkan semuanya sebagai "izin ditolak" keliru
+        // dan menyesatkan: GPS mati atau mode pesawat memberi POSITION_UNAVAILABLE,
+        // dan pengguna akan sia-sia mencari pengaturan izin yang sebetulnya
+        // sudah benar.
+        const message =
+          err.code === err.PERMISSION_DENIED
+            ? 'Izin lokasi ditolak. Pilih kota di bawah, atau aktifkan izin lokasi di pengaturan browser.'
+            : err.code === err.POSITION_UNAVAILABLE
+              ? 'Lokasi tidak bisa dibaca — GPS mati atau perangkat sedang mode pesawat. Pilih kota di bawah.'
+              : 'Deteksi lokasi terlalu lama. Pilih kota di bawah.';
+        setError(message);
         setSavingLocation(false);
       },
-      () => {
-        setError('Izin lokasi ditolak. Pengingat siram tetap jalan tanpa data cuaca.');
-        setSavingLocation(false);
-      }
+      // Tanpa timeout, getCurrentPosition bisa menggantung tanpa batas dan
+      // tombolnya terlihat macet selamanya.
+      { timeout: 10_000, maximumAge: 600_000 }
     );
   };
 
@@ -219,13 +240,44 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
               whileTap={savingLocation ? {} : { scale: 0.97 }}
               transition={springs.snappy}
             >
-              {savingLocation ? 'Menyimpan…' : 'Pakai lokasi saya'}
+              {savingLocation ? 'Menyimpan…' : '📍 Pakai lokasi saya'}
             </motion.button>
+
+            {/* Jalan keluar wajib ada. GPS bisa ditolak, mati, atau perangkatnya
+                mode pesawat — tanpa pilihan manual, fiturnya mati permanen bagi
+                orang yang tidak bisa atau tidak mau memberi izin lokasi. */}
+            <div className="text-[10px] text-center font-semibold" style={{ color: 'var(--text3)' }}>
+              atau pilih kota terdekat
+            </div>
+            <select
+              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
+              value=""
+              disabled={savingLocation}
+              onChange={(e) => {
+                const city = CITIES_ID.find((c) => c.name === e.target.value);
+                if (city) saveLocation(city.lat, city.lon, city.name);
+              }}
+            >
+              <option value="">Pilih kota…</option>
+              {CITIES_ID.map((city) => (
+                <option key={city.name} value={city.name}>
+                  {city.name}
+                </option>
+              ))}
+            </select>
           </>
         ) : weather.available === false ? (
-          <div className="text-xs" style={{ color: 'var(--text2)' }}>
-            {weather.message}
-          </div>
+          <>
+            <div className="text-xs" style={{ color: 'var(--text2)' }}>
+              {weather.message}
+            </div>
+            {weather.label && (
+              <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                Lokasi tersimpan: {weather.label}
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div className="flex justify-between text-xs" style={{ color: 'var(--text2)' }}>

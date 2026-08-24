@@ -37,6 +37,65 @@ describe('GardenPlanner', () => {
 
     expect(await screen.findByText('Atur lokasi kebun dulu.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Pakai lokasi saya/i })).toBeInTheDocument();
+    // Selalu ada jalan keluar tanpa GPS.
+    expect(screen.getByText('atau pilih kota terdekat')).toBeInTheDocument();
+  });
+
+  it('membedakan GPS mati dari izin yang ditolak', async () => {
+    vi.stubGlobal('fetch', routeFetch(emptyPlannerRoutes));
+    vi.stubGlobal('navigator', {
+      geolocation: {
+        getCurrentPosition: (_ok: unknown, fail: (e: GeolocationPositionError) => void) =>
+          fail({ code: 2, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError),
+      },
+    });
+
+    render(<GardenPlanner plantings={plantings} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Pakai lokasi saya/i }));
+
+    // Melaporkan ini sebagai "izin ditolak" membuat pengguna sia-sia mencari
+    // pengaturan izin yang sebetulnya sudah benar.
+    expect(await screen.findByText(/mode pesawat/)).toBeInTheDocument();
+    expect(screen.queryByText(/Izin lokasi ditolak/)).not.toBeInTheDocument();
+  });
+
+  it('menyebut izin ditolak hanya saat memang ditolak', async () => {
+    vi.stubGlobal('fetch', routeFetch(emptyPlannerRoutes));
+    vi.stubGlobal('navigator', {
+      geolocation: {
+        getCurrentPosition: (_ok: unknown, fail: (e: GeolocationPositionError) => void) =>
+          fail({ code: 1, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3 } as GeolocationPositionError),
+      },
+    });
+
+    render(<GardenPlanner plantings={plantings} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /Pakai lokasi saya/i }));
+
+    expect(await screen.findByText(/Izin lokasi ditolak/)).toBeInTheDocument();
+  });
+
+  it('menyimpan lokasi dari kota pilihan tanpa GPS', async () => {
+    const fetchMock = routeFetch({ ...emptyPlannerRoutes, '/garden/location': { latitude: -6.9175 } });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<GardenPlanner plantings={plantings} />);
+    const user = userEvent.setup();
+
+    // Ada dua dropdown di tab ini; yang dicari adalah yang punya opsi kota.
+    const citySelect = (await screen.findAllByRole('combobox')).find((el) =>
+      el.textContent?.includes('Bandung')
+    )!;
+    await user.selectOptions(citySelect, 'Bandung');
+
+    const post = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'POST');
+    expect(post).toBeDefined();
+    expect(JSON.parse((post![1] as RequestInit).body as string)).toEqual({
+      latitude: -6.9175,
+      longitude: 107.6191,
+      label: 'Bandung',
+    });
   });
 
   it('mengatakan siram jalan seperti biasa saat cuaca tak bisa diambil', async () => {
