@@ -31,7 +31,22 @@ npx wrangler d1 execute fayolla-db --remote --file=./migrations/00XX_name.sql
 ```
 
 Already applied this way, deliberately absent from the script:
-`0002`, `0006`, `0007`, `0008`, `0010`, `0017`, `0018`.
+`0002`, `0006`, `0007`, `0008`, `0010`, `0017`, `0018` (each adds a column), and
+`0003` (a one-time fix that drops and rebuilds a table — destructive, must never
+re-run).
+
+`0004`, `0005`, and `0009` used to be missing from both this list and the
+script, which was an oversight rather than a decision: all three are pure
+`CREATE TABLE IF NOT EXISTS`, so they are safe to re-run and are now listed.
+Their absence meant a database built only from the script never got
+`push_subscriptions`, the menstrual tables, or `weekly_reviews`.
+
+Note the limit this leaves: the tables created in `0006` (`kids_schedules`,
+`debts`, `debt_payments`, `inventory_items`, …) still cannot be created by the
+script, because the same file also adds columns. A database rebuilt from
+scratch needs `0006` applied by hand. That is a known cost of keeping one file
+per change; splitting it is the fix if bootstrapping ever needs to be
+automatic.
 
 The files stay in this directory as the schema's written history; only the
 script's list is trimmed.

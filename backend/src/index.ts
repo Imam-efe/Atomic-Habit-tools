@@ -29,6 +29,7 @@ import insights from './routes/insights';
 import quickadd from './routes/quickadd';
 import search from './routes/search';
 import notes from './routes/notes';
+import daily from './routes/daily';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -45,6 +46,12 @@ import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
+import {
+  triggerBillRadar,
+  triggerKidsPrep,
+  triggerMissTwice,
+  triggerMorningBrief,
+} from './lib/daily_push';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -106,6 +113,7 @@ app.route('/api/insights', insights);
 app.route('/api/quickadd', quickadd);
 app.route('/api/search', search);
 app.route('/api/notes', notes);
+app.route('/api/daily', daily);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -604,6 +612,10 @@ const handler = {
       triggerWeeklyRecap(env),
       triggerGardenCare(env).catch((err) => console.error('Garden care push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
+      triggerMorningBrief(env).catch((err) => console.error('Morning brief push failed', err)),
+      triggerBillRadar(env).catch((err) => console.error('Bill radar push failed', err)),
+      triggerMissTwice(env).catch((err) => console.error('Miss-twice push failed', err)),
+      triggerKidsPrep(env).catch((err) => console.error('Kids prep push failed', err)),
       // Holiday feed. Sunday only — the decree changes once a year, so a daily
       // pull would be noise. A failure leaves the previous cache in place.
       (new Date().getUTCDay() === 0
@@ -621,6 +633,10 @@ const handler = {
       env.DB.prepare(
         "DELETE FROM garden_care_alert_sent WHERE sent_at < unixepoch() - 7 * 86400"
       ).run().catch((err) => console.error('Garden alert cleanup failed', err)),
+      // Dedup alert harian hanya perlu berlaku untuk hari berjalan
+      env.DB.prepare(
+        "DELETE FROM daily_alert_sent WHERE sent_at < unixepoch() - 7 * 86400"
+      ).run().catch((err) => console.error('Daily alert cleanup failed', err)),
     ]));
   }
 };
