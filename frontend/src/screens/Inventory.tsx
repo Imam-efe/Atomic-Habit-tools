@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { todayISO } from '@/lib/date';
 
 interface RescueRecipe {
   name: string;
@@ -65,7 +66,7 @@ export function Inventory() {
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState('pcs');
   const [expiryDate, setExpiryDate] = useState('');
-  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [purchaseDate, setPurchaseDate] = useState(todayISO());
   const [category, setCategory] = useState('Bahan Makanan');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -150,7 +151,7 @@ export function Inventory() {
           quantity: qty,
           unit: buyingItem.unit,
           expiry_date: buyExpiryDate || null,
-          purchase_date: new Date().toISOString().slice(0, 10),
+          purchase_date: todayISO(),
           category: buyingItem.category,
           note: buyingItem.note
         })
@@ -164,7 +165,7 @@ export function Inventory() {
           amount: price,
           category: buyingItem.category === 'Bahan Makanan' || buyingItem.category === 'Bahan Dapur' ? 'Makanan & Minuman' : 'Kebutuhan Rumah Tangga',
           note: `Beli ${buyingItem.name} (${qty} ${buyingItem.unit})`,
-          date: new Date().toISOString().slice(0, 10),
+          date: todayISO(),
           bank_account_id: buyBankId || undefined
         })
       });
@@ -249,7 +250,7 @@ export function Inventory() {
     setQuantity('1');
     setUnit('pcs');
     setExpiryDate('');
-    setPurchaseDate(new Date().toISOString().slice(0, 10));
+    setPurchaseDate(todayISO());
     setCategory('Bahan Makanan');
     setNote('');
     setShowForm(false);

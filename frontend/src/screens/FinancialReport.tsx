@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { todayISO, daysAgoISO } from '@/lib/date';
 
 interface ReportData {
   pnl: {
@@ -84,19 +85,11 @@ function formatRp(n: number) {
 
 type RangePreset = '7d' | '30d' | '3m' | 'custom';
 
-function jakartaToday() {
-  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
-}
-
-function jakartaDaysAgo(n: number) {
-  return new Date(Date.now() + 7 * 3600000 - n * 86400000).toISOString().slice(0, 10);
-}
-
 function computeRange(preset: RangePreset, customFrom: string, customTo: string): { from: string; to: string } {
-  const today = jakartaToday();
-  if (preset === '7d') return { from: jakartaDaysAgo(6), to: today };
-  if (preset === '30d') return { from: jakartaDaysAgo(29), to: today };
-  if (preset === '3m') return { from: jakartaDaysAgo(89), to: today };
+  const today = todayISO();
+  if (preset === '7d') return { from: daysAgoISO(6), to: today };
+  if (preset === '30d') return { from: daysAgoISO(29), to: today };
+  if (preset === '3m') return { from: daysAgoISO(89), to: today };
   return { from: customFrom || today, to: customTo || today };
 }
 
@@ -124,7 +117,7 @@ export function FinancialReport() {
   // Payment Form state
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(jakartaToday());
+  const [paymentDate, setPaymentDate] = useState(todayISO());
   const [paymentNote, setPaymentNote] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
@@ -258,7 +251,7 @@ export function FinancialReport() {
   const completeUpcomingPayment = async (payId: string, debtId: string, amount: number, personName: string, debtType: string) => {
     if (!confirm('Tandai tagihan pembayaran ini sebagai selesai dibayar? Ini juga akan otomatis mencatat pengeluaran di modul uang.')) return;
     try {
-      const today = jakartaToday();
+      const today = todayISO();
 
       // 1. Update payment status to paid
       await apiFetch(`/debts/${debtId}/payments/${payId}`, {

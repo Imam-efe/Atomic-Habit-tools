@@ -423,12 +423,11 @@ export function Habits() {
     downloadIcs(buildHabitReminderIcs(withReminders), 'fayolla-kebiasaan.ics');
   };
 
-  const { done, total, stackedHabits, loopHabit } = useMemo(() => {
+  const { done, total, loopHabit } = useMemo(() => {
     const d = habits.filter(h => h.doneToday).length;
     const t = habits.length;
-    const stacked = habits.filter(h => h.triggerCue?.trim());
     const loop = habits.find(h => h.id === selectedHabitId) || habits[0];
-    return { done: d, total: t, stackedHabits: stacked, loopHabit: loop };
+    return { done: d, total: t, loopHabit: loop };
   }, [habits, selectedHabitId]);
 
   return (

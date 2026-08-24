@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { toISO } from '@/lib/date';
 
 interface HabitData {
   habitId: string;
@@ -28,7 +29,7 @@ function buildGrid(startDate: string, today: string, completedSet: Set<string>) 
     for (let d = 0; d < 7; d++) {
       const current = new Date(start);
       current.setDate(start.getDate() + w * 7 + d);
-      const dateStr = current.toISOString().slice(0, 10);
+      const dateStr = toISO(current);
       week.push({
         date: dateStr,
         done: completedSet.has(dateStr),

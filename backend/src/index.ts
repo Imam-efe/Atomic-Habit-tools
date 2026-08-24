@@ -924,7 +924,7 @@ const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
   },
-  async scheduled(event: any, env: Env, ctx: ExecutionContext) {
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(Promise.all([
       triggerReminders(env),
       triggerCalendarReminders(env).catch((err) => console.error('Calendar reminder push failed', err)),

@@ -121,7 +121,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   debts: ['id', 'user_id', 'type', 'person_name', 'amount_idr', 'due_date', 'note', 'status', 'created_at'],
   debt_payments: ['id', 'debt_id', 'user_id', 'amount_idr', 'payment_date', 'status', 'note', 'created_at', 'bank_account_id', 'budget_entry_id'],
   net_worth_snapshots: ['id', 'user_id', 'month', 'assets', 'liabilities', 'net_worth', 'created_at'],
-  weekly_reviews: ['id', 'user_id', 'week_start', 'habit_reflection', 'obstacle', 'adjustment', 'identity_affirmation', 'rating'],
+  weekly_reviews: ['id', 'user_id', 'week_start', 'habit_reflection', 'obstacle', 'adjustment', 'identity_affirmation', 'rating', 'created_at'],
   monthly_reviews: ['id', 'user_id', 'month', 'narrative', 'created_at'],
   habit_streak_freezes: ['id', 'habit_id', 'user_id', 'freeze_date', 'created_at'],
   habit_bundles: ['id', 'user_id', 'required_habit_id', 'desire_habit_id', 'reward_desc', 'is_active', 'created_at'],

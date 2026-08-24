@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useUIStore } from '@/stores/uiStore';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
+import { todayISO } from '@/lib/date';
 
 interface Task {
   id: string;
@@ -17,10 +18,6 @@ interface Task {
 
 const PRIORITY_LABELS: Record<Task['priority'], string> = { low: 'Rendah', normal: 'Normal', high: 'Tinggi' };
 const PRIORITY_COLORS: Record<Task['priority'], string> = { low: 'var(--text3)', normal: 'var(--info)', high: 'var(--neg)' };
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 interface Project {
   id: string;

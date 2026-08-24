@@ -8,6 +8,12 @@
  * library, no I/O.
  */
 
+// toISO dan todayISO tinggal di lib/date.ts — dulu tiap layar punya salinannya
+// sendiri dan sebagian memakai toISOString(), yang menggeser hari di GMT+7.
+// Diteruskan dari sini supaya pemanggil lama tidak perlu diubah.
+import { toISO, todayISO } from './date';
+export { toISO, todayISO };
+
 export const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 /** Monday-first, matching how Indonesian calendars are printed. */
 export const DAY_INITIALS = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
@@ -16,21 +22,10 @@ export const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ];
 
-/** YYYY-MM-DD in local time. `toISOString` would shift the day in GMT+7. */
-export function toISO(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
 /** Parses YYYY-MM-DD as a local date, not UTC. */
 export function fromISO(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d);
-}
-
-export function todayISO(): string {
-  return toISO(new Date());
 }
 
 export function addDays(iso: string, n: number): string {

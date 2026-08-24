@@ -14,7 +14,7 @@ settings.use('/*', requireAuth);
  * memberi tombol hapus untuk sesuatu yang tidak berarti apa pun bagi
  * pengguna. Yang tidak ada di sini memang sengaja tidak bisa disentuh.
  */
-const DATA_TABLES: Array<{ table: string; label: string; group: string; userScoped: boolean }> = [
+export const DATA_TABLES: Array<{ table: string; label: string; group: string; userScoped: boolean }> = [
   { table: 'habits', label: 'Kebiasaan', group: 'Kebiasaan', userScoped: true },
   { table: 'habit_completions', label: 'Riwayat centang kebiasaan', group: 'Kebiasaan', userScoped: true },
   { table: 'goals', label: 'Goals', group: 'Kebiasaan', userScoped: true },
@@ -42,13 +42,13 @@ const DATA_TABLES: Array<{ table: string; label: string; group: string; userScop
  * Data sementara yang aman dibuang kapan saja: cache dan penanda dedup.
  * Semuanya akan terbentuk lagi sendiri saat dibutuhkan.
  */
-const PURGEABLE: Array<{ table: string; label: string; userScoped: boolean; ageColumn: string }> = [
+export const PURGEABLE: Array<{ table: string; label: string; userScoped: boolean; ageColumn: string }> = [
   { table: 'notification_events', label: 'Riwayat notifikasi', userScoped: true, ageColumn: 'created_at' },
   { table: 'notification_deliveries', label: 'Riwayat pengiriman', userScoped: true, ageColumn: 'fired_at' },
   { table: 'daily_alert_sent', label: 'Penanda alert harian', userScoped: true, ageColumn: 'sent_at' },
   { table: 'garden_care_alert_sent', label: 'Penanda alert kebun', userScoped: false, ageColumn: 'sent_at' },
   { table: 'garden_weather_cache', label: 'Cache cuaca', userScoped: false, ageColumn: 'fetched_at' },
-  { table: 'food_facts_cache', label: 'Cache pencarian makanan', userScoped: false, ageColumn: 'created_at' },
+  { table: 'food_facts_cache', label: 'Cache pencarian makanan', userScoped: false, ageColumn: 'fetched_at' },
 ];
 
 // GET /api/settings — skema beserta nilai yang berlaku

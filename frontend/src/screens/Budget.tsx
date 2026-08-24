@@ -7,6 +7,7 @@ import { createWorker } from 'tesseract.js';
 import { formatRp } from '@/lib/currency';
 import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
+import { todayISO, daysAgoISO } from '@/lib/date';
 
 interface BudgetEntry {
   id: string;
@@ -66,19 +67,11 @@ const MOCK_MERCHANTS = [
 
 type RangePreset = '7d' | '30d' | '3m' | 'custom';
 
-function jakartaToday() {
-  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
-}
-
-function jakartaDaysAgo(n: number) {
-  return new Date(Date.now() + 7 * 3600000 - n * 86400000).toISOString().slice(0, 10);
-}
-
 function computeRange(preset: RangePreset, customFrom: string, customTo: string): { from: string; to: string } {
-  const today = jakartaToday();
-  if (preset === '7d') return { from: jakartaDaysAgo(6), to: today };
-  if (preset === '30d') return { from: jakartaDaysAgo(29), to: today };
-  if (preset === '3m') return { from: jakartaDaysAgo(89), to: today };
+  const today = todayISO();
+  if (preset === '7d') return { from: daysAgoISO(6), to: today };
+  if (preset === '30d') return { from: daysAgoISO(29), to: today };
+  if (preset === '3m') return { from: daysAgoISO(89), to: today };
   return { from: customFrom || today, to: customTo || today };
 }
 
@@ -97,7 +90,7 @@ function parseOcrText(text: string): { merchant: string; amount: number; categor
   }
 
   // 2. Find Date
-  let dateStr = new Date().toISOString().slice(0, 10);
+  let dateStr = todayISO();
   const dateRegexes = [
     /(\d{4})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\d|3[01])/, // YYYY-MM-DD
     /(0[1-9]|[12]\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](20\d{2}|\d{2})/, // DD-MM-YYYY or DD-MM-YY
@@ -193,7 +186,7 @@ export function Budget() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [note, setNote] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayISO());
   const [bankAccountId, setBankAccountId] = useState('');
   const [recurrence, setRecurrence] = useState<'' | 'daily' | 'weekly' | 'monthly'>('');
 
@@ -216,7 +209,6 @@ export function Budget() {
   const [showOcrModal, setShowOcrModal] = useState(false);
   const [ocrScanning, setOcrScanning] = useState(false);
   const [ocrResult, setOcrResult] = useState<{ merchant: string; amount: number; category: string; date: string } | null>(null);
-  const [ocrFileUploaded, setOcrFileUploaded] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   // Which engine produced the result on screen, and the line items only the
   // vision model can see — Tesseract returns flat text with no structure.
@@ -336,7 +328,7 @@ export function Budget() {
           merchant: randomTx.name,
           amount: randomTx.amount,
           category: randomTx.category,
-          date: new Date().toISOString().slice(0, 10)
+          date: todayISO()
         });
         setOcrEngine('local');
         setOcrScanning(false);
@@ -393,8 +385,6 @@ export function Budget() {
   const handleOcrFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    setOcrFileUploaded(true);
 
     // Compression has to finish before the scan starts now: the AI engine
     // sends the compressed data URL, and posting the raw camera JPEG would
@@ -464,7 +454,6 @@ export function Budget() {
     setDate(ocrResult.date);
     setShowOcrModal(false);
     setOcrResult(null);
-    setOcrFileUploaded(false);
     setOcrError(null);
     setOcrEngine(null);
     setOcrItems([]);
@@ -942,7 +931,6 @@ export function Budget() {
                   onClick={() => {
                     setShowOcrModal(false);
                     setOcrResult(null);
-                    setOcrFileUploaded(false);
                   }}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold"
                   style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}

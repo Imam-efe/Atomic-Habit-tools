@@ -12,6 +12,7 @@ import { useAppBadge } from '@/hooks';
 import { resolveYear } from '@/data/holidays';
 import type { RemoteHoliday, ResolvedHoliday } from '@/data/holidays';
 import { observancesOn } from '@/data/observances';
+import { todayISO } from '@/lib/date';
 
 interface DashboardData {
   habitsTotal: number;
@@ -93,7 +94,6 @@ export function Dashboard() {
   }, [identityFlash]);
   const [data, setData] = useState<DashboardData | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [loading, setLoading] = useState(true);
   const [netWorth, setNetWorth] = useState<NetWorthData | null>(null);
 
   // System Insights State
@@ -122,10 +122,11 @@ export function Dashboard() {
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Selamat pagi' : hour < 17 ? 'Selamat siang' : 'Selamat malam';
 
-  // `silent` refreshes in place without flashing the loading skeleton — used
-  // when the kept-alive tab is re-shown and already has data on screen.
-  const loadData = async (silent = false) => {
-    if (!silent) setLoading(true);
+  // Muat ulang tidak pernah mengosongkan `data` lebih dulu: angka yang sudah
+  // ada tetap di layar sampai yang baru tiba, jadi membuka tab ini kembali
+  // tidak mengedipkan seluruh halaman. Sebelum data pertama datang, kartunya
+  // menampilkan '–' (lihat habitsText di bawah), bukan angka nol yang keliru.
+  const loadData = async () => {
     try {
       const [dash, habs, nw] = await Promise.all([
         apiFetch<DashboardData>('/dashboard'),
@@ -136,12 +137,11 @@ export function Dashboard() {
       setHabits(habs);
       setNetWorth(nw);
     } catch {}
-    setLoading(false);
 
     // Pagi Ini, Pola, dan Kalender (agenda + info hari ini) tampil langsung di
     // halaman Beranda — bukan hanya di dalam modal Rangkuman Sistem — jadi
     // ini dimuat di sini, bukan saat generateInsights() dipanggil.
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayISO();
     const year = Number(todayStr.slice(0, 4));
     try {
       const [briefRes, patternsRes, agendaRes, holidaysRes] = await Promise.all([
@@ -164,7 +164,7 @@ export function Dashboard() {
   // (habits, budget) refresh silently each time the user comes back.
   useEffect(() => {
     const onShown = (e: Event) => {
-      if ((e as CustomEvent).detail === 'beranda') loadData(true);
+      if ((e as CustomEvent).detail === 'beranda') loadData();
     };
     window.addEventListener('fayolla:tab-shown', onShown);
     return () => window.removeEventListener('fayolla:tab-shown', onShown);
@@ -177,7 +177,7 @@ export function Dashboard() {
     setLoadingInsights(true);
     setShowInsights(true);
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = todayISO();
       const monthStr = new Date().toISOString().slice(0, 7);
 
       const [activities, nutrition, budget] = await Promise.all([
@@ -485,7 +485,7 @@ export function Dashboard() {
         )}
 
         {(() => {
-          const todayStr = now.toISOString().slice(0, 10);
+          const todayStr = todayISO();
           const items = [
             ...(brief?.events.map(e => ({ id: e.id, title: e.title, time: e.event_time })) ?? []),
             ...agenda.map(a => ({ id: a.id, title: a.title, time: a.time ?? null })),
@@ -607,7 +607,6 @@ export function Dashboard() {
                         {insights.budgetText}
                       </p>
                     </div>
-
 
                     {/* AI-generated insight — only appears if the backend has
                         ANTHROPIC_API_KEY configured; silently absent otherwise. */}

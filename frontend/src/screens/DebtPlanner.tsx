@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { todayISO } from '@/lib/date';
 
 interface Debt {
   id: string;
@@ -33,10 +34,6 @@ interface PayForm {
 
 function formatRp(n: number) {
   return n.toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-}
-
-function jakartaToday() {
-  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 }
 
 function computePayoff(debts: Debt[], method: 'snowball' | 'avalanche', extraMonthly: number): number {
@@ -105,7 +102,7 @@ export function DebtPlanner() {
       personName: debt.person_name,
       maxAmount: debt.amount_idr,
       amountInput: String(debt.amount_idr),
-      date: jakartaToday(),
+      date: todayISO(),
       bankAccountId: banks[0]?.id ?? '',
       note: '',
     });

@@ -14,13 +14,9 @@ import { findClashes, type TimedEvent, type TimedHabit } from '../lib/reschedule
 import { findPatterns, type DayRecord } from '../lib/patterns';
 import { loadSettings, num, bool } from '../lib/settings';
 
-/**
- * Agenda tidak menyimpan durasi (lihat 0015_calendar.sql), jadi pengecekan
- * bentrok memakai satu jam sebagai perkiraan. Terlalu panjang berarti
- * mengusulkan pindah yang tidak perlu; terlalu pendek berarti melewatkan
- * bentrok betulan. Satu jam adalah panjang rapat yang paling lazim.
- */
-const ASSUMED_EVENT_MINUTES = 60;
+// Agenda tidak menyimpan durasi (lihat 0015_calendar.sql). Perkiraan yang
+// dipakai pengecekan bentrok datang dari pengaturan
+// `calendar.default_event_minutes`, bukan angka tetap di berkas ini.
 
 const daily = new Hono<AuthContext>();
 

@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
 import { isNetworkError, newClientId, queueFor } from '@/lib/offlineQueue';
 import { useAuthStore } from '@/stores/authStore';
+import { todayISO } from '@/lib/date';
 
 interface Plant {
   id: string;
@@ -183,18 +184,6 @@ const QUICK_QUESTIONS = [
   'Apa risiko hama sekarang?',
   'Bagaimana pola siram & pupukku?',
 ];
-
-/**
- * Hari ini menurut jam Jakarta, bukan UTC.
- *
- * Backend mencatat dan menghitung jadwal dengan jakartaToday(). Memakai
- * toISOString() polos di sini membuat perawatan yang dicatat antara 00:00 dan
- * 07:00 WIB tersimpan bertanggal kemarin — jadwal siram berikutnya lalu maju
- * sehari, dan tanaman yang baru disiram tetap tampil telat.
- */
-function todayISO(): string {
-  return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
-}
 
 function formatDate(iso: string): string {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];

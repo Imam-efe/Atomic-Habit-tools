@@ -44,6 +44,16 @@ jobs:
         working-directory: frontend
         run: npm test -- --run
 
+      # Dijalankan ulang di zona yang jauh dari WIB. Tanggal di aplikasi ini
+      # selalu WIB karena backend menyimpannya begitu; uji yang hanya lulus
+      # di satu zona berarti ada kode yang diam-diam memakai zona perangkat,
+      # dan salahnya baru terlihat sebagai catatan bertanggal kemarin.
+      - name: Test frontend (zona waktu lain)
+        working-directory: frontend
+        env:
+          TZ: America/New_York
+        run: npm test -- --run
+
   deploy-backend:
     needs: verify
     runs-on: ubuntu-latest
