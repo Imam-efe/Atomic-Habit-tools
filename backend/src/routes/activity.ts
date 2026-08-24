@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate } from '../lib/validate';
+import { validate, jakartaToday } from '../lib/validate';
 
 const activity = new Hono<AuthContext>();
 
@@ -20,7 +20,7 @@ const LABELS = ['Deep Work', 'Shallow Work', 'Rest', 'Social', 'Health', 'Learni
 // GET /api/activity?date=YYYY-MM-DD
 activity.get('/', async (c) => {
   const user = c.get('user');
-  const date = c.req.query('date') ?? new Date().toISOString().slice(0, 10);
+  const date = c.req.query('date') ?? jakartaToday();
 
   const rows = await c.env.DB.prepare(
     'SELECT * FROM activity_logs WHERE user_id = ?1 AND log_date = ?2 ORDER BY created_at ASC'
@@ -44,7 +44,7 @@ activity.post('/', async (c) => {
   const hours = body.hours!;
 
   const id = nanoid();
-  const date = body.date ?? new Date().toISOString().slice(0, 10);
+  const date = body.date ?? jakartaToday();
   const now = Math.floor(Date.now() / 1000);
 
   await c.env.DB.prepare(

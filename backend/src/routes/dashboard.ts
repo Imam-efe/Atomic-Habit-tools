@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
+import { jakartaToday } from '../lib/validate';
 
 const dashboard = new Hono<AuthContext>();
 
@@ -7,8 +8,10 @@ dashboard.use('/*', requireAuth);
 
 dashboard.get('/', async (c) => {
   const user = c.get('user');
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  // Jakarta, bukan UTC: sebelum jam 7 pagi WIB, UTC masih tanggal kemarin,
+  // jadi dashboard menampilkan data hari sebelumnya sepanjang pagi buta.
+  const today = jakartaToday();
+  const yesterday = new Date(new Date(today).getTime() - 86400000).toISOString().slice(0, 10);
   const month = today.slice(0, 7);
 
   const [habitsTotal, habitsDone, goalsTotal, budgetSummary, firstGoal, habitsList, yesterdayCompletions, todayCompletions] = await Promise.all([

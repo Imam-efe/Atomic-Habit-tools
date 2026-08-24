@@ -219,7 +219,7 @@ async function updateDailyHabitStreak(db: D1Database, habitId: string, today: st
 // GET /api/habits — list habits with today's completion status
 habits.get('/', async (c) => {
   const user = c.get('user');
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const today = jakartaToday();
 
   const rows = await c.env.DB.prepare(
     'SELECT * FROM habits WHERE user_id = ?1 ORDER BY sort_order ASC, created_at ASC'
@@ -452,7 +452,9 @@ habits.post('/', async (c) => {
 habits.post('/:id/toggle', async (c) => {
   const user = c.get('user');
   const habitId = c.req.param('id');
-  const today = new Date().toISOString().slice(0, 10);
+  // Jakarta, bukan UTC. Check-in antara 00:00 dan 07:00 WIB tercatat ke
+  // tanggal kemarin di UTC, yang memutus streak dan mengisi hari yang salah.
+  const today = jakartaToday();
   
   type ToggleBody = { isTwoMin?: boolean };
   const body = await c.req.json<ToggleBody>().catch((): ToggleBody => ({}));

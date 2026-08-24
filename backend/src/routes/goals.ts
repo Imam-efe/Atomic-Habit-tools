@@ -81,7 +81,7 @@ function calculateLevelAndExp(totalExp: number) {
 // GET /api/goals
 goals.get('/', async (c) => {
   const user = c.get('user');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = jakartaToday();
 
   const [gRows, hRows, completionsRes, allCompletionsRes] = await Promise.all([
     c.env.DB.prepare('SELECT * FROM goals WHERE user_id = ?1 ORDER BY sort_order ASC, created_at ASC').bind(user.sub).all<GoalRow>(),
