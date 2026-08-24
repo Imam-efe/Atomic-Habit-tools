@@ -137,6 +137,25 @@ export function Dashboard() {
       setNetWorth(nw);
     } catch {}
     setLoading(false);
+
+    // Pagi Ini, Pola, dan Kalender (agenda + info hari ini) tampil langsung di
+    // halaman Beranda — bukan hanya di dalam modal Rangkuman Sistem — jadi
+    // ini dimuat di sini, bukan saat generateInsights() dipanggil.
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const year = Number(todayStr.slice(0, 4));
+    try {
+      const [briefRes, patternsRes, agendaRes, holidaysRes] = await Promise.all([
+        apiFetch<Brief>('/daily/brief').catch(() => null),
+        apiFetch<PatternResult>('/daily/patterns').catch(() => null),
+        apiFetch<{ date: string; items: AgendaItem[] }>(`/calendar/agenda?date=${todayStr}`).catch(() => null),
+        apiFetch<{ holidays: RemoteHoliday[] }>(`/holidays?year=${year}`).catch(() => null),
+      ]);
+      setBrief(briefRes);
+      setPatterns(patternsRes);
+      setAgenda(agendaRes?.items ?? []);
+      const resolved = resolveYear(year, holidaysRes?.holidays ?? []);
+      setTodayHoliday(resolved.holidays.find(h => h.date === todayStr) ?? null);
+    } catch {}
   };
 
   useEffect(() => { loadData(); }, []);
@@ -166,22 +185,6 @@ export function Dashboard() {
         apiFetch<NutritionData>(`/nutrition?date=${todayStr}`),
         apiFetch<any>(`/budget?month=${monthStr}`)
       ]);
-
-      // Pagi Ini, Pola, dan Kalender (agenda + info hari ini) — tiap sumber
-      // berdiri sendiri lewat .catch(null) supaya satu modul yang gagal tidak
-      // mengosongkan seluruh panel insight.
-      const year = Number(todayStr.slice(0, 4));
-      const [briefRes, patternsRes, agendaRes, holidaysRes] = await Promise.all([
-        apiFetch<Brief>('/daily/brief').catch(() => null),
-        apiFetch<PatternResult>('/daily/patterns').catch(() => null),
-        apiFetch<{ date: string; items: AgendaItem[] }>(`/calendar/agenda?date=${todayStr}`).catch(() => null),
-        apiFetch<{ holidays: RemoteHoliday[] }>(`/holidays?year=${year}`).catch(() => null),
-      ]);
-      setBrief(briefRes);
-      setPatterns(patternsRes);
-      setAgenda(agendaRes?.items ?? []);
-      const resolved = resolveYear(year, holidaysRes?.holidays ?? []);
-      setTodayHoliday(resolved.holidays.find(h => h.date === todayStr) ?? null);
 
       // 1. Habits Evaluation
       const totalHabs = data?.habitsTotal ?? 0;
@@ -417,6 +420,116 @@ export function Dashboard() {
           <span className="neu-cta text-[10px] font-bold px-2 py-1 rounded-lg text-white" style={{ background: 'var(--accentFill)' }}>Lihat</span>
         </div>
 
+        {/* Pagi Ini, Pola, dan Kalender — insight lintas modul yang langsung
+            tampak di Beranda, tanpa perlu membuka modal Rangkuman Sistem. */}
+        {brief && (
+          <motion.div
+            whileTap={press.surface}
+            onClick={() => { setTab('lainnya'); setTimeout(() => useUIStore.getState().setSubScreen('harian'), 20); }}
+            className="rounded-[18px] p-3.5 mb-3 cursor-pointer border"
+            style={{ background: 'var(--surface)', borderColor: 'var(--sep)' }}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold" style={{ color: 'var(--text)' }}>🌤️ Pagi Ini</span>
+              <span className="text-[10px]" style={{ color: 'var(--text3)' }}>Lihat semua ›</span>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {(() => {
+                const lines: string[] = [];
+                lines.push(
+                  brief.habits.pending > 0
+                    ? `${brief.habits.pending} dari ${brief.habits.total} kebiasaan belum selesai`
+                    : brief.habits.total > 0
+                      ? 'Semua kebiasaan sudah selesai ✅'
+                      : 'Belum ada kebiasaan terdaftar'
+                );
+                if (brief.missed.length > 0) {
+                  lines.push(`⚠️ Berisiko bolos dua kali: ${brief.missed.map(m => m.name).join(', ')}`);
+                }
+                if (brief.bills.total > 0) {
+                  lines.push(`💳 ${brief.bills.bills.length} tagihan jatuh tempo · Rp${Math.round(brief.bills.total).toLocaleString('id-ID')}`);
+                }
+                if (brief.expiring.length > 0) {
+                  lines.push(`🥫 ${brief.expiring.length} bahan makanan mau kedaluwarsa`);
+                }
+                if (brief.kids.length > 0) {
+                  lines.push(`👶 ${brief.kids.length} jadwal anak besok`);
+                }
+                return lines.slice(0, 3).map((line, i) => (
+                  <li key={i} className="text-[11px] leading-relaxed" style={{ color: 'var(--text2)' }}>{line}</li>
+                ));
+              })()}
+            </ul>
+          </motion.div>
+        )}
+
+        {patterns && patterns.patterns.length > 0 && (
+          <motion.div
+            whileTap={press.surface}
+            onClick={() => { setTab('lainnya'); setTimeout(() => useUIStore.getState().setSubScreen('pola'), 20); }}
+            className="rounded-[18px] p-3.5 mb-3 cursor-pointer border"
+            style={{ background: 'var(--surface)', borderColor: 'var(--sep)' }}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-bold" style={{ color: 'var(--text)' }}>🔗 Pola</span>
+              <span className="text-[10px]" style={{ color: 'var(--text3)' }}>Lihat semua ›</span>
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {patterns.patterns.slice(0, 2).map(p => (
+                <li key={p.id} className="text-[11px] leading-relaxed" style={{ color: 'var(--text2)' }}>
+                  <span className="font-bold" style={{ color: 'var(--text)' }}>{PATTERN_LABELS[p.id] ?? p.id}:</span> {p.text}
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+
+        {(() => {
+          const todayStr = now.toISOString().slice(0, 10);
+          const items = [
+            ...(brief?.events.map(e => ({ id: e.id, title: e.title, time: e.event_time })) ?? []),
+            ...agenda.map(a => ({ id: a.id, title: a.title, time: a.time ?? null })),
+          ];
+          const observances = observancesOn(todayStr);
+          if (!todayHoliday && observances.length === 0 && items.length === 0) return null;
+
+          return (
+            <motion.div
+              whileTap={press.surface}
+              onClick={() => setTab('kalender')}
+              className="rounded-[18px] p-3.5 mb-4 cursor-pointer border"
+              style={{ background: 'var(--surface)', borderColor: 'var(--sep)' }}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold" style={{ color: 'var(--text)' }}>🗓️ Kalender Hari Ini</span>
+                <span className="text-[10px]" style={{ color: 'var(--text3)' }}>Buka Kalender ›</span>
+              </div>
+              {todayHoliday && (
+                <p className="text-[11px] leading-relaxed mb-1" style={{ color: todayHoliday.kind === 'libur' ? 'var(--neg)' : 'var(--warn)' }}>
+                  {todayHoliday.kind === 'libur' ? '🔴 Libur Nasional' : '🟠 Cuti Bersama'}: {todayHoliday.name}
+                </p>
+              )}
+              {observances.length > 0 && (
+                <p className="text-[11px] leading-relaxed mb-1" style={{ color: 'var(--text2)' }}>
+                  {observances.map(o => o.name).join(', ')}
+                </p>
+              )}
+              {items.length > 0 && (
+                <ul className="flex flex-col gap-1">
+                  {items.slice(0, 3).map((it, i) => (
+                    <li key={`${it.id}-${i}`} className="text-[11px] leading-relaxed" style={{ color: 'var(--text2)' }}>
+                      • {it.title}{it.time ? ` — ${it.time}` : ''}
+                    </li>
+                  ))}
+                  {items.length > 3 && (
+                    <li className="text-[11px]" style={{ color: 'var(--text3)' }}>+{items.length - 3} lainnya</li>
+                  )}
+                </ul>
+              )}
+            </motion.div>
+          );
+        })()}
+
         {/* AI System Insights Modal */}
         <AnimatePresence>
           {showInsights && (
@@ -495,112 +608,6 @@ export function Dashboard() {
                       </p>
                     </div>
 
-                    {/* Pagi Ini — ringkasan lintas modul */}
-                    {brief && (
-                      <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
-                        <span className="text-xs font-bold text-white block mb-1.5">🌤️ Pagi Ini</span>
-                        <ul className="flex flex-col gap-1">
-                          {(() => {
-                            const lines: string[] = [];
-                            lines.push(
-                              brief.habits.pending > 0
-                                ? `${brief.habits.pending} dari ${brief.habits.total} kebiasaan belum selesai hari ini`
-                                : brief.habits.total > 0
-                                  ? 'Semua kebiasaan sudah selesai hari ini ✅'
-                                  : 'Belum ada kebiasaan terdaftar'
-                            );
-                            if (brief.missed.length > 0) {
-                              lines.push(`⚠️ Berisiko bolos dua kali: ${brief.missed.map(m => m.name).join(', ')}`);
-                            }
-                            if (brief.bills.total > 0) {
-                              lines.push(`💳 ${brief.bills.bills.length} tagihan jatuh tempo · Rp${Math.round(brief.bills.total).toLocaleString('id-ID')}`);
-                            }
-                            if (brief.expiring.length > 0) {
-                              lines.push(`🥫 ${brief.expiring.length} bahan makanan mau kedaluwarsa`);
-                            }
-                            if (brief.kids.length > 0) {
-                              lines.push(`👶 ${brief.kids.length} jadwal anak besok`);
-                            }
-                            return lines.map((line, i) => (
-                              <li key={i} className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>{line}</li>
-                            ));
-                          })()}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Pola — hubungan antar modul */}
-                    {patterns && (
-                      <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
-                        <span className="text-xs font-bold text-white block mb-1.5">🔗 Pola</span>
-                        {patterns.patterns.length > 0 ? (
-                          <ul className="flex flex-col gap-1.5">
-                            {patterns.patterns.slice(0, 3).map(p => (
-                              <li key={p.id} className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
-                                <span className="font-bold" style={{ color: 'var(--text)' }}>{PATTERN_LABELS[p.id] ?? p.id}:</span> {p.text}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
-                            Belum ada pola yang cukup kuat — butuh lebih banyak data.
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Agenda pada kalender — gabungan agenda pribadi + due-item lintas modul hari ini */}
-                    {(() => {
-                      const todayStr = now.toISOString().slice(0, 10);
-                      const items = [
-                        ...(brief?.events.map(e => ({ id: e.id, title: e.title, time: e.event_time })) ?? []),
-                        ...agenda.map(a => ({ id: a.id, title: a.title, time: a.time ?? null })),
-                      ];
-                      const observances = observancesOn(todayStr);
-                      return (
-                        <>
-                          <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
-                            <span className="text-xs font-bold text-white block mb-1.5">🗓️ Agenda Hari Ini</span>
-                            {items.length > 0 ? (
-                              <ul className="flex flex-col gap-1">
-                                {items.map((it, i) => (
-                                  <li key={`${it.id}-${i}`} className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
-                                    • {it.title}{it.time ? ` — ${it.time}` : ''}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
-                                Tidak ada agenda tercatat hari ini.
-                              </p>
-                            )}
-                          </div>
-
-                          {/* Info kalender hari ini — libur nasional/cuti bersama & peringatan */}
-                          <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
-                            <span className="text-xs font-bold text-white block mb-1.5">ℹ️ Info Kalender</span>
-                            <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
-                              {now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                            </p>
-                            {todayHoliday && (
-                              <p className="text-xs leading-relaxed mt-1" style={{ color: todayHoliday.kind === 'libur' ? 'var(--neg)' : 'var(--warn)' }}>
-                                {todayHoliday.kind === 'libur' ? '🔴 Libur Nasional' : '🟠 Cuti Bersama'}: {todayHoliday.name}
-                              </p>
-                            )}
-                            {observances.length > 0 && (
-                              <p className="text-xs leading-relaxed mt-1" style={{ color: 'var(--text2)' }}>
-                                {observances.map(o => o.name).join(', ')}
-                              </p>
-                            )}
-                            {!todayHoliday && observances.length === 0 && (
-                              <p className="text-xs leading-relaxed mt-1" style={{ color: 'var(--text3)' }}>
-                                Hari biasa, tidak ada libur atau peringatan khusus.
-                              </p>
-                            )}
-                          </div>
-                        </>
-                      );
-                    })()}
 
                     {/* AI-generated insight — only appears if the backend has
                         ANTHROPIC_API_KEY configured; silently absent otherwise. */}

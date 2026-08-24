@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
 import { GardenLocationPicker } from '@/components/GardenLocationPicker';
+import { GrowPlannerSections, GrowRecordSections } from './GardenGrow';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -523,6 +524,8 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
           )}
         </Card>
       )}
+
+      <GrowPlannerSections plantings={plantings} />
     </div>
   );
 }
@@ -1019,6 +1022,8 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
           </div>
         )}
       </Card>
+
+      <GrowRecordSections />
     </div>
   );
 }

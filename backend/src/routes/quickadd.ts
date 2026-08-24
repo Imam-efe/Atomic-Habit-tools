@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { runJson, SCHEMA_MODEL } from '../lib/ai';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './budget';
+import { PLANT_BY_ID } from '../data/plants';
 import { jakartaToday } from '../lib/validate';
 
 const quickadd = new Hono<AuthContext>();
@@ -16,7 +17,10 @@ quickadd.use('/*', requireAuth);
  * /budget, /habits/:id/toggle and /inventory endpoints.
  */
 
-type Intent = 'expense' | 'income' | 'habit' | 'inventory' | 'calendar' | 'unknown';
+type Intent = 'expense' | 'income' | 'habit' | 'inventory' | 'calendar' | 'garden' | 'unknown';
+
+/** Aksi perawatan kebun yang bisa dicatat lewat kalimat. */
+const GARDEN_ACTIONS = ['siram', 'pupuk', 'panen', 'pangkas', 'semprot'] as const;
 
 interface RawParse {
   intent?: string;
@@ -32,6 +36,10 @@ interface RawParse {
   calendar_date?: string;
   calendar_time?: string;
   calendar_kind?: string;
+  garden_action?: string;
+  garden_plant?: string;
+  garden_amount?: number;
+  garden_unit?: string;
 }
 
 const CALENDAR_KINDS = ['task', 'event', 'reminder'] as const;
@@ -41,8 +49,8 @@ const PARSE_SCHEMA = {
   properties: {
     intent: {
       type: 'string',
-      enum: ['expense', 'income', 'habit', 'inventory', 'calendar', 'unknown'],
-      description: 'expense/income untuk transaksi uang, habit kalau menyelesaikan kebiasaan, inventory kalau menambah stok barang, calendar kalau menjadwalkan sesuatu di masa depan',
+      enum: ['expense', 'income', 'habit', 'inventory', 'calendar', 'garden', 'unknown'],
+      description: 'expense/income untuk transaksi uang, habit kalau menyelesaikan kebiasaan, inventory kalau menambah stok barang, calendar kalau menjadwalkan sesuatu di masa depan, garden kalau merawat tanaman di kebun (menyiram, memupuk, memanen)',
     },
     amount: { type: 'number', description: 'Nominal rupiah, angka penuh tanpa titik. 25rb = 25000' },
     category: { type: 'string', description: 'Salah satu kategori dari daftar yang diberikan' },
@@ -56,6 +64,10 @@ const PARSE_SCHEMA = {
     calendar_date: { type: 'string', description: 'Tanggal dalam format YYYY-MM-DD, dihitung dari tanggal hari ini yang diberikan. Hanya untuk intent calendar' },
     calendar_time: { type: 'string', description: 'Jam dalam format HH:MM 24 jam, kosongkan kalau tidak disebutkan. Hanya untuk intent calendar' },
     calendar_kind: { type: 'string', enum: CALENDAR_KINDS, description: 'task untuk hal yang harus dikerjakan, event untuk acara, reminder untuk pengingat. Hanya untuk intent calendar' },
+    garden_action: { type: 'string', enum: GARDEN_ACTIONS, description: 'Perawatan yang dilakukan. Hanya untuk intent garden' },
+    garden_plant: { type: 'string', description: 'Nama tanaman yang dirawat. Hanya untuk intent garden' },
+    garden_amount: { type: 'number', description: 'Jumlah hasil panen, hanya diisi untuk garden_action panen' },
+    garden_unit: { type: 'string', description: 'Satuan hasil panen, misal kg/ikat/buah. Hanya untuk garden_action panen' },
   },
   required: ['intent'],
 } as const;
@@ -154,14 +166,35 @@ quickadd.post('/parse', async (c) => {
   if (!text) return c.json({ error: 'text is required' }, 400);
   if (text.length > 500) return c.json({ error: 'text too long' }, 400);
 
-  const [habitsRes, banksRes] = await Promise.all([
+  const [habitsRes, banksRes, plantingsRes] = await Promise.all([
     c.env.DB.prepare('SELECT id, name FROM habits WHERE user_id = ?1')
       .bind(user.sub).all<{ id: string; name: string }>(),
     c.env.DB.prepare('SELECT id, name FROM bank_accounts WHERE user_id = ?1')
       .bind(user.sub).all<{ id: string; name: string }>(),
+    c.env.DB.prepare(
+      `SELECT id, nickname, custom_name, plant_id FROM garden_plantings
+        WHERE user_id = ?1 AND status IN ('tumbuh', 'panen')`
+    ).bind(user.sub).all<{
+      id: string; nickname: string | null; custom_name: string | null; plant_id: string | null;
+    }>(),
   ]);
   const habits = habitsRes.results ?? [];
   const banks = banksRes.results ?? [];
+
+  // Nama tanaman untuk pencocokan: julukan dulu, lalu nama katalog, terakhir
+  // nama kustom. Urutan ini meniru layar Kebun supaya "siram si merah" cocok
+  // dengan julukan yang dipakai pengguna sehari-hari, bukan nama botani yang
+  // tidak pernah dia sebut. Katalog ada di kode, bukan DB, jadi diresolusi di
+  // sini — bukan lewat JOIN yang hanya mengenal cache AI.
+  const plantings = (plantingsRes.results ?? [])
+    .map((p) => ({
+      id: p.id,
+      name: p.nickname?.trim()
+        || (p.plant_id ? PLANT_BY_ID.get(p.plant_id)?.name : undefined)
+        || p.custom_name?.trim()
+        || '',
+    }))
+    .filter((p) => p.name.length > 0);
 
   let parsed: RawParse | null = null;
   try {
@@ -195,11 +228,39 @@ quickadd.post('/parse', async (c) => {
 
   if (!parsed) return c.json({ intent: 'unknown' as Intent, text });
 
-  const intent: Intent = (['expense', 'income', 'habit', 'inventory', 'calendar'] as const).includes(
-    parsed.intent as Intent & ('expense' | 'income' | 'habit' | 'inventory' | 'calendar')
-  )
+  const KNOWN_INTENTS = ['expense', 'income', 'habit', 'inventory', 'calendar', 'garden'] as const;
+  const intent: Intent = (KNOWN_INTENTS as readonly string[]).includes(parsed.intent ?? '')
     ? (parsed.intent as Intent)
     : 'unknown';
+
+  if (intent === 'garden') {
+    const planting = matchHabit(plantings, parsed.garden_plant ?? text);
+    // Tanpa tanaman yang cocok tidak ada yang bisa dicatat — lebih baik jatuh
+    // ke unknown daripada menebak tanaman mana yang dimaksud.
+    if (!planting) return c.json({ intent: 'unknown' as Intent, text });
+
+    const action = (GARDEN_ACTIONS as readonly string[]).includes(parsed.garden_action ?? '')
+      ? parsed.garden_action!
+      : 'siram';
+
+    // Jumlah hanya bermakna untuk panen; untuk siram/pupuk angka di kalimat
+    // biasanya bagian dari nama atau jumlah tanaman, bukan hasil.
+    const amount = action === 'panen' && parsed.garden_amount && parsed.garden_amount > 0
+      ? parsed.garden_amount
+      : null;
+
+    return c.json({
+      intent,
+      text,
+      care: {
+        plantingId: planting.id,
+        plantName: planting.name,
+        action,
+        amount,
+        unit: amount !== null ? (parsed.garden_unit?.trim() || 'kg') : null,
+      },
+    });
+  }
 
   if (intent === 'habit') {
     const habit = matchHabit(habits, parsed.habit_name ?? text);
