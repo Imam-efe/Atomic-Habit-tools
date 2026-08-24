@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
+import { GardenPlanner, GardenRecords, type PlantingOption } from './GardenExtras';
 import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
 import { useUIStore } from '@/stores/uiStore';
@@ -160,10 +161,18 @@ function relativeLabel(iso: string, today: string): string {
 
 export function Garden() {
   const { goBack } = useUIStore();
-  const [tab, setTab] = useState<'kebun' | 'jadwal' | 'katalog'>('kebun');
+  const [tab, setTab] = useState<'kebun' | 'jadwal' | 'katalog' | 'rencana' | 'catatan'>('kebun');
   const [data, setData] = useState<GardenResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Bentuk ringkas untuk tab Rencana dan Catatan — keduanya hanya butuh id,
+  // label, dan id katalognya.
+  const plantingOptions: PlantingOption[] = (data?.plantings ?? []).map(p => ({
+    id: p.id,
+    label: p.nickname || p.name,
+    plantId: p.plantId,
+  }));
 
   // Katalog
   const [catalog, setCatalog] = useState<Plant[]>([]);
@@ -449,17 +458,19 @@ export function Garden() {
       )}
 
       {/* Tab */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-4"
+      <div className="grid grid-cols-5 gap-1 p-1 rounded-xl mb-4"
         style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         {([
-          ['kebun', '🌱 Kebun'],
-          ['jadwal', '📅 Jadwal'],
-          ['katalog', '📖 Katalog'],
+          ['kebun', '🌱'],
+          ['jadwal', '📅'],
+          ['rencana', '🧭'],
+          ['catatan', '📊'],
+          ['katalog', '📖'],
         ] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className="py-2.5 rounded-lg text-xs font-bold text-center"
+            className="py-2.5 rounded-lg text-base font-bold text-center"
             style={{
               background: tab === id ? 'var(--bg)' : 'transparent',
               color: tab === id ? 'var(--text)' : 'var(--text3)',
@@ -727,6 +738,12 @@ export function Garden() {
             ))}
           </div>
         )
+      ) : tab === 'rencana' ? (
+        /* ────────────────────────── TAB RENCANA ────────────────────────── */
+        <GardenPlanner plantings={plantingOptions} />
+      ) : tab === 'catatan' ? (
+        /* ────────────────────────── TAB CATATAN ────────────────────────── */
+        <GardenRecords plantings={plantingOptions} />
       ) : (
         /* ────────────────────────── TAB KATALOG ────────────────────────── */
         <div className="flex flex-col gap-3">
