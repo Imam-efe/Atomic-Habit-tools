@@ -12,7 +12,9 @@ export type AlertKind =
   | 'bill_radar'
   | 'kids_prep'
   | 'miss_twice'
-  | 'succession';
+  | 'succession'
+  | 'garden_followup'
+  | 'harvest_due';
 
 /**
  * Klaim hak kirim untuk (user, kind, tanggal).

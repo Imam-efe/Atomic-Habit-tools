@@ -141,6 +141,51 @@ interface KitchenReport {
   unpricedHarvests: string[];
 }
 
+interface Calibration {
+  plantId: string;
+  name: string;
+  emoji: string;
+  catalogDays: number;
+  actualDays: number;
+  deltaDays: number;
+  cycles: number;
+  reliable: boolean;
+}
+
+interface GardenStreak {
+  current: number;
+  longest: number;
+  activeToday: boolean;
+  totalDays: number;
+}
+
+interface UnitCost {
+  plantKey: string;
+  name: string;
+  costPerUnitIdr: number | null;
+  marketPriceIdr: number | null;
+  savingPerUnitIdr: number | null;
+  unit: string;
+  verdict: string;
+  advice: string;
+}
+
+interface SeasonPlanItem {
+  plantId: string;
+  name: string;
+  emoji: string;
+  recommendation: 'utamakan' | 'boleh' | 'hindari';
+  reasons: string[];
+  seedOnHand: boolean;
+}
+
+interface RecipeIdea {
+  name: string;
+  uses: string[];
+  steps: string[];
+  minutes: number | null;
+}
+
 interface AnnualReport {
   year: string;
   plantedCount: number;
@@ -160,6 +205,9 @@ export function GrowPlannerSections({ plantings }: { plantings: PlantingOption[]
   const [forecasts, setForecasts] = useState<Forecast[]>([]);
   const [needs, setNeeds] = useState<SupplyNeed[]>([]);
   const [beds, setBeds] = useState<BedView[]>([]);
+  const [calibrations, setCalibrations] = useState<Calibration[]>([]);
+  const [unitCosts, setUnitCosts] = useState<UnitCost[]>([]);
+  const [seasonPlan, setSeasonPlan] = useState<SeasonPlanItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Form bedengan baru
@@ -186,15 +234,21 @@ export function GrowPlannerSections({ plantings }: { plantings: PlantingOption[]
     (async () => {
       // Tiap bagian berdiri sendiri: satu endpoint gagal tidak boleh
       // mengosongkan dua lainnya.
-      const [f, s, b] = await Promise.all([
+      const [f, s, b, cal, uc, plan] = await Promise.all([
         apiFetch<{ forecasts: Forecast[] }>('/garden/harvest-forecast').catch(() => ({ forecasts: [] })),
         apiFetch<{ needs: SupplyNeed[] }>('/garden/supplies').catch(() => ({ needs: [] })),
         apiFetch<{ beds: BedView[] }>('/garden/beds').catch(() => ({ beds: [] })),
+        apiFetch<{ calibrations: Calibration[] }>('/garden/calibration').catch(() => ({ calibrations: [] })),
+        apiFetch<{ plants: UnitCost[] }>('/garden/unit-cost').catch(() => ({ plants: [] })),
+        apiFetch<{ plan: SeasonPlanItem[] }>('/garden/next-season').catch(() => ({ plan: [] })),
       ]);
       if (cancelled) return;
       setForecasts(f.forecasts);
       setNeeds(s.needs);
       setBeds(b.beds);
+      setCalibrations(cal.calibrations);
+      setUnitCosts(uc.plants);
+      setSeasonPlan(plan.plan);
     })();
 
     return () => { cancelled = true; };
@@ -291,6 +345,77 @@ export function GrowPlannerSections({ plantings }: { plantings: PlantingOption[]
                 {f.shiftDays > 0 && ` · mundur ${f.shiftDays} hari dari perkiraan katalog ${f.baselineDate}`}
                 {f.overdueDays > 0 && ` · sudah lewat ${f.overdueDays} hari`}
               </p>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Rencana musim depan — hasil gabungan semua analisis di bawah */}
+      {seasonPlan.length > 0 && (
+        <Card title="📆 Musim depan tanam apa">
+          {seasonPlan.slice(0, 6).map((item) => {
+            const color = item.recommendation === 'utamakan' ? 'var(--pos)'
+              : item.recommendation === 'hindari' ? 'var(--neg)' : 'var(--text2)';
+            return (
+              <div key={item.plantId} className="rounded-xl p-2.5" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold truncate" style={{ color: 'var(--text)' }}>
+                    {item.emoji} {item.name}{item.seedOnHand && ' · benih ada'}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color }}>
+                    {item.recommendation}
+                  </span>
+                </div>
+                {item.reasons.map((r, i) => (
+                  <p key={i} className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--text3)' }}>· {r}</p>
+                ))}
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* HPP: lebih murah menanam sendiri atau membeli? */}
+      {unitCosts.length > 0 && (
+        <Card title="⚖️ Menanam vs membeli">
+          {unitCosts.slice(0, 6).map((u) => {
+            const color = u.verdict === 'untung' ? 'var(--pos)'
+              : u.verdict === 'rugi' ? 'var(--neg)' : 'var(--text2)';
+            return (
+              <div key={u.plantKey}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold truncate" style={{ color: 'var(--text)' }}>{u.name}</span>
+                  {u.costPerUnitIdr !== null && (
+                    <span className="text-[11px] font-bold flex-shrink-0" style={{ color }}>
+                      {rupiah(u.costPerUnitIdr)}/{u.unit}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] leading-relaxed" style={{ color: 'var(--text3)' }}>{u.advice}</p>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* Kalibrasi katalog dari panen sendiri */}
+      {calibrations.length > 0 && (
+        <Card title="📐 Umur panen di kebun ini">
+          <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+            Dibandingkan angka katalog, dari penanaman yang benar-benar sampai panen.
+          </p>
+          {calibrations.map((cal) => (
+            <div key={cal.plantId} className="flex items-center justify-between gap-2">
+              <span className="text-[11px] truncate" style={{ color: 'var(--text2)' }}>
+                {cal.emoji} {cal.name}
+                <span style={{ color: 'var(--text3)' }}>
+                  {' '}({cal.cycles}×{!cal.reliable && ', data masih tipis'})
+                </span>
+              </span>
+              <span className="text-[11px] font-bold flex-shrink-0"
+                style={{ color: cal.deltaDays > 0 ? 'var(--warn)' : 'var(--pos)' }}>
+                {cal.actualDays} hari ({cal.deltaDays > 0 ? '+' : ''}{cal.deltaDays})
+              </span>
             </div>
           ))}
         </Card>
@@ -438,6 +563,9 @@ export function GrowRecordSections() {
   const [pending, setPending] = useState<PendingReview[]>([]);
   const [kitchen, setKitchen] = useState<KitchenReport | null>(null);
   const [annual, setAnnual] = useState<AnnualReport | null>(null);
+  const [streak, setStreak] = useState<GardenStreak | null>(null);
+  const [recipes, setRecipes] = useState<RecipeIdea[] | null>(null);
+  const [loadingRecipes, setLoadingRecipes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -468,12 +596,13 @@ export function GrowRecordSections() {
     let cancelled = false;
 
     (async () => {
-      const [s, t, k, a] = await Promise.all([
+      const [s, t, k, a, st] = await Promise.all([
         apiFetch<SowingsResponse>('/garden/sowings').catch(() => null),
         apiFetch<{ scores: TreatmentScore[]; pending: PendingReview[] }>('/garden/treatments')
           .catch(() => ({ scores: [], pending: [] })),
         apiFetch<KitchenReport>('/garden/kitchen').catch(() => null),
         apiFetch<AnnualReport>('/garden/annual-report').catch(() => null),
+        apiFetch<GardenStreak>('/garden/streak').catch(() => null),
       ]);
       if (cancelled) return;
       setSowings(s);
@@ -481,6 +610,7 @@ export function GrowRecordSections() {
       setPending(t.pending);
       setKitchen(k);
       setAnnual(a);
+      setStreak(st);
     })();
 
     return () => { cancelled = true; };
@@ -531,6 +661,18 @@ export function GrowRecordSections() {
       await loadTreatments();
     } catch (err) {
       setError(describeError(err, 'Gagal menyimpan penilaian.'));
+    }
+  };
+
+  const loadRecipes = async () => {
+    setLoadingRecipes(true);
+    try {
+      const res = await apiFetch<{ recipes: RecipeIdea[] }>('/garden/harvest-recipes');
+      setRecipes(res.recipes);
+    } catch (err) {
+      setError(describeError(err, 'Gagal membuat saran masak.'));
+    } finally {
+      setLoadingRecipes(false);
     }
   };
 
@@ -599,6 +741,57 @@ export function GrowRecordSections() {
           {error}
         </div>
       )}
+
+      {/* Streak merawat kebun */}
+      {streak && streak.totalDays > 0 && (
+        <Card title="🔥 Rentetan merawat kebun">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-extrabold" style={{ color: streak.current > 0 ? 'var(--accent)' : 'var(--text3)' }}>
+              {streak.current}
+            </span>
+            <span className="text-[11px]" style={{ color: 'var(--text2)' }}>
+              hari berturut-turut{streak.activeToday ? '' : ' · hari ini belum'}
+            </span>
+          </div>
+          <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
+            Rekor {streak.longest} hari · total {streak.totalDays} hari merawat.
+            Bolong sehari masih dimaafkan — kebun tidak menuntut tiap hari.
+          </p>
+        </Card>
+      )}
+
+      {/* Panen jadi saran masak */}
+      <Card title="🍳 Masak apa dari panen">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+            Dari panen tiga hari terakhir.
+          </p>
+          <button
+            className="neu-cta text-[10px] font-bold px-2.5 py-1 rounded-lg text-white flex-shrink-0"
+            style={{ background: 'var(--accentFill)', opacity: loadingRecipes ? 0.6 : 1 }}
+            onClick={loadRecipes}
+            disabled={loadingRecipes}
+          >
+            {loadingRecipes ? 'Memikirkan...' : 'Cari ide'}
+          </button>
+        </div>
+        {recipes && recipes.length === 0 && (
+          <p className="text-[11px]" style={{ color: 'var(--text2)' }}>
+            Belum ada panen tercatat beberapa hari ini.
+          </p>
+        )}
+        {recipes?.map((r, i) => (
+          <div key={i} className="rounded-xl p-2.5" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+            <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+              {r.name}{r.minutes !== null && ` · ${r.minutes} menit`}
+            </p>
+            <p className="text-[10px] mb-1" style={{ color: 'var(--text3)' }}>Pakai: {r.uses.join(', ')}</p>
+            {r.steps.map((s, j) => (
+              <p key={j} className="text-[10px] leading-relaxed" style={{ color: 'var(--text2)' }}>{j + 1}. {s}</p>
+            ))}
+          </div>
+        ))}
+      </Card>
 
       {/* Penilaian penanganan hama yang menggantung — paling atas karena ini
           yang menutup lingkaran data; tanpa dijawab, peringkat di bawah kosong. */}
