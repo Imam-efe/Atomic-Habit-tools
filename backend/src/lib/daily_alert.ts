@@ -7,7 +7,12 @@
  * (lihat migrations/README.md). Semua alert baru berbagi satu tabel.
  */
 
-export type AlertKind = 'morning_brief' | 'bill_radar' | 'kids_prep' | 'miss_twice';
+export type AlertKind =
+  | 'morning_brief'
+  | 'bill_radar'
+  | 'kids_prep'
+  | 'miss_twice'
+  | 'succession';
 
 /**
  * Klaim hak kirim untuk (user, kind, tanggal).

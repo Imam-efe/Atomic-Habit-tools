@@ -24,6 +24,11 @@ import netWorth from './routes/net_worth';
 import weeklyReview, { getMondayOf } from './routes/weekly_review';
 import monthlyReview from './routes/monthly_review';
 import garden, { computeCareState, lastActions, resolvePlants, type PlantingRow } from './routes/garden';
+import gardenExtra from './routes/garden_extra';
+import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
+import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
+import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
+import { PLANT_BY_ID } from './data/plants';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
 import quickadd from './routes/quickadd';
@@ -101,6 +106,9 @@ app.route('/api/finance-report', financeReport);
 app.route('/api/net-worth', netWorth);
 app.route('/api/weekly-review', weeklyReview);
 app.route('/api/monthly-review', monthlyReview);
+// Dipasang sebelum router kebun utama: garden.ts punya rute /:id yang akan
+// menelan /companions, /seeds, dan kawan-kawan kalau ia dicocokkan lebih dulu.
+app.route('/api/garden', gardenExtra);
 app.route('/api/garden', garden);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
@@ -534,6 +542,22 @@ async function triggerGardenCare(env: Env) {
   `).all<{ user_id: string }>();
 
   for (const { user_id: userId } of users.results ?? []) {
+    // Cuaca diambil sekali per pengguna, bukan per tanaman: satu kebun ada di
+    // satu lokasi, dan Open-Meteo dibatasi kuota harian.
+    const location = await env.DB.prepare(
+      'SELECT latitude, longitude FROM garden_location WHERE user_id = ?1'
+    ).bind(userId).first<{ latitude: number; longitude: number }>();
+
+    const rain = location
+      ? await getRain(env.DB, location.latitude, location.longitude, today)
+      : null;
+
+    // Tidak tahu cuaca bukan berarti kering. Tanpa data, pengingat berjalan
+    // seperti sebelumnya — melewatkan siram karena tebakan lebih berbahaya
+    // daripada menyiram saat sudah agak basah.
+    const rainVerdict = rain ? shouldSkipWatering(rain) : { skip: false, reason: '' };
+    const rainNote = rain ? wateringNote(rain) : null;
+
     const [rows, lastMap] = await Promise.all([
       env.DB.prepare(
         `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
@@ -551,6 +575,7 @@ async function triggerGardenCare(env: Env) {
       [...new Set(plantings.map(p => p.plant_id).filter((id): id is string => !!id))]
     );
 
+    let rainSkipped = 0;
     const water: string[] = [];
     const fertilize: string[] = [];
     const harvest: string[] = [];
@@ -561,7 +586,9 @@ async function triggerGardenCare(env: Env) {
       const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
       const label = p.nickname || plant?.name || p.custom_name || 'Tanaman';
 
-      const dueWater = care.nextWater !== null && care.nextWater <= today;
+      const wantsWater = care.nextWater !== null && care.nextWater <= today;
+      const dueWater = wantsWater && !rainVerdict.skip;
+      if (wantsWater && rainVerdict.skip) rainSkipped++;
       const dueFertilize = care.nextFertilize !== null && care.nextFertilize <= today;
       if (!dueWater && !dueFertilize && !care.harvestReady) continue;
 
@@ -584,6 +611,10 @@ async function triggerGardenCare(env: Env) {
 
     const parts: string[] = [];
     if (water.length) parts.push(`💧 Siram: ${water.join(', ')}`);
+    if (water.length && rainNote) parts.push(rainNote);
+    // Siram yang dilewati karena hujan tetap disebut. Pengingat yang diam
+    // tanpa penjelasan terbaca sebagai fitur yang rusak.
+    if (rainSkipped > 0) parts.push(`☔ ${rainSkipped} tanaman tidak perlu disiram. ${rainVerdict.reason}`);
     if (fertilize.length) parts.push(`🌿 Pupuk: ${fertilize.join(', ')}`);
     if (harvest.length) parts.push(`🧺 Siap panen: ${harvest.join(', ')}`);
 
@@ -594,6 +625,75 @@ async function triggerGardenCare(env: Env) {
       water, fertilize, harvest, url: '/lainnya',
     });
     await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
+  }
+}
+
+// Pengingat menyemai batch berikutnya untuk tanaman sekali cabut.
+//
+// Jam 7 bersama pengingat perawatan supaya kebun cukup satu kali membuka
+// ponsel. Dedup lewat daily_alert_sent — semai bukan urusan per tanaman,
+// melainkan satu keputusan sekali sehari.
+async function triggerSuccession(env: Env) {
+  if (new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours() !== 7) return;
+
+  const today = jakartaToday();
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT g.user_id
+    FROM garden_plantings g
+    JOIN push_subscriptions s ON s.user_id = g.user_id
+    WHERE g.status IN ('tumbuh', 'panen')
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const rows = await env.DB.prepare(
+      `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+              planted_date, expected_harvest_date, status, note
+       FROM garden_plantings WHERE user_id = ?1 AND status IN ('tumbuh', 'panen')`
+    ).bind(userId).all<PlantingRow>();
+
+    const plantings = rows.results ?? [];
+    if (plantings.length === 0) continue;
+
+    const [plantMap, lastMap] = await Promise.all([
+      resolvePlants(env.DB, [...new Set(plantings.map(p => p.plant_id).filter((id): id is string => !!id))]),
+      lastActions(env.DB, userId),
+    ]);
+
+    const active: ActivePlanting[] = plantings.map(p => {
+      const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
+      const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
+      return {
+        id: p.id,
+        plantId: p.plant_id,
+        label: p.nickname || plant?.name || p.custom_name || 'Tanaman',
+        nextHarvest: care.nextHarvest,
+      };
+    });
+
+    const due = findSuccessionDue(active, PLANT_BY_ID, today, 0);
+    if (due.length === 0) continue;
+
+    const lines = due.map(d => {
+      const when = d.daysUntilSow < 0
+        ? `sudah lewat ${Math.abs(d.daysUntilSow)} hari`
+        : 'hari ini';
+      return `${d.emoji} ${d.label} — semai batch berikutnya, ${when}`;
+    });
+
+    const title = '🌱 Waktunya semai batch berikutnya';
+    const body = `${lines.join('\n')}\nSupaya panen bersambung, bukan kosong berminggu-minggu.`;
+
+    if (!(await claimDailyAlert(env.DB, userId, 'succession', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'succession', title, body, {
+      plantings: due.map(d => ({ id: d.plantingId, label: d.label })),
+      url: '/lainnya',
+    });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/lainnya' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'succession', today);
+    }
   }
 }
 
@@ -611,6 +711,7 @@ const handler = {
       triggerStreakAtRisk(env),
       triggerWeeklyRecap(env),
       triggerGardenCare(env).catch((err) => console.error('Garden care push failed', err)),
+      triggerSuccession(env).catch((err) => console.error('Succession push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       triggerMorningBrief(env).catch((err) => console.error('Morning brief push failed', err)),
       triggerBillRadar(env).catch((err) => console.error('Bill radar push failed', err)),

@@ -462,6 +462,70 @@ garden.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Berapa lama hasil panen segar bertahan, dalam hari.
+ *
+ * Perkiraan kasar per kategori, bukan angka pasti — cukup untuk membuat fitur
+ * Selamatkan Bahan menyadari hasil kebun sebelum layu. Pengguna bisa mengubah
+ * tanggalnya di Inventaris.
+ */
+const FRESH_DAYS: Record<string, number> = {
+  'sayuran-daun': 4,
+  'sayuran-buah': 10,
+  umbi: 30,
+  rempah: 14,
+  buah: 7,
+};
+
+/**
+ * Catat hasil panen sebagai stok Inventaris.
+ *
+ * Mengembalikan id item stok, atau null kalau panen ini sudah pernah dicatat.
+ * Kunci utama garden_harvest_stock yang menjaganya: memanggil ulang endpoint
+ * perawatan tidak boleh menggandakan stok.
+ */
+async function addHarvestToInventory(
+  db: D1Database,
+  userId: string,
+  plantingId: string,
+  careLogId: string,
+  amount: number,
+  unit: string | null,
+  date: string
+): Promise<string | null> {
+  const planting = await db.prepare(
+    'SELECT plant_id, custom_name, nickname FROM garden_plantings WHERE id = ?1 AND user_id = ?2'
+  ).bind(plantingId, userId).first<{ plant_id: string | null; custom_name: string | null; nickname: string | null }>();
+  if (!planting) return null;
+
+  const plant = planting.plant_id ? PLANT_BY_ID.get(planting.plant_id) : undefined;
+  const name = plant?.name ?? planting.custom_name ?? planting.nickname ?? 'Hasil panen';
+  const freshDays = FRESH_DAYS[plant?.category ?? ''] ?? 7;
+
+  const itemId = nanoid();
+
+  try {
+    // Klaim dulu, simpan stok belakangan: kalau baris klaim gagal karena panen
+    // ini sudah pernah masuk, tidak ada stok kedua yang terlanjur dibuat.
+    await db.prepare(
+      'INSERT INTO garden_harvest_stock (care_log_id, user_id, inventory_item_id) VALUES (?1, ?2, ?3)'
+    ).bind(careLogId, userId, itemId).run();
+  } catch {
+    return null;
+  }
+
+  await db.prepare(`
+    INSERT INTO inventory_items (id, user_id, name, quantity, unit, expiry_date, purchase_date, category, note, created_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'Bahan Makanan', ?8, unixepoch())
+  `).bind(
+    itemId, userId, name, amount, unit ?? 'kg',
+    addDays(date, freshDays), date,
+    'Hasil panen kebun'
+  ).run();
+
+  return itemId;
+}
+
 // ──────────────────────────── LOG PERAWATAN ────────────────────────────
 
 // POST /api/garden/:id/care — catat siram / pupuk / panen / dst
@@ -501,7 +565,17 @@ garden.post('/:id/care', async (c) => {
       .bind(plantingId).run();
   }
 
-  return c.json({ id, action, date }, 201);
+  // Panen yang ada jumlahnya masuk ke Inventaris. Sebelum ini panen berhenti
+  // di log kebun, padahal 2 kg tomat hasil panen ya stok dapur — dan begitu
+  // masuk Inventaris ia ikut terpantau fitur Selamatkan Bahan.
+  let stockItemId: string | null = null;
+  if (action === 'panen' && typeof body.amount === 'number' && body.amount > 0) {
+    stockItemId = await addHarvestToInventory(
+      c.env.DB, user.sub, plantingId, id, body.amount, body.unit?.trim() || null, date
+    );
+  }
+
+  return c.json({ id, action, date, stockItemId }, 201);
 });
 
 // GET /api/garden/:id/care — riwayat perawatan satu tanaman
