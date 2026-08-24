@@ -458,6 +458,9 @@ export function More() {
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas', path: null },
             { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang', path: null },
             { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal', path: null },
+            { label: 'Pagi Ini', id: 'harian', desc: 'Ringkasan harian: kebiasaan, agenda, sisa aman, tagihan & jadwal anak', path: null },
+            { label: 'Tutup Hari', id: 'tutup-hari', desc: 'Ritual malam 3 menit: refleksi, mood & tiga prioritas besok', path: null },
+            { label: 'Pola', id: 'pola', desc: 'Hubungan kebiasaan dengan tidur, langkah & pengeluaran', path: null },
             { label: 'Pembuat Shortcut', id: 'shortcuts', desc: 'Generator iOS Shortcuts dari deskripsi natural', path: '/shortcuts' },
           ].map((item, i) => (
             <div key={item.id}>
@@ -691,9 +694,30 @@ export function More() {
                     <li><strong>Centang Habit:</strong> Endpoint <code className="text-[var(--accent)]">/habits/toggle</code><br />Body: <code className="text-[var(--text2)]">{"{ \"habitName\": \"Minum Air Putih\" }"}</code></li>
                     <li><strong>Catat Pengeluaran:</strong> Endpoint <code className="text-[var(--accent)]">/budget</code><br />Body: <code className="text-[var(--text2)]">{"{ \"type\": \"expense\", \"amount\": 20000, \"category\": \"Makanan\", \"note\": \"Kopi\" }"}</code></li>
                     <li><strong>Baca Notifikasi (polling):</strong> Endpoint <code className="text-[var(--accent)]">/notifications?token=&lt;API_KEY&gt;</code> dengan Method <strong>GET</strong> tanpa Headers.<br />Mengembalikan notifikasi sistem (pengingat habit, alert kadaluarsa) yang belum dibaca — cocok untuk Automation berkala. Panduan lengkap ada di <code className="bg-black/20 px-1 rounded">docs/shortcuts</code> repo.</li>
+                    <li><strong>Kirim Data Apple Health:</strong> Endpoint <code className="text-[var(--accent)]">/health</code><br />Body: <code className="text-[var(--text2)]">{"{ \"metrics\": { \"sleep_minutes\": 430, \"steps\": 8200 } }"}</code><br />Metrik yang diterima: <code className="bg-black/20 px-1 rounded">sleep_minutes</code>, <code className="bg-black/20 px-1 rounded">steps</code>, <code className="bg-black/20 px-1 rounded">resting_hr</code>, <code className="bg-black/20 px-1 rounded">active_energy</code>, <code className="bg-black/20 px-1 rounded">weight_kg</code>. Data ini yang dipakai layar <strong>Pola</strong>.</li>
                   </ul>
                 </li>
               </ol>
+
+              {/* Panduan tersendiri: kirim-Health adalah satu-satunya endpoint
+                  yang butuh aksi Health di dalam Shortcut, bukan sekadar
+                  Get Contents of URL. */}
+              <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--sep)' }}>
+                <div className="text-[11px] font-bold mb-1" style={{ color: 'var(--text)' }}>
+                  Automation Apple Health (untuk layar Pola)
+                </div>
+                <ol className="list-decimal pl-4 text-[10px] flex flex-col gap-1" style={{ color: 'var(--text2)' }}>
+                  <li>Shortcuts → Automation → buat Personal Automation <strong>Time of Day</strong>, misalnya jam 08:00.</li>
+                  <li>Tambah aksi <strong>Find Health Samples</strong>: Sleep Analysis, hari ini, hitung total menit.</li>
+                  <li>Tambah <strong>Find Health Samples</strong> kedua untuk Steps, hari ini, jumlahkan.</li>
+                  <li>Tambah <strong>Get Contents of URL</strong> ke endpoint <code className="text-[var(--accent)]">/health</code>, Method POST, Headers seperti di atas, Body JSON berisi kedua angka tadi.</li>
+                  <li>Matikan <strong>Ask Before Running</strong> supaya berjalan sendiri tiap pagi.</li>
+                </ol>
+                <div className="text-[10px] mt-1.5" style={{ color: 'var(--text3)' }}>
+                  Angka di luar batas wajar ditolak, jadi salah satuan (jam vs menit) tidak akan
+                  diam-diam merusak analisis. Cek hasilnya dengan GET ke endpoint yang sama.
+                </div>
+              </div>
             </div>
           )}
         </div>

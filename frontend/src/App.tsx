@@ -37,6 +37,9 @@ const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').the
 const Achievements = lazy(() => import('@/screens/Achievements').then(m => ({ default: m.Achievements })));
 const Notes = lazy(() => import('@/screens/Notes').then(m => ({ default: m.Notes })));
 const Shortcuts = lazy(() => import('@/screens/Shortcuts'));
+const Harian = lazy(() => import('@/screens/Harian'));
+const TutupHari = lazy(() => import('@/screens/TutupHari'));
+const Pola = lazy(() => import('@/screens/Pola'));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -174,6 +177,9 @@ function AppShell() {
       'achievements': <Achievements />,
       'notes': <Notes />,
       'shortcuts': <Shortcuts />,
+      'harian': <Harian />,
+      'tutup-hari': <TutupHari />,
+      'pola': <Pola />,
     }),
     [],
   );

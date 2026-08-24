@@ -1,8 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+
+interface RescueRecipe {
+  name: string;
+  uses: string[];
+  steps: string[];
+  minutes: number | null;
+}
 
 interface InventoryItem {
   id: string;
@@ -45,6 +52,11 @@ export function Inventory() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [selectedStatus, setSelectedStatus] = useState<'Semua' | 'Aman' | 'Masa Pakai Tipis' | 'Kedaluwarsa'>('Semua');
+
+  // Selamatkan Bahan: saran masakan dari stok yang hampir kedaluwarsa.
+  const [recipes, setRecipes] = useState<RescueRecipe[]>([]);
+  const [rescueLoading, setRescueLoading] = useState(false);
+  const [rescueError, setRescueError] = useState<string | null>(null);
 
   // Form State for Stock Items
   const [showForm, setShowForm] = useState(false);
@@ -208,6 +220,29 @@ export function Inventory() {
     setShowForm(true);
   };
 
+  const handleRescue = async () => {
+    setRescueLoading(true);
+    setRescueError(null);
+    setRecipes([]);
+
+    try {
+      const res = await apiFetch<{ recipes: RescueRecipe[] }>('/daily/rescue', { method: 'POST' });
+      setRecipes(res.recipes);
+      if (res.recipes.length === 0) {
+        setRescueError('Belum bisa menyusun saran dari bahan ini.');
+      }
+    } catch (err) {
+      // Backend tetap mengembalikan daftar bahannya saat AI gagal, jadi pesan
+      // spesifiknya lebih berguna daripada "gagal" yang generik.
+      setRescueError(
+        err instanceof ApiError
+          ? (err.body.message ?? 'Gagal memuat saran masakan.')
+          : 'Terjadi kesalahan jaringan.'
+      );
+    }
+    setRescueLoading(false);
+  };
+
   const resetForm = () => {
     setEditingId(null);
     setName('');
@@ -238,6 +273,14 @@ export function Inventory() {
       return { label: `Sisa ${diffDays} hari`, color: 'var(--pos)', fill: 'var(--posFill)', status: 'Aman' as const, days: diffDays };
     }
   };
+
+  // Bahan mendesak: kedaluwarsa dalam 3 hari atau sudah lewat. Ambangnya sama
+  // dengan backend, supaya tombol Selamatkan Bahan tidak pernah muncul untuk
+  // daftar yang ternyata kosong di sisi server.
+  const urgentCount = items.filter(item => {
+    if (!item.expiry_date || item.quantity <= 0) return false;
+    return getExpiryStatus(item.expiry_date).status !== 'Aman';
+  }).length;
 
   // Determine Shopping list items (Quantity <= 0 OR expired)
   const shoppingItems = items.filter(item => {
@@ -328,6 +371,93 @@ export function Inventory() {
           🛒 Butuh Belanja ({shoppingItems.length})
         </button>
       </div>
+
+      {/* Selamatkan Bahan — hanya muncul kalau memang ada yang mendesak, supaya
+          tidak jadi tombol mati yang selalu terpampang. */}
+      {activeTab === 'stok' && urgentCount > 0 && (
+        <motion.div
+          className="rounded-[20px] p-4 mb-5 flex flex-col gap-3"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={springs.gentle}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="text-sm font-bold" style={{ color: 'var(--text)' }}>
+                🥬 Selamatkan {urgentCount} bahan
+              </span>
+              <span className="text-[11px]" style={{ color: 'var(--text2)' }}>
+                Minta saran masakan dari stok yang hampir kedaluwarsa
+              </span>
+            </div>
+            <motion.button
+              className="px-4 py-2.5 rounded-xl text-xs font-semibold text-white shrink-0"
+              style={{ background: 'var(--accentFill)', opacity: rescueLoading ? 0.6 : 1 }}
+              onClick={handleRescue}
+              disabled={rescueLoading}
+              whileTap={rescueLoading ? {} : { scale: 0.96 }}
+              transition={springs.snappy}
+            >
+              {rescueLoading ? 'Menyusun…' : 'Beri saran'}
+            </motion.button>
+          </div>
+
+          <AnimatePresence>
+            {rescueError && (
+              <motion.div
+                className="text-[11px] rounded-xl p-3 border-l-[3px]"
+                style={{ background: 'rgba(255, 159, 10, 0.1)', borderColor: '#ff9f0a', color: 'var(--text2)' }}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={collapse}
+              >
+                {rescueError}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {recipes.length > 0 && (
+              <motion.div
+                className="flex flex-col gap-3"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={collapse}
+              >
+                {recipes.map((recipe, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl p-3 flex flex-col gap-1.5"
+                    style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+                  >
+                    <div className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+                      {recipe.name}
+                      {recipe.minutes !== null && (
+                        <span className="font-normal" style={{ color: 'var(--text3)' }}>
+                          {' '}· {recipe.minutes} menit
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px]" style={{ color: 'var(--accent)' }}>
+                      Pakai: {recipe.uses.join(', ')}
+                    </div>
+                    {recipe.steps.length > 0 && (
+                      <ol className="list-decimal pl-4 text-[11px] flex flex-col gap-0.5" style={{ color: 'var(--text2)' }}>
+                        {recipe.steps.map((step, j) => (
+                          <li key={j}>{step}</li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
 
       {/* Add / Edit Form Panel */}
       <AnimatePresence>
