@@ -38,6 +38,19 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
+    id: 'kebun',
+    label: 'Kebun',
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22c4.97 0 9-4.03 9-9-4.97 0-9 4.03-9 9Z" />
+        <path d="M12 22C7.03 22 3 17.97 3 13c4.97 0 9 4.03 9 9Z" />
+        <path d="M12 22V8" />
+        <path d="M12 8a4 4 0 0 0 4-4 4 4 0 0 0-4 4Z" />
+        <path d="M12 8a4 4 0 0 1-4-4 4 4 0 0 1 4 4Z" />
+      </svg>
+    ),
+  },
+  {
     id: 'goals',
     label: 'Goals',
     icon: (

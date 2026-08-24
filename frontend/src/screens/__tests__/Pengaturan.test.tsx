@@ -185,4 +185,47 @@ describe('Pengaturan', () => {
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText(/2.0 MB/)).toBeInTheDocument();
   });
+
+  it('menampilkan lokasi kebun dan membuka ulang pemilih lewat "Ubah"', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...defaultRoutes,
+      '/garden/location': { latitude: -6.9175, longitude: 107.6191, label: 'Bandung' },
+    }));
+
+    render(<PengaturanScreen />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('Bandung')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Ubah' }));
+    expect(screen.getByText('atau pilih kota terdekat')).toBeInTheDocument();
+  });
+
+  it('menghapus lokasi kebun setelah konfirmasi', async () => {
+    const fetchMock = routeFetch({
+      ...defaultRoutes,
+      '/garden/location': { latitude: -6.9175, longitude: 107.6191, label: 'Bandung' },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('confirm', vi.fn(() => true));
+
+    render(<PengaturanScreen />);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Hapus' }));
+
+    const del = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'DELETE');
+    expect(del).toBeDefined();
+    // Lokasi hilang, jalan pilih ulang muncul lagi — bukan jalan buntu.
+    expect(await screen.findByText('atau pilih kota terdekat')).toBeInTheDocument();
+  });
+
+  it('langsung menawarkan pemilih lokasi bila belum pernah diatur', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...defaultRoutes,
+      '/garden/location': { latitude: null, longitude: null, label: null },
+    }));
+
+    render(<PengaturanScreen />);
+    expect(await screen.findByText('atau pilih kota terdekat')).toBeInTheDocument();
+  });
 });

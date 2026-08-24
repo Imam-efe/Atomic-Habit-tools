@@ -134,6 +134,50 @@ describe('GardenPlanner', () => {
     expect(screen.getByText('Kemarin 24 mm')).toBeInTheDocument();
   });
 
+  it('menawarkan ubah lokasi begitu lokasi sudah diatur — dulu jalan buntu', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/weather': {
+        configured: true,
+        available: true,
+        label: 'Bandung',
+        rain: { yesterday: 0, today: 0, tomorrow: 0 },
+        skipWatering: false,
+        reason: null,
+        note: null,
+      },
+    }));
+
+    render(<GardenPlanner plantings={plantings} />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('📍 Bandung')).toBeInTheDocument();
+    // Bug yang diperbaiki: begitu lokasi tersimpan, dulu tidak ada jalan
+    // untuk memilih lokasi lain lagi.
+    expect(screen.queryByText('atau pilih kota terdekat')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ubah lokasi' }));
+    expect(screen.getByText('atau pilih kota terdekat')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pakai lokasi saya/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+  });
+
+  it('tetap menawarkan ubah lokasi walau cuaca belum bisa diambil', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/weather': {
+        configured: true,
+        available: false,
+        label: 'Bandung',
+        message: 'Data cuaca belum bisa diambil. Pengingat siram tetap berjalan seperti biasa.',
+      },
+    }));
+
+    render(<GardenPlanner plantings={plantings} />);
+    expect(await screen.findByText(/tetap berjalan seperti biasa/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ubah lokasi' })).toBeInTheDocument();
+  });
+
   it('menandai semai yang sudah terlewat', async () => {
     vi.stubGlobal('fetch', routeFetch({
       ...emptyPlannerRoutes,

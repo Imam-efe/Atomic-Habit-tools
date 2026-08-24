@@ -4,7 +4,6 @@ import { springs, collapse } from '@/tokens/motion';
 import { GardenPlanner, GardenRecords, type PlantingOption } from './GardenExtras';
 import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
-import { useUIStore } from '@/stores/uiStore';
 
 interface Plant {
   id: string;
@@ -160,7 +159,6 @@ function relativeLabel(iso: string, today: string): string {
 }
 
 export function Garden() {
-  const { goBack } = useUIStore();
   const [tab, setTab] = useState<'kebun' | 'jadwal' | 'katalog' | 'rencana' | 'catatan'>('kebun');
   const [data, setData] = useState<GardenResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
@@ -406,25 +404,14 @@ export function Garden() {
   const today = data?.today ?? todayISO();
 
   return (
-    <div className="min-h-screen px-5 pt-14 pb-tab-safe" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
-        <motion.button
-          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          onClick={goBack}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </motion.button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.5px' }}>
+          <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>
             Kebun
           </h1>
-          <p className="text-xs" style={{ color: 'var(--text2)' }}>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text2)' }}>
             Sayur & buah: jadwal siram, pupuk, panen
           </p>
         </div>

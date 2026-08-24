@@ -18,6 +18,6 @@ export interface Session {
   accessToken: string;
 }
 
-export type TabName = 'beranda' | 'kebiasaan' | 'kalender' | 'goals' | 'uang' | 'lainnya';
+export type TabName = 'beranda' | 'kebiasaan' | 'kalender' | 'kebun' | 'goals' | 'uang' | 'lainnya';
 export type AccentName = 'violet' | 'green' | 'blue' | 'orange';
 export type ThemeName = 'dark' | 'light';

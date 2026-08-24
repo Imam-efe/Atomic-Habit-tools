@@ -142,6 +142,13 @@ extra.post('/location', async (c) => {
   return c.json({ latitude, longitude, label: body.label?.trim() || null });
 });
 
+// DELETE /api/garden/location — kembali ke belum-terkonfigurasi
+extra.delete('/location', async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM garden_location WHERE user_id = ?1').bind(user.sub).run();
+  return c.json({ ok: true });
+});
+
 // GET /api/garden/weather — curah hujan dan putusan siram hari ini
 extra.get('/weather', async (c) => {
   const user = c.get('user');
@@ -162,6 +169,7 @@ extra.get('/weather', async (c) => {
     return c.json({
       configured: true,
       available: false,
+      label: loc.label,
       message: 'Data cuaca belum bisa diambil. Pengingat siram tetap berjalan seperti biasa.',
     });
   }

@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
-import { CITIES_ID } from '@/data/cities_id';
+import { GardenLocationPicker } from '@/components/GardenLocationPicker';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -124,8 +124,10 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
   const [potLiter, setPotLiter] = useState('10');
   const [space, setSpace] = useState<SpaceResponse | null>(null);
 
-  // Lokasi kebun
-  const [savingLocation, setSavingLocation] = useState(false);
+  // Lokasi kebun — picker disembunyikan begitu lokasi sudah diatur, tapi
+  // selalu bisa dibuka lagi lewat tombol "Ubah lokasi". Sebelumnya begitu
+  // cuaca berhasil terbaca, tidak ada jalan untuk memilih lokasi lain lagi.
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,53 +157,18 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
     };
   }, []);
 
-  const saveLocation = async (latitude: number, longitude: number, label?: string) => {
-    setSavingLocation(true);
-    setError(null);
+  const reloadWeather = async () => {
     try {
-      await apiFetch('/garden/location', {
-        method: 'POST',
-        body: JSON.stringify({ latitude, longitude, label }),
-      });
       setWeather(await apiFetch<WeatherResponse>('/garden/weather'));
     } catch (err) {
-      setError(describeError(err, 'Gagal menyimpan lokasi.'));
+      setError(describeError(err, 'Gagal memuat cuaca.'));
     }
-    setSavingLocation(false);
   };
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) {
-      setError('Perangkat ini tidak mendukung deteksi lokasi. Pilih kota di bawah.');
-      return;
-    }
-    setSavingLocation(true);
+  const handleLocationSaved = () => {
+    setShowLocationPicker(false);
     setError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        saveLocation(
-          Number(pos.coords.latitude.toFixed(4)),
-          Number(pos.coords.longitude.toFixed(4))
-        ),
-      (err) => {
-        // Dibedakan per kode. Melaporkan semuanya sebagai "izin ditolak" keliru
-        // dan menyesatkan: GPS mati atau mode pesawat memberi POSITION_UNAVAILABLE,
-        // dan pengguna akan sia-sia mencari pengaturan izin yang sebetulnya
-        // sudah benar.
-        const message =
-          err.code === err.PERMISSION_DENIED
-            ? 'Izin lokasi ditolak. Pilih kota di bawah, atau aktifkan izin lokasi di pengaturan browser.'
-            : err.code === err.POSITION_UNAVAILABLE
-              ? 'Lokasi tidak bisa dibaca — GPS mati atau perangkat sedang mode pesawat. Pilih kota di bawah.'
-              : 'Deteksi lokasi terlalu lama. Pilih kota di bawah.';
-        setError(message);
-        setSavingLocation(false);
-      },
-      // Tanpa timeout, getCurrentPosition bisa menggantung tanpa batas dan
-      // tombolnya terlihat macet selamanya.
-      { timeout: 10_000, maximumAge: 600_000 }
-    );
+    reloadWeather();
   };
 
   const checkSpace = async () => {
@@ -232,70 +199,67 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
             <div className="text-xs" style={{ color: 'var(--text2)' }}>
               {weather?.message ?? 'Atur lokasi kebun supaya pengingat siram bisa menyesuaikan cuaca.'}
             </div>
-            <motion.button
-              className="py-2.5 rounded-xl text-xs font-semibold text-white"
-              style={{ background: 'var(--accentFill)', opacity: savingLocation ? 0.6 : 1 }}
-              onClick={useMyLocation}
-              disabled={savingLocation}
-              whileTap={savingLocation ? {} : { scale: 0.97 }}
-              transition={springs.snappy}
-            >
-              {savingLocation ? 'Menyimpan…' : '📍 Pakai lokasi saya'}
-            </motion.button>
-
-            {/* Jalan keluar wajib ada. GPS bisa ditolak, mati, atau perangkatnya
-                mode pesawat — tanpa pilihan manual, fiturnya mati permanen bagi
-                orang yang tidak bisa atau tidak mau memberi izin lokasi. */}
-            <div className="text-[10px] text-center font-semibold" style={{ color: 'var(--text3)' }}>
-              atau pilih kota terdekat
-            </div>
-            <select
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
-              value=""
-              disabled={savingLocation}
-              onChange={(e) => {
-                const city = CITIES_ID.find((c) => c.name === e.target.value);
-                if (city) saveLocation(city.lat, city.lon, city.name);
-              }}
-            >
-              <option value="">Pilih kota…</option>
-              {CITIES_ID.map((city) => (
-                <option key={city.name} value={city.name}>
-                  {city.name}
-                </option>
-              ))}
-            </select>
-          </>
-        ) : weather.available === false ? (
-          <>
-            <div className="text-xs" style={{ color: 'var(--text2)' }}>
-              {weather.message}
-            </div>
-            {weather.label && (
-              <div className="text-xs" style={{ color: 'var(--text3)' }}>
-                Lokasi tersimpan: {weather.label}
-              </div>
-            )}
+            <GardenLocationPicker onSaved={handleLocationSaved} onError={setError} />
           </>
         ) : (
           <>
-            <div className="flex justify-between text-xs" style={{ color: 'var(--text2)' }}>
-              <span>Kemarin {Math.round(weather.rain!.yesterday)} mm</span>
-              <span>Hari ini {Math.round(weather.rain!.today)} mm</span>
-              <span>Besok {Math.round(weather.rain!.tomorrow)} mm</span>
-            </div>
-            <div
-              className="text-sm font-semibold"
-              style={{ color: weather.skipWatering ? '#34c759' : 'var(--text)' }}
-            >
-              {weather.skipWatering ? '✓ Tidak perlu menyiram hari ini' : '💧 Siram seperti biasa'}
-            </div>
-            {(weather.reason || weather.note) && (
+            {weather.available === false ? (
               <div className="text-xs" style={{ color: 'var(--text2)' }}>
-                {weather.reason || weather.note}
+                {weather.message}
               </div>
+            ) : (
+              <>
+                <div className="flex justify-between text-xs" style={{ color: 'var(--text2)' }}>
+                  <span>Kemarin {Math.round(weather.rain!.yesterday)} mm</span>
+                  <span>Hari ini {Math.round(weather.rain!.today)} mm</span>
+                  <span>Besok {Math.round(weather.rain!.tomorrow)} mm</span>
+                </div>
+                <div
+                  className="text-sm font-semibold"
+                  style={{ color: weather.skipWatering ? '#34c759' : 'var(--text)' }}
+                >
+                  {weather.skipWatering ? '✓ Tidak perlu menyiram hari ini' : '💧 Siram seperti biasa'}
+                </div>
+                {(weather.reason || weather.note) && (
+                  <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                    {weather.reason || weather.note}
+                  </div>
+                )}
+              </>
             )}
+
+            {/* Bug yang diperbaiki: sebelumnya begitu lokasi tersimpan, tidak
+                ada jalan untuk memilihnya lagi. Tombol ini selalu ada begitu
+                lokasi sudah diatur, apa pun status cuacanya. */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              {weather.label ? (
+                <span className="text-xs" style={{ color: 'var(--text3)' }}>
+                  📍 {weather.label}
+                </span>
+              ) : (
+                <span />
+              )}
+              <button
+                className="text-[11px] font-semibold shrink-0"
+                style={{ color: 'var(--accent)' }}
+                onClick={() => setShowLocationPicker((v) => !v)}
+              >
+                {showLocationPicker ? 'Batal' : 'Ubah lokasi'}
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {showLocationPicker && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={collapse}
+                >
+                  <GardenLocationPicker onSaved={handleLocationSaved} onError={setError} />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
       </Card>
