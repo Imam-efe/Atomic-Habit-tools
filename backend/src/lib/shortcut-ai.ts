@@ -1,60 +1,130 @@
-export interface Env {
-  ai: {
-    run(model: string, options: { prompt: string }): Promise<{ response: string }>;
+import {
+  ACTION_CATALOG,
+  buildActions,
+  buildShortcutPlist,
+  catalogPrompt,
+  type ShortcutAction,
+} from './shortcut-plist';
+
+/**
+ * Only the AI binding is needed here. Typed structurally rather than against
+ * the full backend Env so the module stays testable with a stub.
+ */
+export interface ShortcutAiEnv {
+  AI: {
+    run(model: string, options: Record<string, unknown>): Promise<unknown>;
   };
 }
 
-const SHORTCUT_AI_PROMPT = (description: string) => `Generate an iOS Shortcut (plist XML format) that does: ${description}
-Return ONLY valid plist XML, no explanation.
-Use standard Shortcut actions available in iOS.
-If the request is impossible or dangerous (e.g., hacking, malware), return an error plist that politely declines.`;
+/** Same model the rest of the backend's AI features run on. */
+const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
-function isValidPlist(xml: string): boolean {
-  if (!xml.includes('<?xml') || !xml.includes('</plist>')) {
-    return false;
+const AI_TIMEOUT_MS = 8000;
+
+const SYSTEM_PROMPT = `You convert a plain-language request into iOS Shortcuts actions.
+
+Reply with ONLY a JSON object, no prose and no markdown fences:
+{"actions":[{"id":"<action id>","params":{...}}]}
+
+Pick ids ONLY from this catalog:
+${catalogPrompt()}
+
+Rules:
+- Use the fewest actions that satisfy the request, at most 6.
+- Every required parameter must be present; numbers must be plain numbers.
+- If the request is impossible, unsafe, or not something a Shortcut can do,
+  reply with a single is.workflow.actions.notification action whose body
+  explains briefly that it cannot be built.`;
+
+/** Pull the JSON object out of a model reply that may carry fences or prose. */
+function extractJson(text: string): unknown {
+  const withoutFences = text.replace(/```(?:json)?/gi, '').trim();
+
+  const start = withoutFences.indexOf('{');
+  const end = withoutFences.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('invalid_plist');
   }
-  // Basic structure check: opening and closing tags
+
   try {
-    // Try to parse with DOMParser if available (browser/Cloudflare Workers)
-    if (typeof DOMParser !== 'undefined') {
-      new DOMParser().parseFromString(xml, 'application/xml');
-    }
-    return true;
+    return JSON.parse(withoutFences.slice(start, end + 1));
   } catch {
-    return false;
+    throw new Error('invalid_plist');
   }
 }
 
-export async function generateShortcutPlist(env: Env, description: string): Promise<string> {
-  let timeoutId: ReturnType<typeof setTimeout>;
-  try {
-    const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+function parseActions(payload: unknown): ShortcutAction[] {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error('invalid_plist');
+  }
 
-    const response = await env.ai.run('@cf/meta/llama-2-7b-chat-int8', {
-      prompt: SHORTCUT_AI_PROMPT(description),
+  const raw = (payload as { actions?: unknown }).actions;
+  if (!Array.isArray(raw)) {
+    throw new Error('invalid_plist');
+  }
+
+  const actions: ShortcutAction[] = [];
+  for (const item of raw.slice(0, 6)) {
+    if (typeof item !== 'object' || item === null) continue;
+    const { id, params } = item as { id?: unknown; params?: unknown };
+    if (typeof id !== 'string' || !(id in ACTION_CATALOG)) continue;
+
+    actions.push({
+      id,
+      params:
+        typeof params === 'object' && params !== null
+          ? (params as Record<string, string | number>)
+          : {},
     });
+  }
 
-    clearTimeout(timeoutId);
+  return actions;
+}
 
-    const plist = response.response.trim();
+/**
+ * Ask the model for actions and assemble them into shortcut plist XML.
+ *
+ * Workers AI has no abort signal, so the timeout is a race — a hung call stops
+ * blocking the request even though it keeps running in the background.
+ *
+ * @throws Error('ai_timeout' | 'invalid_plist' | 'ai_error')
+ */
+export async function generateShortcutPlist(
+  env: ShortcutAiEnv,
+  description: string
+): Promise<string> {
+  let response: unknown;
 
-    if (!isValidPlist(plist)) {
-      throw new Error('invalid_plist');
-    }
-
-    return plist;
+  try {
+    response = await Promise.race([
+      env.AI.run(MODEL, {
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: description },
+        ],
+        max_tokens: 600,
+      }),
+      new Promise((_resolve, reject) =>
+        setTimeout(() => reject(new Error('ai_timeout')), AI_TIMEOUT_MS)
+      ),
+    ]);
   } catch (err) {
-    if (timeoutId) clearTimeout(timeoutId);
-
-    const message = err instanceof Error ? err.message : 'unknown';
-
-    if (message === 'invalid_plist') {
-      throw new Error('invalid_plist');
-    }
-    if (message.includes('abort') || message.includes('timeout')) {
-      throw new Error('ai_timeout');
-    }
+    const message = err instanceof Error ? err.message : '';
+    if (message === 'ai_timeout') throw new Error('ai_timeout');
     throw new Error('ai_error');
   }
+
+  const text = (response as { response?: string })?.response;
+  if (typeof text !== 'string' || text.trim() === '') {
+    throw new Error('invalid_plist');
+  }
+
+  const actions = buildActions(parseActions(extractJson(text)));
+  if (actions.length === 0) {
+    // Every action the model named was unknown or missing a required
+    // parameter, so there is nothing installable to hand back.
+    throw new Error('invalid_plist');
+  }
+
+  return buildShortcutPlist(actions);
 }

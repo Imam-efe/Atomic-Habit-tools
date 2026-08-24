@@ -1,142 +1,95 @@
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import { requireAuth, type AuthContext } from '../middleware/auth';
 import { validateDescription } from '../lib/shortcut-validation';
-import { generateShortcutPlist } from '../lib/shortcut-ai';
-import type { Env as AiEnv } from '../lib/shortcut-ai';
-import { signShortcut } from '../lib/shortcut-signing';
+import { generateShortcutPlist, type ShortcutAiEnv } from '../lib/shortcut-ai';
+import { signShortcut, toBase64 } from '../lib/shortcut-signing';
 import { getErrorResponse } from '../lib/shortcut-errors';
 import { createRateLimitChecker } from '../lib/shortcut-ratelimit';
 
-// Rate limit storage: Map<clientIp, RateLimitState>
+// Per-isolate counter. Workers may run several isolates, so this caps abuse
+// rather than enforcing an exact global quota — enough for a stateless
+// feature that costs neurons but writes nothing.
 const rateLimitStorage = new Map<string, { count: number; resetAt: number }>();
-
-type ShortcutsContext = {
-  Bindings: Env;
-};
-
-const shortcuts = new Hono<ShortcutsContext>();
 const rateLimitChecker = createRateLimitChecker(rateLimitStorage);
 
-/**
- * Extract client IP from request headers
- */
-function getClientIp(c: any): string {
-  // Check CF-Connecting-IP (Cloudflare Workers)
-  const cfConnectingIp = c.req.header('cf-connecting-ip');
-  if (cfConnectingIp) {
-    return cfConnectingIp;
-  }
+const shortcuts = new Hono<AuthContext>();
+shortcuts.use('/*', requireAuth);
 
-  // Check X-Forwarded-For
-  const xForwardedFor = c.req.header('x-forwarded-for');
-  if (xForwardedFor) {
-    return xForwardedFor.split(',')[0].trim();
-  }
+/** Identify the caller for rate limiting: user id first, client IP as backup. */
+function rateLimitKey(c: {
+  get: (key: 'user') => { sub?: string } | undefined;
+  req: { header: (name: string) => string | undefined };
+}): string {
+  const userId = c.get('user')?.sub;
+  if (userId) return `user:${userId}`;
 
-  // Fallback to 127.0.0.1 (should not happen in production)
-  return '127.0.0.1';
+  const cfIp = c.req.header('cf-connecting-ip');
+  if (cfIp) return `ip:${cfIp}`;
+
+  const forwarded = c.req.header('x-forwarded-for');
+  if (forwarded) return `ip:${forwarded.split(',')[0].trim()}`;
+
+  return 'ip:unknown';
 }
 
-/**
- * Generate ISO timestamp (YYYYMMDD-HHmmss)
- */
+/** Filename stamp, YYYYMMDD-HHmmss in UTC so it does not drift by region. */
 function generateTimestamp(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  return `${year}${month}${day}-${hours}${minutes}${seconds}`;
+  return new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
 }
 
-// POST /api/shortcuts/generate - Generate a shortcut from description
+// POST /api/shortcuts/generate — description in, installable shortcut out.
 shortcuts.post('/generate', async (c) => {
-  const clientIp = getClientIp(c);
-
-  // Parse request body
-  let body: { description?: string };
-  try {
-    body = await c.req.json();
-  } catch {
-    const err = getErrorResponse('server_error');
-    return c.json(err, 400);
+  const body = await c.req.json<{ description?: string }>().catch(() => null);
+  if (!body) {
+    return c.json(getErrorResponse('invalid_request'), 400);
   }
 
-  const { description } = body;
+  const description = body.description ?? '';
 
-  // Validate input
-  const validation = validateDescription(description || '');
+  const validation = validateDescription(description);
   if (!validation.valid) {
-    const err = getErrorResponse('server_error');
-    return c.json(err, 400);
+    // Hand back the validator's own wording; a generic "server error" here
+    // told the user nothing about what to change.
+    return c.json(getErrorResponse(validation.code ?? 'invalid_input', validation.error), 400);
   }
 
-  // Check rate limit
-  const rateLimitResult = rateLimitChecker(clientIp);
-  if (!rateLimitResult.allowed) {
-    const err = getErrorResponse('rate_limit');
-    return c.json(err, 429);
+  const key = rateLimitKey(c);
+  if (!rateLimitChecker(key).allowed) {
+    return c.json(getErrorResponse('rate_limit'), 429);
   }
 
   try {
-    // Generate plist from description using AI
-    // Cast to AiEnv which has the 'ai' property
-    const plistXml = await generateShortcutPlist(c.env as unknown as AiEnv, description!);
-
-    // Sign the plist using CocoCloud
-    const apiKey = c.env.COCOCLOUD_API_KEY;
-    const certId = c.env.COCOCLOUD_CERT_ID;
-
-    let signedBuffer: any;
-    if (apiKey && certId) {
-      signedBuffer = await signShortcut(plistXml, apiKey, certId);
-    } else {
-      // Fallback to unsigned if no signing credentials
-      console.warn('[shortcuts] Missing COCOCLOUD credentials, returning unsigned shortcut');
-      // Use type any to avoid Buffer type issues in Cloudflare Workers
-      signedBuffer = (globalThis as any).Buffer.from(plistXml, 'utf-8');
-    }
-
-    // Encode signed plist as base64
-    const base64Shortcut = (signedBuffer as any).toString('base64');
-
-    // Generate filename
-    const timestamp = generateTimestamp();
-    const filename = `shortcut-${timestamp}.shortcut`;
-
-    // Return success response
-    return c.json(
-      {
-        shortcut: base64Shortcut,
-        filename,
-      },
-      200 as any
+    const plistXml = await generateShortcutPlist(
+      c.env as unknown as ShortcutAiEnv,
+      description.trim()
     );
+
+    const { data, signed } = await signShortcut(plistXml, {
+      url: c.env.SHORTCUT_SIGNING_URL,
+      apiKey: c.env.SHORTCUT_SIGNING_KEY,
+    });
+
+    return c.json({
+      shortcut: toBase64(data),
+      filename: `shortcut-${generateTimestamp()}.shortcut`,
+      signed,
+    });
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'unknown';
+    // The description itself is never logged — only the failure code.
+    const code = err instanceof Error ? err.message : 'server_error';
 
-    // Determine error type from message
-    let errorType = 'server_error';
-    let statusCode: any = 500;
-
-    if (errorMessage === 'invalid_plist') {
-      errorType = 'invalid_plist';
-      statusCode = 400;
-    } else if (errorMessage === 'ai_timeout') {
-      errorType = 'ai_timeout';
-      statusCode = 504;
-    } else if (errorMessage === 'too_short') {
-      errorType = 'too_short';
-      statusCode = 400;
-    } else if (errorMessage === 'too_long') {
-      errorType = 'too_long';
-      statusCode = 400;
+    if (code === 'invalid_plist') {
+      return c.json(getErrorResponse('invalid_plist'), 400);
+    }
+    if (code === 'ai_timeout') {
+      return c.json(getErrorResponse('ai_timeout'), 504);
     }
 
-    const errorResponse = getErrorResponse(errorType);
-    return c.json(errorResponse, statusCode as any);
+    console.error(`[shortcuts] generation failed: ${code}`);
+    if (code === 'ai_error') {
+      return c.json(getErrorResponse('ai_error'), 502);
+    }
+    return c.json(getErrorResponse('server_error'), 500);
   }
 });
 

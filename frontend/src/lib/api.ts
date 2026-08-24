@@ -3,6 +3,27 @@ import type { User } from '@/types';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '/api';
 
+/**
+ * Carries the parsed error body alongside the message. `message` keeps its old
+ * value (the `error` code) so existing callers are unaffected; callers that
+ * want the human-readable text read `body.message`.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: { error?: string; message?: string; suggestion?: string };
+
+  constructor(
+    message: string,
+    status: number,
+    body: { error?: string; message?: string; suggestion?: string }
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -47,8 +68,12 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'unknown error' }));
-    throw new Error((error as { error: string }).error ?? res.statusText);
+    const error = (await res.json().catch(() => ({ error: 'unknown error' }))) as {
+      error?: string;
+      message?: string;
+      suggestion?: string;
+    };
+    throw new ApiError(error.error ?? res.statusText, res.status, error);
   }
 
   return res.json() as Promise<T>;

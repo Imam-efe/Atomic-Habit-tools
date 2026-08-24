@@ -1,11 +1,32 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
+import { apiFetch, ApiError } from '@/lib/api';
+
+interface GenerateResponse {
+  shortcut: string; // base64 plist
+  filename: string;
+  signed: boolean;
+}
+
+/** Turn the base64 body into the bytes a .shortcut download needs. */
+function base64ToBlob(base64: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: 'application/octet-stream' });
+}
 
 export default function ShortcutsScreen() {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ filename: string; file: Blob } | null>(null);
+  const [result, setResult] = useState<{
+    filename: string;
+    file: Blob;
+    signed: boolean;
+  } | null>(null);
   const [error, setError] = useState<{ message: string; suggestion?: string } | null>(null);
 
   const handleGenerate = async () => {
@@ -14,26 +35,27 @@ export default function ShortcutsScreen() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/shortcuts/generate', {
+      // apiFetch carries the API base URL and the auth token; a bare
+      // fetch('/api/...') resolved against the Pages origin in production.
+      const data = await apiFetch<GenerateResponse>('/shortcuts/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description }),
+        body: JSON.stringify({ description: description.trim() }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        setError(errorData);
-        return;
-      }
-
-      const blob = await response.blob();
-      const contentDisposition = response.headers.get('Content-Disposition');
-      const filename =
-        contentDisposition?.match(/filename="([^"]+)"/)?.[1] || 'shortcut.shortcut';
-
-      setResult({ filename, file: blob });
+      setResult({
+        filename: data.filename,
+        file: base64ToBlob(data.shortcut),
+        signed: data.signed,
+      });
     } catch (err) {
-      setError({ message: 'Terjadi kesalahan jaringan. Coba lagi.' });
+      if (err instanceof ApiError) {
+        setError({
+          message: err.body.message ?? 'Gagal membuat shortcut. Coba lagi.',
+          suggestion: err.body.suggestion,
+        });
+      } else {
+        setError({ message: 'Terjadi kesalahan jaringan. Coba lagi.' });
+      }
     } finally {
       setLoading(false);
     }
@@ -187,6 +209,15 @@ export default function ShortcutsScreen() {
               >
                 {result.filename}
               </p>
+              {!result.signed && (
+                <p
+                  className="text-xs mt-2 leading-relaxed"
+                  style={{ color: 'var(--text3)' }}
+                >
+                  Shortcut belum ditandatangani. Aktifkan Pengaturan &gt; Pintasan &gt;
+                  Izinkan Pintasan Tak Tepercaya sebelum memasang.
+                </p>
+              )}
             </div>
             <motion.button
               className="w-full py-3 rounded-xl text-sm font-semibold text-white"

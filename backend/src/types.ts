@@ -6,8 +6,9 @@ export interface Env {
   VAPID_SUBJECT: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
-  COCOCLOUD_API_KEY?: string;
-  COCOCLOUD_CERT_ID?: string;
+  // Optional external shortcut signer; unset means unsigned shortcuts.
+  SHORTCUT_SIGNING_URL?: string;
+  SHORTCUT_SIGNING_KEY?: string;
 }
 
 export interface JWTPayload {

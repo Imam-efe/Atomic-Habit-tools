@@ -1,108 +1,92 @@
 /**
- * Shortcut Signing via CocoCloud API
+ * Optional shortcut signing.
  *
- * Signs iOS Shortcuts (plist XML) using external CocoCloud signing service.
- * Falls back to unsigned if CocoCloud fails after retries.
+ * Signing a shortcut needs Apple's own tooling, which cannot run on Workers,
+ * so it has to be delegated to an external signer. No signer is configured by
+ * default: unsigned shortcuts still install on iOS once "Allow Untrusted
+ * Shortcuts" is on in Settings > Shortcuts, which is the honest fallback.
+ *
+ * Point SHORTCUT_SIGNING_URL at a service that accepts
+ * `{ plist: string }` and returns `{ signed: "<base64>" }` to enable it;
+ * SHORTCUT_SIGNING_KEY is sent as a bearer token when set.
  */
 
-interface CocoCloudResponse {
-  status: 'success' | 'error';
-  signedData?: string; // base64-encoded signed plist
-  message?: string;
+export interface SigningConfig {
+  url?: string;
+  apiKey?: string;
 }
 
-interface RetryOptions {
-  maxRetries: number;
-  initialDelayMs: number;
-  backoffMultiplier: number;
+export interface SignResult {
+  /** The bytes to hand back to the caller, signed or not. */
+  data: Uint8Array;
+  signed: boolean;
 }
 
-const DEFAULT_RETRY_OPTIONS: RetryOptions = {
-  maxRetries: 3,
-  initialDelayMs: 100,
-  backoffMultiplier: 2,
-};
+const SIGNING_TIMEOUT_MS = 5000;
+
+function encodeUtf8(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function decodeBase64(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/** Base64 for arbitrary bytes, chunked so large files do not blow the stack. */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 /**
- * Sleep for specified milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Call CocoCloud API to sign a plist
+ * Sign the plist if a signer is configured, otherwise return it as-is.
  *
- * @param plistXml - The plist XML content to sign
- * @param apiKey - CocoCloud API key from env var COCOCLOUD_API_KEY
- * @param certId - Certificate ID from env var COCOCLOUD_CERT_ID
- * @returns Signed plist as Buffer
+ * Never throws: a signer that is down or misbehaving degrades to an unsigned
+ * shortcut rather than failing the user's request.
  */
 export async function signShortcut(
   plistXml: string,
-  apiKey: string,
-  certId: string,
-  retryOptions: RetryOptions = DEFAULT_RETRY_OPTIONS
-): Promise<Buffer> {
-  const cocoCloudUrl = 'https://api.cococloud.dev/v1/sign/plist';
+  config: SigningConfig = {}
+): Promise<SignResult> {
+  const unsigned: SignResult = { data: encodeUtf8(plistXml), signed: false };
 
-  let lastError: Error | undefined;
+  if (!config.url) return unsigned;
 
-  for (let attempt = 1; attempt <= retryOptions.maxRetries; attempt++) {
-    try {
-      const response = await fetch(cocoCloudUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          plist: plistXml,
-          certificateId: certId,
-        }),
-      });
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
 
-      if (!response.ok) {
-        // Non-2xx response
-        if (response.status === 408 || response.status === 429) {
-          // Timeout or rate limit - retry
-          lastError = new Error(`CocoCloud returned ${response.status}`);
-          if (attempt < retryOptions.maxRetries) {
-            const delayMs = retryOptions.initialDelayMs * Math.pow(retryOptions.backoffMultiplier, attempt - 1);
-            await sleep(delayMs);
-            continue;
-          }
-        }
-        // Other errors - don't retry
-        throw new Error(`CocoCloud API error: ${response.status}`);
-      }
+    const response = await fetch(config.url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ plist: plistXml }),
+      signal: AbortSignal.timeout(SIGNING_TIMEOUT_MS),
+    });
 
-      // Parse response
-      const data: CocoCloudResponse = await response.json();
-
-      if (data.status === 'success' && data.signedData) {
-        // Decode base64-encoded signed plist
-        const signedBuffer = Buffer.from(data.signedData, 'base64');
-        return signedBuffer;
-      } else {
-        throw new Error(`CocoCloud returned status: ${data.status}`);
-      }
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      // Retry on timeout or other retriable errors
-      if (attempt < retryOptions.maxRetries) {
-        const delayMs = retryOptions.initialDelayMs * Math.pow(retryOptions.backoffMultiplier, attempt - 1);
-        await sleep(delayMs);
-        continue;
-      }
+    if (!response.ok) {
+      console.warn(`[shortcut-signing] signer returned ${response.status}; sending unsigned`);
+      return unsigned;
     }
+
+    const body = (await response.json()) as { signed?: unknown };
+    if (typeof body.signed !== 'string' || body.signed === '') {
+      console.warn('[shortcut-signing] signer response missing "signed"; sending unsigned');
+      return unsigned;
+    }
+
+    return { data: decodeBase64(body.signed), signed: true };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : 'unknown';
+    console.warn(`[shortcut-signing] signing failed (${reason}); sending unsigned`);
+    return unsigned;
   }
-
-  // All retries exhausted - fallback to unsigned plist
-  console.warn(
-    `[shortcut-signing] Failed to sign with CocoCloud after ${retryOptions.maxRetries} attempts. Error: ${lastError?.message}. Returning unsigned plist.`
-  );
-
-  return Buffer.from(plistXml, 'utf-8');
 }

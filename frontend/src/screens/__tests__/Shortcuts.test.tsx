@@ -93,37 +93,124 @@ describe('ShortcutsScreen - E2E Frontend Tests', () => {
       expect(screen.getByText(/11\/500/)).toBeInTheDocument();
     });
 
-    it('sends correct API request when generate button is clicked', async () => {
+    it('posts the trimmed description to the shortcuts endpoint', async () => {
       const user = userEvent.setup();
-      const fetchSpy = vi.fn();
-      global.fetch = fetchSpy;
-
-      fetchSpy.mockResolvedValueOnce({
-        ok: true,
-        blob: async () => new Blob(),
-        headers: { get: () => null },
-      });
+      const fetchSpy = vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ shortcut: btoa('<plist/>'), filename: 'a.shortcut', signed: false }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+      );
+      vi.stubGlobal('fetch', fetchSpy);
 
       render(<ShortcutsScreen />);
 
-      const textarea = screen.getByPlaceholderText(/Deskripsi apa/);
-      await user.type(textarea, 'send a message');
+      await user.type(screen.getByPlaceholderText(/Deskripsi apa/), '  send a message  ');
+      await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
 
-      const generateBtn = screen.getByRole('button', { name: /Buat Shortcut/i });
-      await user.click(generateBtn);
+      await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
 
-      await waitFor(() => {
-        expect(fetchSpy).toHaveBeenCalledWith(
-          '/api/shortcuts/generate',
-          expect.objectContaining({
-            method: 'POST',
-            headers: expect.objectContaining({
-              'Content-Type': 'application/json',
-            }),
-            body: JSON.stringify({ description: 'send a message' }),
-          })
-        );
-      });
+      const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+      // Must go through the configured API base URL, not a bare relative path —
+      // in production the frontend and the Worker are on different origins.
+      expect(url.endsWith('/api/shortcuts/generate')).toBe(true);
+      expect(init.method).toBe('POST');
+      expect(init.body).toBe(JSON.stringify({ description: 'send a message' }));
+    });
+
+    it('shows the returned filename after a successful generate', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                shortcut: btoa('<plist/>'),
+                filename: 'shortcut-20260823-143022.shortcut',
+                signed: true,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+        )
+      );
+
+      render(<ShortcutsScreen />);
+
+      await user.type(screen.getByPlaceholderText(/Deskripsi apa/), 'set a timer');
+      await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
+
+      expect(
+        await screen.findByText('shortcut-20260823-143022.shortcut')
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Download Shortcut/i })).toBeInTheDocument();
+    });
+
+    it('warns that an unsigned shortcut needs untrusted shortcuts enabled', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({ shortcut: btoa('<plist/>'), filename: 'a.shortcut', signed: false }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+        )
+      );
+
+      render(<ShortcutsScreen />);
+
+      await user.type(screen.getByPlaceholderText(/Deskripsi apa/), 'set a timer');
+      await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
+
+      expect(await screen.findByText(/Tak Tepercaya/i)).toBeInTheDocument();
+    });
+
+    it('renders the backend message and suggestion when generation fails', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                error: 'invalid_plist',
+                message: 'Tidak bisa membuat shortcut untuk ini.',
+                suggestion: 'Coba deskripsi yang lebih spesifik.',
+              }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } }
+            )
+        )
+      );
+
+      render(<ShortcutsScreen />);
+
+      await user.type(screen.getByPlaceholderText(/Deskripsi apa/), 'do something impossible');
+      await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
+
+      // The raw error code must never be what the user reads.
+      expect(await screen.findByText('Tidak bisa membuat shortcut untuk ini.')).toBeInTheDocument();
+      expect(screen.getByText('Coba deskripsi yang lebih spesifik.')).toBeInTheDocument();
+      expect(screen.queryByText('invalid_plist')).not.toBeInTheDocument();
+    });
+
+    it('shows a network message when the request itself fails', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new TypeError('Failed to fetch');
+        })
+      );
+
+      render(<ShortcutsScreen />);
+
+      await user.type(screen.getByPlaceholderText(/Deskripsi apa/), 'set a timer');
+      await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
+
+      expect(await screen.findByText(/kesalahan jaringan/i)).toBeInTheDocument();
     });
   });
 
