@@ -1,44 +1,73 @@
-import { ALG_UMUM, computeAlgPercent, buildWarnings, scaleServing } from './nutrition_insight.ts';
+import { describe, it, expect } from 'vitest';
+import { ALG_UMUM, computeAlgPercent, buildWarnings, scaleServing } from './nutrition_insight';
 
-// Backend tidak punya @types/node (lihat Global Constraints) — 'node:assert'
-// tidak resolvable di bawah tsc --noEmit meski jalan fine di runtime node.
-// Helper lokal ini menghindari import itu sepenuhnya, jadi tsc tetap bersih.
-function check(condition: boolean, message: string): void {
-  if (!condition) throw new Error(`FAIL: ${message}`);
-}
-function checkEqual(actual: unknown, expected: unknown, message: string): void {
-  const a = JSON.stringify(actual);
-  const e = JSON.stringify(expected);
-  if (a !== e) throw new Error(`FAIL: ${message} — got ${a}, expected ${e}`);
-}
+const EMPTY = {
+  calories: 0,
+  protein: 0,
+  fat: 0,
+  saturatedFat: 0,
+  carbs: 0,
+  sugar: 0,
+  sodium: 0,
+};
 
-// Separuh acuan kalori -> 50%.
-checkEqual(
-  computeAlgPercent({ calories: ALG_UMUM.calories / 2, protein: 0, fat: 0, saturatedFat: 0, carbs: 0, sugar: 0, sodium: 0 }).calories,
-  50,
-  'separuh acuan kalori = 50%'
-);
+describe('computeAlgPercent', () => {
+  it('menghitung separuh acuan kalori sebagai 50%', () => {
+    const percent = computeAlgPercent({ ...EMPTY, calories: ALG_UMUM.calories / 2 });
+    expect(percent.calories).toBe(50);
+  });
+});
 
-// Natrium di atas ambang 20% ALG -> masuk warnings, menyebut "Natrium".
-const highSodium = computeAlgPercent({ calories: 100, protein: 1, fat: 1, saturatedFat: 1, carbs: 10, sugar: 1, sodium: 500 });
-check(buildWarnings(highSodium).some(w => w.includes('Natrium')), 'natrium tinggi memicu warning');
+describe('buildWarnings', () => {
+  it('memicu warning saat natrium di atas ambang 20% ALG', () => {
+    const high = computeAlgPercent({
+      calories: 100,
+      protein: 1,
+      fat: 1,
+      saturatedFat: 1,
+      carbs: 10,
+      sugar: 1,
+      sodium: 500,
+    });
+    expect(buildWarnings(high).some((w) => w.includes('Natrium'))).toBe(true);
+  });
 
-// Semua di bawah ambang -> tidak ada warning.
-const lowEverything = computeAlgPercent({ calories: 100, protein: 1, fat: 1, saturatedFat: 1, carbs: 10, sugar: 1, sodium: 50 });
-checkEqual(buildWarnings(lowEverything), [], 'semua di bawah ambang = tanpa warning');
+  it('tidak memberi warning saat semua di bawah ambang', () => {
+    const low = computeAlgPercent({
+      calories: 100,
+      protein: 1,
+      fat: 1,
+      saturatedFat: 1,
+      carbs: 10,
+      sugar: 1,
+      sodium: 50,
+    });
+    expect(buildWarnings(low)).toEqual([]);
+  });
 
-// scaleServing mengalikan tiap field numerik.
-checkEqual(scaleServing({ calories: 100, protein: 2 }, 3), { calories: 300, protein: 6 }, 'scaleServing mengalikan tiap field');
-// servingsPerPack tidak valid (0, undefined) -> null, bukan dikalikan 0.
-checkEqual(scaleServing({ calories: 100 }, 0), null, 'servingsPerPack 0 -> null');
-checkEqual(scaleServing({ calories: 100 }, undefined), null, 'servingsPerPack undefined -> null');
+  it('tidak memicu warning tepat di ambang 20% — batasnya >, bukan >=', () => {
+    // 300/1500*100 = 20
+    const atThreshold = computeAlgPercent({ ...EMPTY, sodium: 300 });
+    expect(buildWarnings(atThreshold)).toEqual([]);
+  });
 
-// Tepat di ambang (20%) -> TIDAK warning (bukti >, bukan >=).
-const atThreshold = computeAlgPercent({ calories: 0, protein: 0, fat: 0, saturatedFat: 0, carbs: 0, sugar: 0, sodium: 300 }); // 300/1500*100 = 20
-checkEqual(buildWarnings(atThreshold), [], 'tepat 20% ALG tidak memicu warning');
+  it('memicu warning sedikit di atas ambang (21%)', () => {
+    // 315/1500*100 = 21
+    const justOver = computeAlgPercent({ ...EMPTY, sodium: 315 });
+    expect(buildWarnings(justOver).some((w) => w.includes('Natrium'))).toBe(true);
+  });
+});
 
-// Sedikit di atas ambang (21%) -> warning muncul.
-const justOverThreshold = computeAlgPercent({ calories: 0, protein: 0, fat: 0, saturatedFat: 0, carbs: 0, sugar: 0, sodium: 315 }); // 315/1500*100 = 21
-check(buildWarnings(justOverThreshold).some(w => w.includes('Natrium')), '21% ALG memicu warning');
+describe('scaleServing', () => {
+  it('mengalikan tiap field numerik', () => {
+    expect(scaleServing({ calories: 100, protein: 2 }, 3)).toEqual({ calories: 300, protein: 6 });
+  });
 
-console.log('nutrition_insight.test.ts OK');
+  it('mengembalikan null untuk servingsPerPack 0, bukan mengalikan dengan 0', () => {
+    expect(scaleServing({ calories: 100 }, 0)).toBeNull();
+  });
+
+  it('mengembalikan null untuk servingsPerPack undefined', () => {
+    expect(scaleServing({ calories: 100 }, undefined)).toBeNull();
+  });
+});
