@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { validate } from '../lib/validate';
+import { computeCareState, lastActions, resolvePlants, type PlantingRow } from './garden';
 
 const calendar = new Hono<AuthContext>();
 
@@ -383,6 +384,61 @@ calendar.get('/agenda', async (c) => {
     ).bind(user.sub).all<{ id: string; name: string; action_time: string }>();
     for (const h of r.results ?? []) {
       items.push({ source: 'habit', id: h.id, title: h.name, time: h.action_time });
+    }
+  });
+
+  // Kebun: jadwal siram/pupuk/panen tidak disimpan sebagai baris tanggal —
+  // dihitung dari tanggal tanam plus interval katalog. Jadi agenda hari ini
+  // harus menghitungnya, bukan menanyakannya ke tabel.
+  await safe(async () => {
+    const [plantingRes, actions] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT id, plant_id, custom_name, nickname, location, planted_date,
+                expected_harvest_date, status, quantity, planting_method, note
+           FROM garden_plantings
+          WHERE user_id = ?1 AND status IN ('tumbuh', 'panen')`
+      ).bind(user.sub).all<PlantingRow>(),
+      lastActions(c.env.DB, user.sub),
+    ]);
+
+    const rows = plantingRes.results ?? [];
+    const plants = await resolvePlants(
+      c.env.DB,
+      rows.map((r) => r.plant_id).filter((id): id is string => !!id)
+    );
+
+    for (const row of rows) {
+      const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
+      const care = computeCareState(row, plant, actions.get(row.id) ?? {}, date);
+      const name = row.nickname || plant?.name || row.custom_name || 'Tanaman';
+      const where = row.location ? ` · ${row.location}` : '';
+
+      // Hanya yang jatuh tempo tepat pada `date` yang masuk agenda hari itu.
+      // Yang sudah telat tetap ditampilkan, karena justru itu yang mendesak.
+      if (care.nextWater && care.nextWater <= date) {
+        items.push({
+          source: 'garden',
+          id: `${row.id}-siram`,
+          title: `Siram ${name}`,
+          detail: care.waterOverdueDays > 0 ? `telat ${care.waterOverdueDays} hari${where}` : where.slice(3) || null,
+        });
+      }
+      if (care.nextFertilize && care.nextFertilize <= date) {
+        items.push({
+          source: 'garden',
+          id: `${row.id}-pupuk`,
+          title: `Pupuk ${name}`,
+          detail: care.fertilizeOverdueDays > 0 ? `telat ${care.fertilizeOverdueDays} hari${where}` : where.slice(3) || null,
+        });
+      }
+      if (care.nextHarvest === date) {
+        items.push({
+          source: 'garden',
+          id: `${row.id}-panen`,
+          title: `Perkiraan panen ${name}`,
+          detail: where.slice(3) || null,
+        });
+      }
     }
   });
 

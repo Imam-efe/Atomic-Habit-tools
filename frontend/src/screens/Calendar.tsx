@@ -63,6 +63,7 @@ const SOURCE_LABEL: Record<string, string> = {
   inventory: 'Stok',
   kids: 'Anak',
   habit: 'Kebiasaan',
+  garden: 'Kebun',
 };
 
 export function Calendar() {

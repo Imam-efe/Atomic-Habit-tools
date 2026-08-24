@@ -284,6 +284,17 @@ export function Garden() {
   useEffect(() => { load(); }, []);
   useEffect(() => { loadCatalog(); }, [catalogQuery, catalogCategory]);
 
+  // Tab ini tetap ter-mount antar kunjungan, jadi perawatan yang dicatat dari
+  // luar layar ini — lewat quick-add, misalnya — tidak akan terlihat sampai
+  // dimuat ulang. Event yang sama dipakai Beranda untuk alasan yang sama.
+  useEffect(() => {
+    const onShown = (e: Event) => {
+      if ((e as CustomEvent).detail === 'kebun') load();
+    };
+    window.addEventListener('fayolla:tab-shown', onShown);
+    return () => window.removeEventListener('fayolla:tab-shown', onShown);
+  }, []);
+
   const handleCare = async (plantingId: string, action: string) => {
     // Panen boleh dicatat tanpa jumlah, tapi kalau diisi, dikirim ke backend
     // supaya hasil panen otomatis masuk ke Inventaris.

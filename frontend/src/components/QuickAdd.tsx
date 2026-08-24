@@ -55,12 +55,29 @@ interface EventProposal {
   event_time: string | null;
 }
 
+interface CareProposal {
+  plantingId: string;
+  plantName: string;
+  action: string;
+  amount: number | null;
+  unit: string | null;
+}
+
 type ParseResponse =
   | { intent: 'expense' | 'income'; text: string; entry: EntryProposal }
   | { intent: 'habit'; text: string; habit: { id: string; name: string } }
   | { intent: 'inventory'; text: string; item: ItemProposal }
   | { intent: 'calendar'; text: string; event: EventProposal }
+  | { intent: 'garden'; text: string; care: CareProposal }
   | { intent: 'unknown'; text: string };
+
+const GARDEN_ACTION_LABELS: Record<string, string> = {
+  siram: '💧 Siram',
+  pupuk: '🌿 Pupuk',
+  panen: '🧺 Panen',
+  pangkas: '✂️ Pangkas',
+  semprot: '🧴 Semprot',
+};
 
 const CALENDAR_KIND_LABELS: Record<EventProposal['kind'], string> = {
   task: 'Tugas',
@@ -224,6 +241,20 @@ export function QuickAdd() {
         });
         notifyDataChanged('kebiasaan');
         setTab('kebiasaan');
+      } else if (result.intent === 'garden') {
+        await apiFetch(`/garden/${result.care.plantingId}/care`, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: result.care.action,
+            // Jumlah hanya dikirim untuk panen — itu yang menyalakan
+            // sinkronisasi panen ke stok Inventaris di backend.
+            ...(result.care.amount !== null
+              ? { amount: result.care.amount, unit: result.care.unit ?? 'kg' }
+              : {}),
+          }),
+        });
+        notifyDataChanged('kebun');
+        setTab('kebun');
       } else if (result.intent === 'inventory') {
         const qty = parseInt(amount.replace(/\D/g, ''), 10);
         await apiFetch('/inventory', {
@@ -449,6 +480,28 @@ export function QuickAdd() {
                       <p className="text-[14px]" style={{ color: 'var(--text)' }}>
                         Tandai <span className="font-bold">{result.habit.name}</span> selesai hari ini?
                       </p>
+                    )}
+
+                    {result.intent === 'garden' && (
+                      <>
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mb-2"
+                          style={{ background: 'var(--accentFill)', color: '#fff' }}
+                        >
+                          Kebun
+                        </span>
+                        <p className="text-[14px]" style={{ color: 'var(--text)' }}>
+                          Catat{' '}
+                          <span className="font-bold">
+                            {GARDEN_ACTION_LABELS[result.care.action] ?? result.care.action}
+                          </span>{' '}
+                          untuk <span className="font-bold">{result.care.plantName}</span>
+                          {result.care.amount !== null && (
+                            <> sebanyak <span className="font-bold">{result.care.amount} {result.care.unit}</span></>
+                          )}
+                          ?
+                        </p>
+                      </>
                     )}
 
                     {result.intent === 'inventory' && (

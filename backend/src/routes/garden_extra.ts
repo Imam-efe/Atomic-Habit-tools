@@ -24,6 +24,14 @@ import { checkRotation, type LocationPlanting } from '../lib/garden_rotation';
 import { assessPestRisk, findAtRiskPlantings, type RiskCandidate } from '../lib/garden_pest_risk';
 import { planBedLayout, type BedCandidate } from '../lib/garden_layout';
 import { computeCareState, lastActions, resolvePlants, type PlantingRow } from './garden';
+import {
+  rankSeedSources, summarizeSowings, type SowingStatusRecord,
+} from '../lib/garden_germination';
+import { forecastHarvest, expectedCareCount } from '../lib/garden_harvest_forecast';
+import { planSupplies, type SupplyPlanting } from '../lib/garden_supplies';
+import { rankTreatments, pendingReviews, type TreatmentRecord } from '../lib/garden_treatment';
+import { inspectBed, suggestSlot, type Bed, type BedSlot } from '../lib/garden_bed_map';
+import { buildKitchenReport, priceKey, type HarvestEntry } from '../lib/garden_kitchen';
 
 const extra = new Hono<AuthContext>();
 extra.use('/*', requireAuth);
@@ -818,6 +826,591 @@ extra.post('/layout', async (c) => {
   const bedAreaM2 = typeof body.bedAreaM2 === 'number' && body.bedAreaM2 > 0 ? body.bedAreaM2 : null;
 
   return c.json(planBedLayout(candidates, PLANTS, bedAreaM2));
+});
+
+// ────────────────────── #13 PEMBIBITAN (SEMAI) ──────────────────────
+
+/** Baris semai apa adanya dari DB, sebelum dibentuk untuk lib. */
+interface SowingRow {
+  id: string;
+  plant_id: string | null;
+  name: string;
+  seed_brand: string | null;
+  sown_date: string;
+  seed_count: number;
+  germinated_count: number | null;
+  germinated_date: string | null;
+  transplanted_date: string | null;
+  planting_id: string | null;
+  note: string | null;
+}
+
+function toSowingRecord(r: SowingRow): SowingStatusRecord {
+  return {
+    id: r.id,
+    plantId: r.plant_id,
+    name: r.name,
+    brand: r.seed_brand,
+    sownDate: r.sown_date,
+    seedCount: r.seed_count,
+    germinatedCount: r.germinated_count,
+    transplantedDate: r.transplanted_date,
+  };
+}
+
+// GET /api/garden/sowings — daftar batch semai + ringkasan + peringkat merek
+extra.get('/sowings', async (c) => {
+  const user = c.get('user');
+  const rows = await c.env.DB.prepare(
+    `SELECT id, plant_id, name, seed_brand, sown_date, seed_count, germinated_count,
+            germinated_date, transplanted_date, planting_id, note
+       FROM garden_sowings WHERE user_id = ?1 ORDER BY sown_date DESC LIMIT 200`
+  ).bind(user.sub).all<SowingRow>();
+
+  const list = rows.results ?? [];
+  const records = list.map(toSowingRecord);
+
+  return c.json({
+    sowings: list.map((r) => ({
+      id: r.id,
+      plantId: r.plant_id,
+      name: r.name,
+      emoji: (r.plant_id ? PLANT_BY_ID.get(r.plant_id)?.emoji : undefined) ?? '🌱',
+      brand: r.seed_brand,
+      sownDate: r.sown_date,
+      seedCount: r.seed_count,
+      germinatedCount: r.germinated_count,
+      germinatedDate: r.germinated_date,
+      transplantedDate: r.transplanted_date,
+      plantingId: r.planting_id,
+      note: r.note,
+    })),
+    summary: summarizeSowings(records),
+    sources: rankSeedSources(records),
+  });
+});
+
+// POST /api/garden/sowings — catat batch semai baru
+extra.post('/sowings', async (c) => {
+  const user = c.get('user');
+  type Body = {
+    plantId?: string; name?: string; brand?: string;
+    sownDate?: string; seedCount?: number; note?: string;
+  };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const name = body.name?.trim();
+  if (!name) return c.json({ error: 'nama tanaman wajib diisi' }, 400);
+
+  const seedCount = Math.floor(body.seedCount ?? 0);
+  if (!Number.isFinite(seedCount) || seedCount <= 0) {
+    return c.json({ error: 'jumlah benih harus lebih dari nol' }, 400);
+  }
+
+  const sownDate = body.sownDate && /^\d{4}-\d{2}-\d{2}$/.test(body.sownDate)
+    ? body.sownDate
+    : jakartaToday();
+
+  const id = nanoid();
+  await c.env.DB.prepare(
+    `INSERT INTO garden_sowings (id, user_id, plant_id, name, seed_brand, sown_date, seed_count, note)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+  ).bind(
+    id, user.sub, body.plantId?.trim() || null, name,
+    body.brand?.trim() || null, sownDate, seedCount, body.note?.trim() || null
+  ).run();
+
+  return c.json({ id, ok: true });
+});
+
+// PATCH /api/garden/sowings/:id — catat hasil kecambah atau pindah tanam
+extra.patch('/sowings/:id', async (c) => {
+  const user = c.get('user');
+  type Body = { germinatedCount?: number; transplantedDate?: string; plantingId?: string; note?: string };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  // Nol adalah jawaban sah — gagal total justru data terpenting — jadi yang
+  // dicek keberadaan field-nya, bukan kebenarannya sebagai angka.
+  let germinated: number | null = null;
+  if (body.germinatedCount !== undefined) {
+    germinated = Math.floor(body.germinatedCount);
+    if (!Number.isFinite(germinated) || germinated < 0) {
+      return c.json({ error: 'jumlah kecambah tidak valid' }, 400);
+    }
+  }
+
+  const res = await c.env.DB.prepare(
+    `UPDATE garden_sowings
+        SET germinated_count = COALESCE(?1, germinated_count),
+            germinated_date  = CASE WHEN ?1 IS NOT NULL THEN ?2 ELSE germinated_date END,
+            transplanted_date = COALESCE(?3, transplanted_date),
+            planting_id      = COALESCE(?4, planting_id),
+            note             = COALESCE(?5, note)
+      WHERE id = ?6 AND user_id = ?7`
+  ).bind(
+    germinated, jakartaToday(),
+    body.transplantedDate ?? null, body.plantingId ?? null,
+    body.note?.trim() || null,
+    c.req.param('id'), user.sub
+  ).run();
+
+  if (!res.meta.changes) return c.json({ error: 'catatan semai tidak ditemukan' }, 404);
+  return c.json({ ok: true });
+});
+
+// DELETE /api/garden/sowings/:id
+extra.delete('/sowings/:id', async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM garden_sowings WHERE id = ?1 AND user_id = ?2')
+    .bind(c.req.param('id'), user.sub).run();
+  return c.json({ ok: true });
+});
+
+// ────────────────── #14 PERKIRAAN PANEN ADAPTIF ──────────────────
+
+// GET /api/garden/harvest-forecast — perkiraan panen dikoreksi kepatuhan perawatan
+extra.get('/harvest-forecast', async (c) => {
+  const user = c.get('user');
+  const today = jakartaToday();
+
+  const [plantingRes, careRes] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+              planted_date, expected_harvest_date, status, note
+         FROM garden_plantings
+        WHERE user_id = ?1 AND status = 'tumbuh'`
+    ).bind(user.sub).all<PlantingRow>(),
+    // Jumlah perawatan nyata per tanaman, satu kueri untuk semua — bukan satu
+    // kueri per tanaman di dalam loop.
+    c.env.DB.prepare(
+      `SELECT planting_id, action, COUNT(*) AS n FROM garden_care_log
+        WHERE user_id = ?1 AND action IN ('siram','pupuk')
+        GROUP BY planting_id, action`
+    ).bind(user.sub).all<{ planting_id: string; action: string; n: number }>(),
+  ]);
+
+  const rows = plantingRes.results ?? [];
+  const plants = await resolvePlants(
+    c.env.DB, rows.map((r) => r.plant_id).filter((id): id is string => !!id)
+  );
+
+  const counts = new Map<string, { siram: number; pupuk: number }>();
+  for (const r of careRes.results ?? []) {
+    const e = counts.get(r.planting_id) ?? { siram: 0, pupuk: 0 };
+    if (r.action === 'siram') e.siram = r.n;
+    if (r.action === 'pupuk') e.pupuk = r.n;
+    counts.set(r.planting_id, e);
+  }
+
+  const forecasts = [];
+  for (const row of rows) {
+    const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
+    // Tanpa katalog tidak ada interval maupun umur panen — tidak ada yang bisa
+    // dikoreksi, jadi tanaman itu dilewati daripada ditebak.
+    if (!plant) continue;
+
+    const actual = counts.get(row.id) ?? { siram: 0, pupuk: 0 };
+    const forecast = forecastHarvest(
+      row.planted_date,
+      plant.daysToHarvest[0],
+      {
+        waterExpected: expectedCareCount(row.planted_date, today, plant.waterIntervalDays),
+        waterActual: actual.siram,
+        fertilizeExpected: expectedCareCount(row.planted_date, today, plant.fertilizeIntervalDays),
+        fertilizeActual: actual.pupuk,
+      },
+      today,
+      row.expected_harvest_date
+    );
+
+    forecasts.push({
+      plantingId: row.id,
+      name: row.nickname || plant.name || row.custom_name || 'Tanaman',
+      emoji: plant.emoji,
+      ...forecast,
+    });
+  }
+
+  // Yang paling dekat panen didahulukan — itu yang perlu disiapkan.
+  forecasts.sort((a, b) => a.estimatedDate.localeCompare(b.estimatedDate));
+  return c.json({ today, forecasts });
+});
+
+// ────────────────── #15 KALKULATOR BELANJA KEBUN ──────────────────
+
+// GET /api/garden/supplies — kebutuhan media tanam & pupuk untuk tanaman aktif
+extra.get('/supplies', async (c) => {
+  const user = c.get('user');
+  const today = jakartaToday();
+
+  const rows = (await c.env.DB.prepare(
+    `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+            planted_date, expected_harvest_date, status, note
+       FROM garden_plantings WHERE user_id = ?1 AND status = 'tumbuh'`
+  ).bind(user.sub).all<PlantingRow>()).results ?? [];
+
+  const plants = await resolvePlants(
+    c.env.DB, rows.map((r) => r.plant_id).filter((id): id is string => !!id)
+  );
+  const actions = await lastActions(c.env.DB, user.sub);
+
+  const inputs: SupplyPlanting[] = [];
+  for (const row of rows) {
+    const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
+    if (!plant) continue;
+
+    const care = computeCareState(row, plant, actions.get(row.id) ?? {}, today);
+    const daysToHarvest = care.nextHarvest
+      ? Math.max(0, Math.round(
+          (new Date(`${care.nextHarvest}T00:00:00Z`).getTime()
+            - new Date(`${today}T00:00:00Z`).getTime()) / 86400000
+        ))
+      : 0;
+
+    inputs.push({
+      plantingId: row.id,
+      name: plant.name,
+      quantity: row.quantity,
+      potLiter: plant.potLiter,
+      fertilizeIntervalDays: plant.fertilizeIntervalDays,
+      daysToHarvest,
+    });
+  }
+
+  return c.json({ needs: planSupplies(inputs), plantingCount: inputs.length });
+});
+
+// ──────────────── #16 EFEKTIVITAS PENANGANAN HAMA ────────────────
+
+// GET /api/garden/treatments — peringkat penanganan + catatan yang perlu dinilai
+extra.get('/treatments', async (c) => {
+  const user = c.get('user');
+  const today = jakartaToday();
+
+  const rows = (await c.env.DB.prepare(
+    `SELECT id, pest, treatment, worked, spotted_date, resolved_date
+       FROM garden_pest_log WHERE user_id = ?1 ORDER BY spotted_date DESC LIMIT 300`
+  ).bind(user.sub).all<{
+    id: string; pest: string; treatment: string | null;
+    worked: number | null; spotted_date: string; resolved_date: string | null;
+  }>()).results ?? [];
+
+  const records: TreatmentRecord[] = rows.map((r) => ({
+    pest: r.pest,
+    treatment: r.treatment,
+    worked: r.worked,
+    spottedDate: r.spotted_date,
+    resolvedDate: r.resolved_date,
+  }));
+
+  // Id dibawa kembali supaya frontend bisa langsung PATCH catatan yang ditagih.
+  const pendingIds = new Map(rows.filter((r) => r.worked === null).map((r) => [r.spotted_date + r.pest, r.id]));
+  const pending = pendingReviews(records, today).map((p) => ({
+    ...p,
+    id: pendingIds.get(p.spottedDate + p.pest) ?? null,
+  }));
+
+  return c.json({ scores: rankTreatments(records), pending });
+});
+
+// ──────────────────── #17 DENAH BEDENGAN ────────────────────
+
+// GET /api/garden/beds — daftar bedengan beserta isinya dan masalah tata letak
+extra.get('/beds', async (c) => {
+  const user = c.get('user');
+
+  const [bedRes, slotRes] = await Promise.all([
+    c.env.DB.prepare(
+      'SELECT id, name, width_cm, length_cm, note FROM garden_beds WHERE user_id = ?1 ORDER BY created_at'
+    ).bind(user.sub).all<{ id: string; name: string; width_cm: number; length_cm: number; note: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT s.planting_id, s.bed_id, s.pos_x, s.pos_y,
+              p.plant_id, p.nickname, p.custom_name
+         FROM garden_bed_slots s
+         JOIN garden_plantings p ON p.id = s.planting_id
+        WHERE s.user_id = ?1`
+    ).bind(user.sub).all<{
+      planting_id: string; bed_id: string; pos_x: number; pos_y: number;
+      plant_id: string | null; nickname: string | null; custom_name: string | null;
+    }>(),
+  ]);
+
+  const slotRows = slotRes.results ?? [];
+  const plants = await resolvePlants(
+    c.env.DB, slotRows.map((s) => s.plant_id).filter((id): id is string => !!id)
+  );
+
+  const byBed = new Map<string, BedSlot[]>();
+  for (const s of slotRows) {
+    const plant = s.plant_id ? plants.get(s.plant_id) : undefined;
+    const list = byBed.get(s.bed_id) ?? [];
+    list.push({
+      plantingId: s.planting_id,
+      name: s.nickname || plant?.name || s.custom_name || 'Tanaman',
+      posX: s.pos_x,
+      posY: s.pos_y,
+      spacingCm: plant?.spacingCm ?? 0,
+    });
+    byBed.set(s.bed_id, list);
+  }
+
+  const beds = (bedRes.results ?? []).map((b) => {
+    const bed: Bed = { id: b.id, name: b.name, widthCm: b.width_cm, lengthCm: b.length_cm };
+    const slots = byBed.get(b.id) ?? [];
+    return { ...bed, note: b.note, slots, report: inspectBed(bed, slots) };
+  });
+
+  return c.json({ beds });
+});
+
+// POST /api/garden/beds — buat bedengan
+extra.post('/beds', async (c) => {
+  const user = c.get('user');
+  type Body = { name?: string; widthCm?: number; lengthCm?: number; note?: string };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const name = body.name?.trim();
+  if (!name) return c.json({ error: 'nama bedengan wajib diisi' }, 400);
+
+  const widthCm = Math.round(body.widthCm ?? 0);
+  const lengthCm = Math.round(body.lengthCm ?? 0);
+  if (widthCm <= 0 || lengthCm <= 0) return c.json({ error: 'ukuran bedengan harus lebih dari nol' }, 400);
+  if (widthCm > 5000 || lengthCm > 5000) return c.json({ error: 'ukuran bedengan terlalu besar' }, 400);
+
+  const id = nanoid();
+  await c.env.DB.prepare(
+    'INSERT INTO garden_beds (id, user_id, name, width_cm, length_cm, note) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
+  ).bind(id, user.sub, name, widthCm, lengthCm, body.note?.trim() || null).run();
+
+  return c.json({ id, ok: true });
+});
+
+// DELETE /api/garden/beds/:id
+extra.delete('/beds/:id', async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM garden_beds WHERE id = ?1 AND user_id = ?2')
+    .bind(c.req.param('id'), user.sub).run();
+  return c.json({ ok: true });
+});
+
+// PUT /api/garden/beds/:id/slots — taruh atau pindahkan satu tanaman di denah
+extra.put('/beds/:id/slots', async (c) => {
+  const user = c.get('user');
+  const bedId = c.req.param('id');
+  type Body = { plantingId?: string; posX?: number; posY?: number };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const plantingId = body.plantingId?.trim();
+  if (!plantingId) return c.json({ error: 'plantingId wajib diisi' }, 400);
+
+  // Bedengan dan tanaman dicek kepemilikannya: tanpa ini seseorang bisa
+  // menempelkan tanaman orang lain ke denahnya sendiri lewat id tebakan.
+  const [bed, planting] = await Promise.all([
+    c.env.DB.prepare('SELECT id, name, width_cm, length_cm FROM garden_beds WHERE id = ?1 AND user_id = ?2')
+      .bind(bedId, user.sub).first<{ id: string; name: string; width_cm: number; length_cm: number }>(),
+    c.env.DB.prepare('SELECT id, plant_id FROM garden_plantings WHERE id = ?1 AND user_id = ?2')
+      .bind(plantingId, user.sub).first<{ id: string; plant_id: string | null }>(),
+  ]);
+
+  if (!bed) return c.json({ error: 'bedengan tidak ditemukan' }, 404);
+  if (!planting) return c.json({ error: 'tanaman tidak ditemukan' }, 404);
+
+  const posX = Math.round(body.posX ?? -1);
+  const posY = Math.round(body.posY ?? -1);
+  if (posX < 0 || posY < 0 || posX > bed.width_cm || posY > bed.length_cm) {
+    return c.json({ error: 'posisi di luar bedengan' }, 400);
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO garden_bed_slots (planting_id, bed_id, user_id, pos_x, pos_y)
+     VALUES (?1, ?2, ?3, ?4, ?5)
+     ON CONFLICT(planting_id) DO UPDATE SET bed_id = ?2, pos_x = ?4, pos_y = ?5`
+  ).bind(plantingId, bedId, user.sub, posX, posY).run();
+
+  return c.json({ ok: true });
+});
+
+// DELETE /api/garden/beds/slots/:plantingId — angkat tanaman dari denah
+extra.delete('/beds/slots/:plantingId', async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM garden_bed_slots WHERE planting_id = ?1 AND user_id = ?2')
+    .bind(c.req.param('plantingId'), user.sub).run();
+  return c.json({ ok: true });
+});
+
+// GET /api/garden/beds/:id/suggest?spacing= — titik kosong terdekat
+extra.get('/beds/:id/suggest', async (c) => {
+  const user = c.get('user');
+  const bedId = c.req.param('id');
+
+  const bedRow = await c.env.DB.prepare(
+    'SELECT id, name, width_cm, length_cm FROM garden_beds WHERE id = ?1 AND user_id = ?2'
+  ).bind(bedId, user.sub).first<{ id: string; name: string; width_cm: number; length_cm: number }>();
+  if (!bedRow) return c.json({ error: 'bedengan tidak ditemukan' }, 404);
+
+  const slotRows = (await c.env.DB.prepare(
+    `SELECT s.planting_id, s.pos_x, s.pos_y, p.plant_id, p.nickname, p.custom_name
+       FROM garden_bed_slots s
+       JOIN garden_plantings p ON p.id = s.planting_id
+      WHERE s.bed_id = ?1 AND s.user_id = ?2`
+  ).bind(bedId, user.sub).all<{
+    planting_id: string; pos_x: number; pos_y: number;
+    plant_id: string | null; nickname: string | null; custom_name: string | null;
+  }>()).results ?? [];
+
+  const plants = await resolvePlants(
+    c.env.DB, slotRows.map((s) => s.plant_id).filter((id): id is string => !!id)
+  );
+
+  const slots: BedSlot[] = slotRows.map((s) => {
+    const plant = s.plant_id ? plants.get(s.plant_id) : undefined;
+    return {
+      plantingId: s.planting_id,
+      name: s.nickname || plant?.name || s.custom_name || 'Tanaman',
+      posX: s.pos_x,
+      posY: s.pos_y,
+      spacingCm: plant?.spacingCm ?? 0,
+    };
+  });
+
+  const spacing = Number(c.req.query('spacing')) || 20;
+  const bed: Bed = { id: bedRow.id, name: bedRow.name, widthCm: bedRow.width_cm, lengthCm: bedRow.length_cm };
+
+  return c.json({ suggestion: suggestSlot(bed, slots, spacing) });
+});
+
+// ─────────────────── #18 DARI KEBUN KE PIRING ───────────────────
+
+// GET /api/garden/kitchen?month=YYYY-MM — nilai panen vs belanja makanan
+extra.get('/kitchen', async (c) => {
+  const user = c.get('user');
+  const month = c.req.query('month') ?? jakartaToday().slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month)) return c.json({ error: 'month harus YYYY-MM' }, 400);
+
+  const from = `${month}-01`;
+  const to = `${month}-31`;
+
+  const [harvestRes, priceRes, spendRes] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT p.plant_id, p.nickname, p.custom_name, l.amount, l.unit, l.action_date
+         FROM garden_care_log l
+         JOIN garden_plantings p ON p.id = l.planting_id
+        WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL
+          AND l.action_date >= ?2 AND l.action_date <= ?3`
+    ).bind(user.sub, from, to).all<{
+      plant_id: string | null; nickname: string | null; custom_name: string | null;
+      amount: number; unit: string | null; action_date: string;
+    }>(),
+    c.env.DB.prepare('SELECT plant_key, price_idr FROM garden_plant_price WHERE user_id = ?1')
+      .bind(user.sub).all<{ plant_key: string; price_idr: number }>(),
+    // Belanja makanan bulan ini: itulah pembanding yang membuat nilai panen
+    // punya arti. Kategorinya dicocokkan longgar supaya "Makanan" dan
+    // "Makan & Minum" sama-sama terhitung.
+    c.env.DB.prepare(
+      `SELECT COALESCE(SUM(amount_idr), 0) AS total FROM budget_entries
+        WHERE user_id = ?1 AND type = 'expense'
+          AND entry_date >= ?2 AND entry_date <= ?3
+          AND (lower(category) LIKE '%makan%' OR lower(category) LIKE '%belanja%'
+               OR lower(category) LIKE '%dapur%' OR lower(category) LIKE '%sayur%')`
+    ).bind(user.sub, from, to).first<{ total: number }>(),
+  ]);
+
+  const harvests: HarvestEntry[] = (harvestRes.results ?? []).map((r) => {
+    const plant = r.plant_id ? PLANT_BY_ID.get(r.plant_id) : undefined;
+    return {
+      key: priceKey(r.plant_id, r.custom_name),
+      name: r.nickname || plant?.name || r.custom_name || 'Tanaman',
+      amount: r.amount,
+      unit: r.unit ?? 'kg',
+      date: r.action_date,
+    };
+  });
+
+  const prices = new Map<string, number>();
+  // plant_key sudah disimpan dalam bentuk yang sama dengan priceKey(): id
+  // katalog, atau nama kustom yang dinormalisasi.
+  for (const p of priceRes.results ?? []) prices.set(p.plant_key, p.price_idr);
+
+  return c.json(buildKitchenReport(harvests, prices, spendRes?.total ?? 0, from, to));
+});
+
+// ─────────────────── #19 LAPORAN KEBUN TAHUNAN ───────────────────
+
+// GET /api/garden/annual-report?year=YYYY — rekap setahun untuk diekspor PDF
+extra.get('/annual-report', async (c) => {
+  const user = c.get('user');
+  const year = c.req.query('year') ?? jakartaToday().slice(0, 4);
+  if (!/^\d{4}$/.test(year)) return c.json({ error: 'year harus YYYY' }, 400);
+
+  const from = `${year}-01-01`;
+  const to = `${year}-12-31`;
+
+  const [harvestRes, costRes, priceRes, plantedRes, failedRes, pestRes] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT p.plant_id, p.nickname, p.custom_name, l.amount, l.unit
+         FROM garden_care_log l
+         JOIN garden_plantings p ON p.id = l.planting_id
+        WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL
+          AND l.action_date >= ?2 AND l.action_date <= ?3`
+    ).bind(user.sub, from, to).all<{
+      plant_id: string | null; nickname: string | null; custom_name: string | null;
+      amount: number; unit: string | null;
+    }>(),
+    c.env.DB.prepare(
+      `SELECT COALESCE(SUM(amount_idr), 0) AS total FROM garden_costs
+        WHERE user_id = ?1 AND cost_date >= ?2 AND cost_date <= ?3`
+    ).bind(user.sub, from, to).first<{ total: number }>(),
+    c.env.DB.prepare('SELECT plant_key, price_idr FROM garden_plant_price WHERE user_id = ?1')
+      .bind(user.sub).all<{ plant_key: string; price_idr: number }>(),
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM garden_plantings
+        WHERE user_id = ?1 AND planted_date >= ?2 AND planted_date <= ?3`
+    ).bind(user.sub, from, to).first<{ n: number }>(),
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM garden_plantings
+        WHERE user_id = ?1 AND status = 'gagal' AND planted_date >= ?2 AND planted_date <= ?3`
+    ).bind(user.sub, from, to).first<{ n: number }>(),
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM garden_pest_log
+        WHERE user_id = ?1 AND spotted_date >= ?2 AND spotted_date <= ?3`
+    ).bind(user.sub, from, to).first<{ n: number }>(),
+  ]);
+
+  const prices = new Map<string, number>();
+  // plant_key sudah disimpan dalam bentuk yang sama dengan priceKey(): id
+  // katalog, atau nama kustom yang dinormalisasi.
+  for (const p of priceRes.results ?? []) prices.set(p.plant_key, p.price_idr);
+
+  const harvests: HarvestEntry[] = (harvestRes.results ?? []).map((r) => {
+    const plant = r.plant_id ? PLANT_BY_ID.get(r.plant_id) : undefined;
+    return {
+      key: priceKey(r.plant_id, r.custom_name),
+      name: r.nickname || plant?.name || r.custom_name || 'Tanaman',
+      amount: r.amount,
+      unit: r.unit ?? 'kg',
+      date: from,
+    };
+  });
+
+  // Laporan tahunan memakai mesin hitung yang sama dengan "dari kebun ke
+  // piring": satu definisi nilai panen, dipakai di dua tempat.
+  const value = buildKitchenReport(harvests, prices, 0, from, to);
+  const costs = costRes?.total ?? 0;
+  const planted = plantedRes?.n ?? 0;
+  const failed = failedRes?.n ?? 0;
+
+  return c.json({
+    year,
+    plantedCount: planted,
+    failedCount: failed,
+    successPercent: planted > 0 ? Math.round(((planted - failed) / planted) * 100) : null,
+    pestCount: pestRes?.n ?? 0,
+    harvestValueIdr: value.harvestValueIdr,
+    costIdr: costs,
+    netIdr: value.harvestValueIdr - costs,
+    items: value.items,
+    unpricedHarvests: value.unpricedHarvests,
+  });
 });
 
 export default extra;
