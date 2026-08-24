@@ -40,6 +40,7 @@ const Shortcuts = lazy(() => import('@/screens/Shortcuts'));
 const Harian = lazy(() => import('@/screens/Harian'));
 const TutupHari = lazy(() => import('@/screens/TutupHari'));
 const Pola = lazy(() => import('@/screens/Pola'));
+const Pengaturan = lazy(() => import('@/screens/Pengaturan'));
 
 /**
  * Keep-alive pane for a tab screen.
@@ -180,6 +181,7 @@ function AppShell() {
       'harian': <Harian />,
       'tutup-hari': <TutupHari />,
       'pola': <Pola />,
+      'pengaturan': <Pengaturan />,
     }),
     [],
   );

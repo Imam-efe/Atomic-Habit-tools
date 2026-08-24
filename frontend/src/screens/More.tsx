@@ -458,6 +458,7 @@ export function More() {
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas', path: null },
             { label: 'Pencapaian', id: 'achievements', desc: 'Koleksi lencana dari streak, budget & pelunasan utang', path: null },
             { label: 'Catatan', id: 'notes', desc: 'Catatan bebas, bisa didikte & dihubungkan ke kebiasaan/goal', path: null },
+            { label: 'Pengaturan', id: 'pengaturan', desc: 'Jam notifikasi, ambang tiap modul & manajemen data', path: null },
             { label: 'Pagi Ini', id: 'harian', desc: 'Ringkasan harian: kebiasaan, agenda, sisa aman, tagihan & jadwal anak', path: null },
             { label: 'Tutup Hari', id: 'tutup-hari', desc: 'Ritual malam 3 menit: refleksi, mood & tiga prioritas besok', path: null },
             { label: 'Pola', id: 'pola', desc: 'Hubungan kebiasaan dengan tidur, langkah & pengeluaran', path: null },
