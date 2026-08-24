@@ -4,7 +4,6 @@ import { springs, collapse } from '@/tokens/motion';
 import { GardenPlanner, GardenRecords, type PlantingOption } from './GardenExtras';
 import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
-import { useUIStore } from '@/stores/uiStore';
 
 interface Plant {
   id: string;
@@ -92,12 +91,33 @@ interface ScheduleResponse {
   upcoming: DueItem[];
 }
 
+interface FertilizePlanEntry {
+  plantingId: string;
+  name: string;
+  emoji: string;
+  phase: 'semai' | 'vegetatif' | 'generatif';
+  guidance: string;
+}
+
+const PHASE_LABEL: Record<FertilizePlanEntry['phase'], string> = {
+  semai: '🌱 Semai',
+  vegetatif: '🌿 Vegetatif',
+  generatif: '🌸 Berbunga/berbuah',
+};
+
 interface CareLog {
   id: string;
   action: string;
   date: string;
   amount: number | null;
   unit: string | null;
+  note: string | null;
+}
+
+interface Photo {
+  id: string;
+  image: string;
+  taken_date: string;
   note: string | null;
 }
 
@@ -160,11 +180,13 @@ function relativeLabel(iso: string, today: string): string {
 }
 
 export function Garden() {
-  const { goBack } = useUIStore();
   const [tab, setTab] = useState<'kebun' | 'jadwal' | 'katalog' | 'rencana' | 'catatan'>('kebun');
   const [data, setData] = useState<GardenResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
+  const [fertilizePlan, setFertilizePlan] = useState<FertilizePlanEntry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const fertilizeByPlanting = new Map(fertilizePlan.map((f) => [f.plantingId, f]));
 
   // Bentuk ringkas untuk tab Rencana dan Catatan — keduanya hanya butuh id,
   // label, dan id katalognya.
@@ -201,6 +223,15 @@ export function Garden() {
   const [insight, setInsight] = useState<string>('');
   const [insightLoading, setInsightLoading] = useState(false);
 
+  // Jurnal foto — timeline pertumbuhan per tanaman.
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Tanya AI bebas dengan konteks tanaman yang sedang dibuka.
+  const [askQuestion, setAskQuestion] = useState('');
+  const [askAnswer, setAskAnswer] = useState('');
+  const [asking, setAsking] = useState(false);
+
   // Diagnosis. `diagnoseOpen` terpisah dari `diagnoseFor` karena panel ini
   // juga bisa dibuka tanpa tanaman tertentu (tombol 🔬 di header).
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
@@ -214,12 +245,14 @@ export function Garden() {
   const load = async () => {
     setLoading(true);
     try {
-      const [g, s] = await Promise.all([
+      const [g, s, f] = await Promise.all([
         apiFetch<GardenResponse>('/garden'),
         apiFetch<ScheduleResponse>('/garden/schedule?days=14'),
+        apiFetch<{ plan: FertilizePlanEntry[] }>('/garden/fertilize-plan'),
       ]);
       setData(g);
       setSchedule(s);
+      setFertilizePlan(f.plan);
     } catch {}
     setLoading(false);
   };
@@ -275,6 +308,17 @@ export function Garden() {
     }
   };
 
+  const loadPhotos = async (plantingId: string) => {
+    try {
+      const res = await apiFetch<{ photos: Photo[] }>(`/garden/${plantingId}/photos`);
+      // Timeline dibaca kiri-ke-kanan dari semai ke sekarang — kebalikan
+      // dari urutan endpoint (terbaru dulu) yang cocok untuk daftar riwayat.
+      setPhotos([...res.photos].reverse());
+    } catch {
+      setPhotos([]);
+    }
+  };
+
   const toggleDetail = (plantingId: string) => {
     if (openPlanting === plantingId) {
       setOpenPlanting(null);
@@ -282,7 +326,43 @@ export function Garden() {
     }
     setOpenPlanting(plantingId);
     setInsight('');
+    setAskQuestion('');
+    setAskAnswer('');
     loadCareLogs(plantingId);
+    loadPhotos(plantingId);
+  };
+
+  const handleAsk = async (plantingId: string) => {
+    const question = askQuestion.trim();
+    if (!question) return;
+    setAsking(true);
+    setAskAnswer('');
+    try {
+      const res = await apiFetch<{ answer: string }>(`/garden/${plantingId}/ask`, {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+      });
+      setAskAnswer(res.answer);
+    } catch {
+      setAskAnswer('Gagal menjawab. Coba lagi nanti.');
+    }
+    setAsking(false);
+  };
+
+  const handleAddJournalPhoto = async (plantingId: string, file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const image = await compressImage(file);
+      await apiFetch(`/garden/${plantingId}/photos`, {
+        method: 'POST',
+        body: JSON.stringify({ image, date: todayISO() }),
+      });
+      await loadPhotos(plantingId);
+    } catch {
+      // Diam saja — jurnal foto bersifat opsional, kegagalan tidak boleh
+      // mengganggu alur perawatan utama yang lebih penting.
+    }
+    setUploadingPhoto(false);
   };
 
   const handleInsight = async (plantingId: string) => {
@@ -406,25 +486,14 @@ export function Garden() {
   const today = data?.today ?? todayISO();
 
   return (
-    <div className="min-h-screen px-5 pt-14 pb-tab-safe" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
-        <motion.button
-          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
-          whileTap={{ scale: 0.9 }}
-          transition={springs.snappy}
-          onClick={goBack}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </motion.button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.5px' }}>
+          <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>
             Kebun
           </h1>
-          <p className="text-xs" style={{ color: 'var(--text2)' }}>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text2)' }}>
             Sayur & buah: jadwal siram, pupuk, panen
           </p>
         </div>
@@ -623,6 +692,18 @@ export function Garden() {
                           <p className="text-[11px] italic" style={{ color: 'var(--text3)' }}>📝 {p.note}</p>
                         )}
 
+                        {/* Fase pertumbuhan & pupuk — hanya untuk tanaman berkatalog */}
+                        {fertilizeByPlanting.get(p.id) && (
+                          <div className="rounded-xl p-3" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                            <p className="text-[10px] font-extrabold uppercase tracking-wider mb-1" style={{ color: 'var(--text3)' }}>
+                              {PHASE_LABEL[fertilizeByPlanting.get(p.id)!.phase]}
+                            </p>
+                            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text)' }}>
+                              {fertilizeByPlanting.get(p.id)!.guidance}
+                            </p>
+                          </div>
+                        )}
+
                         {/* Insight AI */}
                         <div className="rounded-xl p-3" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
                           <div className="flex items-center justify-between gap-2 mb-1">
@@ -641,6 +722,36 @@ export function Garden() {
                           <p className="text-[11px] leading-relaxed" style={{ color: insight ? 'var(--text)' : 'var(--text3)' }}>
                             {insight || 'Nilai pola perawatanmu terhadap umur tanaman ini.'}
                           </p>
+                        </div>
+
+                        {/* Tanya AI bebas — konteksnya tanaman yang sama seperti Insight */}
+                        <div className="rounded-xl p-3" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>
+                            💬 Tanya soal tanaman ini
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              className="flex-1 px-2.5 py-2 rounded-lg text-[11px] outline-none"
+                              style={{ background: 'var(--surface)', color: 'var(--text)' }}
+                              placeholder="Contoh: kenapa daunnya menguning?"
+                              value={askQuestion}
+                              onChange={(e) => setAskQuestion(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAsk(p.id); }}
+                            />
+                            <button
+                              className="neu-cta px-3 py-2 rounded-lg text-[10px] font-bold text-white flex-shrink-0"
+                              style={{ background: 'var(--accentFill)', opacity: asking || !askQuestion.trim() ? 0.6 : 1 }}
+                              onClick={() => handleAsk(p.id)}
+                              disabled={asking || !askQuestion.trim()}
+                            >
+                              {asking ? '...' : 'Tanya'}
+                            </button>
+                          </div>
+                          {askAnswer && (
+                            <p className="text-[11px] leading-relaxed mt-2" style={{ color: 'var(--text)' }}>
+                              {askAnswer}
+                            </p>
+                          )}
                         </div>
 
                         {/* Riwayat perawatan */}
@@ -662,6 +773,59 @@ export function Garden() {
                             </div>
                           </div>
                         )}
+
+                        {/* Jurnal foto — timeline pertumbuhan */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: 'var(--text3)' }}>
+                              📷 Jurnal Foto
+                            </p>
+                            <label
+                              className="text-[10px] font-bold cursor-pointer"
+                              style={{ color: uploadingPhoto ? 'var(--text3)' : 'var(--accent)' }}
+                            >
+                              {uploadingPhoto ? 'Mengunggah...' : '+ Tambah'}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingPhoto}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleAddJournalPhoto(p.id, file);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
+                          {photos.length === 0 ? (
+                            <p className="text-[11px]" style={{ color: 'var(--text3)' }}>
+                              Belum ada foto. Rekam pertumbuhannya dari semai sampai panen.
+                            </p>
+                          ) : (
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                              {photos.map((photo) => {
+                                const dayNum = Math.round(
+                                  (new Date(`${photo.taken_date}T00:00:00`).getTime() -
+                                    new Date(`${p.plantedDate}T00:00:00`).getTime()) / 86400000
+                                );
+                                return (
+                                  <div key={photo.id} className="flex-shrink-0 flex flex-col items-center gap-1">
+                                    <img
+                                      src={photo.image}
+                                      alt={`Hari ke-${dayNum}`}
+                                      className="w-16 h-16 rounded-xl object-cover"
+                                      style={{ boxShadow: 'var(--neu-raised-sm)' }}
+                                    />
+                                    <span className="text-[9px]" style={{ color: 'var(--text3)' }}>
+                                      hari ke-{dayNum}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
 
                         <div className="flex gap-2">
                           <button

@@ -132,3 +132,48 @@ export function summarizeEconomics(
     missingPrices: [...new Set(missingPrices)],
   };
 }
+
+/**
+ * Break-even kebun tahunan (#18).
+ *
+ * "Untung tahun ini" saja tidak menjawab "kebun ini sudah balik modal atau
+ * belum" — modal infrastruktur (pot, media awal) sering ditanam di tahun
+ * pertama sementara hasilnya baru terasa tahun-tahun berikutnya. Ini
+ * mengumulasikan net dari tahun ke tahun dan menandai persis tahun mana
+ * kumulatifnya pertama kali tidak lagi negatif.
+ */
+export interface YearlyTotal {
+  year: number;
+  cost: number;
+  value: number;
+}
+
+export interface YearlyBreakEven {
+  year: number;
+  cost: number;
+  value: number;
+  net: number;
+  cumulativeNet: number;
+}
+
+export interface BreakEvenSummary {
+  years: YearlyBreakEven[];
+  /** Tahun pertama kumulatif net tidak lagi negatif; null kalau belum pernah. */
+  breakEvenYear: number | null;
+  cumulativeNet: number;
+}
+
+export function computeBreakEven(totals: YearlyTotal[]): BreakEvenSummary {
+  const sorted = [...totals].sort((a, b) => a.year - b.year);
+
+  let cumulative = 0;
+  let breakEvenYear: number | null = null;
+  const years: YearlyBreakEven[] = sorted.map((t) => {
+    const net = t.value - t.cost;
+    cumulative += net;
+    if (breakEvenYear === null && cumulative >= 0) breakEvenYear = t.year;
+    return { year: t.year, cost: t.cost, value: t.value, net, cumulativeNet: cumulative };
+  });
+
+  return { years, breakEvenYear, cumulativeNet: cumulative };
+}

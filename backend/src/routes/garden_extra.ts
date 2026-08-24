@@ -14,9 +14,14 @@ import { PLANTS, PLANT_BY_ID } from '../data/plants';
 import { companionAdvice, findGardenConflicts } from '../lib/garden_companion';
 import { plantingCalendar, seasonOfMonth } from '../lib/garden_season';
 import { fitInArea, fitInBed, potFit } from '../lib/garden_space';
-import { getRain, shouldSkipWatering, wateringNote } from '../lib/garden_weather';
-import { summarizeEconomics } from '../lib/garden_economics';
+import { getRain, getWaterBalance, shouldSkipWatering, wateringNote } from '../lib/garden_weather';
+import { summarizeEconomics, computeBreakEven, type YearlyTotal } from '../lib/garden_economics';
 import { findSuccessionDue, type ActivePlanting } from '../lib/garden_succession';
+import { predictYield, type HarvestSample } from '../lib/garden_yield';
+import { findFailurePatterns, type FailedPlanting } from '../lib/garden_failure_patterns';
+import { checkRotation, type LocationPlanting } from '../lib/garden_rotation';
+import { assessPestRisk, findAtRiskPlantings, type RiskCandidate } from '../lib/garden_pest_risk';
+import { planBedLayout, type BedCandidate } from '../lib/garden_layout';
 import { computeCareState, lastActions, resolvePlants, type PlantingRow } from './garden';
 
 const extra = new Hono<AuthContext>();
@@ -142,6 +147,13 @@ extra.post('/location', async (c) => {
   return c.json({ latitude, longitude, label: body.label?.trim() || null });
 });
 
+// DELETE /api/garden/location — kembali ke belum-terkonfigurasi
+extra.delete('/location', async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM garden_location WHERE user_id = ?1').bind(user.sub).run();
+  return c.json({ ok: true });
+});
+
 // GET /api/garden/weather — curah hujan dan putusan siram hari ini
 extra.get('/weather', async (c) => {
   const user = c.get('user');
@@ -162,16 +174,22 @@ extra.get('/weather', async (c) => {
     return c.json({
       configured: true,
       available: false,
+      label: loc.label,
       message: 'Data cuaca belum bisa diambil. Pengingat siram tetap berjalan seperti biasa.',
     });
   }
 
   const verdict = shouldSkipWatering(rain);
+  // Cache dari getRain di atas biasanya masih hangat di sini, jadi ini
+  // umumnya tinggal baca cache, bukan panggilan jaringan kedua.
+  const waterBalance = await getWaterBalance(c.env.DB, loc.latitude, loc.longitude, jakartaToday());
+
   return c.json({
     configured: true,
     available: true,
     label: loc.label,
     rain,
+    waterBalance,
     skipWatering: verdict.skip,
     reason: verdict.reason,
     note: wateringNote(rain),
@@ -285,6 +303,59 @@ extra.get('/economics', async (c) => {
   );
 
   return c.json(summary);
+});
+
+// GET /api/garden/economics/yearly — apakah kebun ini sudah balik modal
+extra.get('/economics/yearly', async (c) => {
+  const user = c.get('user');
+
+  const [plantingRows, costRows, harvestRows, priceRows] = await Promise.all([
+    c.env.DB.prepare(
+      'SELECT id, plant_id, custom_name FROM garden_plantings WHERE user_id = ?1'
+    ).bind(user.sub).all<{ id: string; plant_id: string | null; custom_name: string | null }>(),
+    c.env.DB.prepare(
+      'SELECT amount_idr, cost_date FROM garden_costs WHERE user_id = ?1'
+    ).bind(user.sub).all<{ amount_idr: number; cost_date: string }>(),
+    c.env.DB.prepare(
+      "SELECT planting_id, amount, unit, action_date FROM garden_care_log WHERE user_id = ?1 AND action = 'panen' AND amount IS NOT NULL"
+    ).bind(user.sub).all<{ planting_id: string; amount: number; unit: string | null; action_date: string }>(),
+    c.env.DB.prepare(
+      'SELECT plant_key, price_idr, unit FROM garden_plant_price WHERE user_id = ?1'
+    ).bind(user.sub).all<{ plant_key: string; price_idr: number; unit: string }>(),
+  ]);
+
+  const plantKeyByPlanting = new Map<string, string>();
+  for (const row of plantingRows.results ?? []) {
+    plantKeyByPlanting.set(row.id, row.plant_id ?? (row.custom_name ?? '').toLowerCase());
+  }
+  const priceByKey = new Map((priceRows.results ?? []).map((r) => [r.plant_key, r]));
+
+  const byYear = new Map<number, { cost: number; value: number }>();
+  const bump = (year: number, delta: { cost?: number; value?: number }) => {
+    const entry = byYear.get(year) ?? { cost: 0, value: 0 };
+    entry.cost += delta.cost ?? 0;
+    entry.value += delta.value ?? 0;
+    byYear.set(year, entry);
+  };
+
+  for (const row of costRows.results ?? []) {
+    const year = Number(row.cost_date.slice(0, 4));
+    if (Number.isInteger(year)) bump(year, { cost: row.amount_idr });
+  }
+
+  // Sama seperti /economics: harga yang belum diisi tidak ditebak, jadi
+  // panennya tidak ikut menyumbang nilai tahun itu sampai harganya diisi.
+  for (const row of harvestRows.results ?? []) {
+    const plantKey = plantKeyByPlanting.get(row.planting_id);
+    const price = plantKey ? priceByKey.get(plantKey) : undefined;
+    if (!price || price.unit !== (row.unit ?? 'kg')) continue;
+
+    const year = Number(row.action_date.slice(0, 4));
+    if (Number.isInteger(year)) bump(year, { value: Math.round(row.amount * price.price_idr) });
+  }
+
+  const totals: YearlyTotal[] = [...byYear.entries()].map(([year, t]) => ({ year, cost: t.cost, value: t.value }));
+  return c.json(computeBreakEven(totals));
 });
 
 // ──────────────────────────── #4 HAMA ────────────────────────────
@@ -556,6 +627,194 @@ extra.delete('/seeds/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM garden_seeds WHERE id = ?1 AND user_id = ?2')
     .bind(c.req.param('id'), user.sub).run();
   return c.json({ ok: true });
+});
+
+// ────────────────── #11 PREDIKSI PANEN ──────────────────
+
+// GET /api/garden/yield-prediction — perkiraan hasil panen berikutnya dari riwayat sendiri
+extra.get('/yield-prediction', async (c) => {
+  const user = c.get('user');
+
+  const [plantingRows, harvestRows] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, plant_id, nickname, custom_name FROM garden_plantings
+       WHERE user_id = ?1 AND status IN ('tumbuh','panen') AND plant_id IS NOT NULL`
+    ).bind(user.sub).all<{ id: string; plant_id: string; nickname: string | null; custom_name: string | null }>(),
+    c.env.DB.prepare(`
+      SELECT gp.plant_id AS plant_id, l.amount AS amount, l.unit AS unit, l.action_date AS action_date
+      FROM garden_care_log l
+      JOIN garden_plantings gp ON gp.id = l.planting_id
+      WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL AND gp.plant_id IS NOT NULL
+    `).bind(user.sub).all<{ plant_id: string; amount: number; unit: string | null; action_date: string }>(),
+  ]);
+
+  const historyByPlant = new Map<string, HarvestSample[]>();
+  for (const row of harvestRows.results ?? []) {
+    const list = historyByPlant.get(row.plant_id) ?? [];
+    list.push({ amount: row.amount, unit: row.unit ?? 'kg', date: row.action_date });
+    historyByPlant.set(row.plant_id, list);
+  }
+
+  const predictions: Array<{
+    plantingId: string; name: string; emoji: string; plantId: string;
+    predictedAmount: number; unit: string; confidence: string; sampleSize: number; excludedByUnit: number;
+  }> = [];
+
+  for (const p of plantingRows.results ?? []) {
+    const prediction = predictYield(p.plant_id, historyByPlant.get(p.plant_id) ?? []);
+    if (!prediction) continue;
+    const plant = PLANT_BY_ID.get(p.plant_id);
+    predictions.push({
+      plantingId: p.id,
+      name: p.nickname || plant?.name || p.custom_name || 'Tanaman',
+      emoji: plant?.emoji ?? '🌱',
+      ...prediction,
+    });
+  }
+
+  return c.json({ predictions });
+});
+
+// ────────────────── #12 POLA GAGAL PANEN ──────────────────
+
+// GET /api/garden/failure-patterns — kegagalan berulang, disilangkan dengan lokasi/musim/hama
+extra.get('/failure-patterns', async (c) => {
+  const user = c.get('user');
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, plant_id, nickname, custom_name, location, planted_date
+     FROM garden_plantings WHERE user_id = ?1 AND status = 'gagal' AND plant_id IS NOT NULL`
+  ).bind(user.sub).all<{
+    id: string; plant_id: string; nickname: string | null; custom_name: string | null;
+    location: string | null; planted_date: string;
+  }>();
+
+  const failedRows = rows.results ?? [];
+  if (failedRows.length === 0) return c.json({ patterns: [] });
+
+  const ids = failedRows.map((r) => r.id);
+  const placeholders = ids.map((_, i) => `?${i + 1}`).join(',');
+  const pestRows = await c.env.DB.prepare(
+    `SELECT DISTINCT planting_id FROM garden_pest_log WHERE planting_id IN (${placeholders})`
+  ).bind(...ids).all<{ planting_id: string }>();
+  const withPest = new Set((pestRows.results ?? []).map((r) => r.planting_id));
+
+  const failures: FailedPlanting[] = failedRows.map((r) => {
+    const plant = PLANT_BY_ID.get(r.plant_id);
+    return {
+      plantingId: r.id,
+      plantId: r.plant_id,
+      label: plant?.name ?? r.nickname ?? r.custom_name ?? 'Tanaman',
+      location: r.location,
+      month: Number(r.planted_date.slice(5, 7)),
+      hadPestIncident: withPest.has(r.id),
+    };
+  });
+
+  return c.json({ patterns: findFailurePatterns(failures) });
+});
+
+// ────────────────── #13 ROTASI TANAM ──────────────────
+
+// GET /api/garden/rotation-check — famili sama berturut-turut di lokasi sama
+extra.get('/rotation-check', async (c) => {
+  const user = c.get('user');
+
+  const rows = await c.env.DB.prepare(
+    `SELECT id, plant_id, nickname, custom_name, location, planted_date
+     FROM garden_plantings
+     WHERE user_id = ?1 AND plant_id IS NOT NULL AND location IS NOT NULL AND location != ''`
+  ).bind(user.sub).all<{
+    id: string; plant_id: string; nickname: string | null; custom_name: string | null;
+    location: string; planted_date: string;
+  }>();
+
+  const history: LocationPlanting[] = (rows.results ?? []).map((r) => {
+    const plant = PLANT_BY_ID.get(r.plant_id);
+    return {
+      plantingId: r.id,
+      plantId: r.plant_id,
+      label: plant?.name ?? r.nickname ?? r.custom_name ?? 'Tanaman',
+      location: r.location,
+      plantedDate: r.planted_date,
+    };
+  });
+
+  return c.json({ warnings: checkRotation(history) });
+});
+
+// ────────────────── #16 RISIKO HAMA DARI CUACA ──────────────────
+
+// GET /api/garden/pest-risk — peringatan dini dari pola hujan 3 hari
+extra.get('/pest-risk', async (c) => {
+  const user = c.get('user');
+  const empty = { condition: null as string | null, reason: '', warnings: [] as unknown[] };
+
+  const loc = await c.env.DB.prepare(
+    'SELECT latitude, longitude FROM garden_location WHERE user_id = ?1'
+  ).bind(user.sub).first<{ latitude: number; longitude: number }>();
+  if (!loc) return c.json(empty);
+
+  const rain = await getRain(c.env.DB, loc.latitude, loc.longitude, jakartaToday());
+  if (!rain) return c.json(empty);
+
+  const assessment = assessPestRisk(rain);
+  if (!assessment.condition) return c.json(empty);
+
+  const [plantingRows, pestRows] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, plant_id, nickname, custom_name FROM garden_plantings
+       WHERE user_id = ?1 AND status IN ('tumbuh','panen') AND plant_id IS NOT NULL`
+    ).bind(user.sub).all<{ id: string; plant_id: string; nickname: string | null; custom_name: string | null }>(),
+    c.env.DB.prepare(
+      'SELECT planting_id, pest FROM garden_pest_log WHERE user_id = ?1'
+    ).bind(user.sub).all<{ planting_id: string; pest: string }>(),
+  ]);
+
+  const pestHistoryByPlanting = new Map<string, string[]>();
+  for (const row of pestRows.results ?? []) {
+    const list = pestHistoryByPlanting.get(row.planting_id) ?? [];
+    list.push(row.pest);
+    pestHistoryByPlanting.set(row.planting_id, list);
+  }
+
+  const candidates: RiskCandidate[] = (plantingRows.results ?? []).map((p) => {
+    const plant = PLANT_BY_ID.get(p.plant_id);
+    return {
+      plantingId: p.id,
+      label: plant?.name ?? p.nickname ?? p.custom_name ?? 'Tanaman',
+      catalogPests: plant?.pests ?? [],
+      ownHistoryPests: pestHistoryByPlanting.get(p.id) ?? [],
+    };
+  });
+
+  return c.json({
+    condition: assessment.condition,
+    reason: assessment.reason,
+    warnings: findAtRiskPlantings(assessment.keywords, candidates),
+  });
+});
+
+// ────────────────── #17 SUSUN-TANAM ──────────────────
+
+// POST /api/garden/layout — { candidates: [{plantId, quantity}], bedAreaM2? }
+extra.post('/layout', async (c) => {
+  const body = await c.req
+    .json<{ candidates?: Array<{ plantId?: string; quantity?: number }>; bedAreaM2?: number }>()
+    .catch(() => null);
+  if (!body?.candidates?.length) return c.json({ error: 'candidates wajib diisi' }, 400);
+
+  const candidates: BedCandidate[] = body.candidates
+    .filter((entry): entry is { plantId: string; quantity?: number } => typeof entry.plantId === 'string')
+    .map((entry) => ({
+      plantId: entry.plantId,
+      quantity: typeof entry.quantity === 'number' && entry.quantity > 0 ? Math.round(entry.quantity) : 1,
+    }));
+  if (candidates.length === 0) return c.json({ error: 'candidates wajib diisi' }, 400);
+
+  const bedAreaM2 = typeof body.bedAreaM2 === 'number' && body.bedAreaM2 > 0 ? body.bedAreaM2 : null;
+
+  return c.json(planBedLayout(candidates, PLANTS, bedAreaM2));
 });
 
 export default extra;

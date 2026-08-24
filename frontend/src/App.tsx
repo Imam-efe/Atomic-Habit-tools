@@ -15,6 +15,7 @@ import { Habits } from '@/screens/Habits';
 import { Goals } from '@/screens/Goals';
 import { Budget } from '@/screens/Budget';
 import { Calendar } from '@/screens/Calendar';
+import { Garden } from '@/screens/Garden';
 import { More } from '@/screens/More';
 import { useOnline } from '@/hooks/useOnline';
 import { applyTheme } from '@/tokens/theme';
@@ -30,7 +31,6 @@ const KidsSchedule = lazy(() => import('@/screens/KidsSchedule').then(m => ({ de
 const FinancialReport = lazy(() => import('@/screens/FinancialReport').then(m => ({ default: m.FinancialReport })));
 const WeeklyReview = lazy(() => import('@/screens/WeeklyReview').then(m => ({ default: m.WeeklyReview })));
 const MonthlyReview = lazy(() => import('@/screens/MonthlyReview').then(m => ({ default: m.MonthlyReview })));
-const Garden = lazy(() => import('@/screens/Garden').then(m => ({ default: m.Garden })));
 const HabitHeatmap = lazy(() => import('@/screens/HabitHeatmap').then(m => ({ default: m.HabitHeatmap })));
 const DebtPlanner = lazy(() => import('@/screens/DebtPlanner').then(m => ({ default: m.DebtPlanner })));
 const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
@@ -86,7 +86,7 @@ function TabPane({
   );
 }
 
-const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'goals', 'uang', 'lainnya']);
+const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'kebun', 'goals', 'uang', 'lainnya']);
 
 function AppShell() {
   const { activeTab, subScreen, goBack, setTab, setSubScreen } = useUIStore();
@@ -153,6 +153,7 @@ function AppShell() {
       beranda: <Dashboard />,
       kebiasaan: <Habits />,
       kalender: <Calendar />,
+      kebun: <Garden />,
       goals: <Goals />,
       uang: <Budget />,
       lainnya: <More />,
@@ -171,7 +172,6 @@ function AppShell() {
       'financial-report': <FinancialReport />,
       'weekly-review': <WeeklyReview />,
       'monthly-review': <MonthlyReview />,
-      'garden': <Garden />,
       'habit-heatmap': <HabitHeatmap />,
       'debt-planner': <DebtPlanner />,
       'notification-center': <NotificationCenter />,

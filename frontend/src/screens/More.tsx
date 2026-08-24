@@ -452,7 +452,6 @@ export function More() {
             { label: 'Laporan Keuangan', id: 'financial-report', desc: 'Rekap Laba Rugi, Neraca, & Utang', path: null },
             { label: 'Review Mingguan', id: 'weekly-review', desc: 'Refleksi kebiasaan & penyesuaian mingguan', path: null },
             { label: 'Rekap Bulanan', id: 'monthly-review', desc: 'Narasi AI bulanan: kebiasaan, keuangan & identitas', path: null },
-            { label: 'Kebun', id: 'garden', desc: 'Kebun sayur & buah: jadwal siram, pupuk, panen & diagnosis AI', path: null },
             { label: 'Heatmap Kebiasaan', id: 'habit-heatmap', desc: 'Visualisasi 52 minggu konsistensi kebiasaan', path: null },
             { label: 'Pelunasan Utang', id: 'debt-planner', desc: 'Kalkulator snowball & avalanche payoff', path: null },
             { label: 'Pusat Notifikasi', id: 'notification-center', desc: 'Pengingat custom ke iPhone, jam & interval bebas', path: null },

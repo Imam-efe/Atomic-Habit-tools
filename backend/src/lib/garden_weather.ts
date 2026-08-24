@@ -100,6 +100,103 @@ export function parseRain(payload: unknown): DailyRain | null {
 }
 
 /**
+ * Evapotranspirasi acuan FAO-56 (#14) — perkiraan air yang menguap dari tanah
+ * dan tanaman per hari, mm. Open-Meteo menghitungnya langsung dari suhu,
+ * kelembapan, angin, dan radiasi matahari, jadi tidak perlu implementasi
+ * Penman-Monteith sendiri di sini.
+ *
+ * Berbeda dari precipitation_sum: nilai null di sini berarti "belum bisa
+ * dihitung" (input cuaca dasarnya kurang), bukan nol — jadi dikembalikan
+ * apa adanya, tidak dianggap 0 seperti curah hujan.
+ */
+export function parseEt0(payload: unknown): number | null {
+  const daily = (payload as { daily?: { et0_fao_evapotranspiration?: unknown[] } })?.daily;
+  const values = daily?.et0_fao_evapotranspiration;
+  if (!Array.isArray(values) || values.length < 3) return null;
+
+  const today = values[1];
+  return typeof today === 'number' && Number.isFinite(today) ? today : null;
+}
+
+export interface WaterBalance {
+  et0Today: number;
+  rainToday: number;
+  /** Kekurangan air hari ini setelah dikurangi hujan, mm — 0 kalau hujan sudah cukup. */
+  recommendedMm: number;
+}
+
+/**
+ * Selisih antara air yang menguap dan air yang sudah turun dari hujan.
+ *
+ * Dipisah dari pemanggil jaringan supaya bisa diuji langsung dengan angka,
+ * tanpa perlu memalsukan balasan Open-Meteo.
+ */
+export function computeWaterBalance(et0Today: number, rainToday: number): WaterBalance {
+  return {
+    et0Today,
+    rainToday,
+    recommendedMm: Math.max(0, Math.round((et0Today - rainToday) * 10) / 10),
+  };
+}
+
+/**
+ * Ambil (atau baca dari cache) balasan mentah Open-Meteo untuk satu hari.
+ *
+ * `getRain` dan `getWaterBalance` sama-sama butuh payload ini — dipisah
+ * supaya keduanya berbagi satu baris cache dan satu panggilan jaringan,
+ * bukan masing-masing memanggil Open-Meteo sendiri-sendiri.
+ */
+async function fetchWeatherPayload(
+  db: D1Database,
+  lat: number,
+  lon: number,
+  today: string
+): Promise<unknown | null> {
+  const key = weatherCacheKey(lat, lon, today);
+
+  const cached = await db
+    .prepare('SELECT payload FROM garden_weather_cache WHERE cache_key = ?1')
+    .bind(key)
+    .first<{ payload: string }>();
+
+  if (cached) {
+    try {
+      return JSON.parse(cached.payload);
+    } catch {
+      // Cache rusak: ambil ulang daripada gagal.
+    }
+  }
+
+  const url =
+    `${API}?latitude=${lat}&longitude=${lon}` +
+    `&daily=precipitation_sum,et0_fao_evapotranspiration&timezone=Asia%2FJakarta&past_days=1&forecast_days=2`;
+
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!response.ok) {
+      console.warn(`[garden_weather] Open-Meteo membalas ${response.status}`);
+      return null;
+    }
+
+    const payload = await response.json();
+
+    await db
+      .prepare(
+        `INSERT INTO garden_weather_cache (cache_key, payload, fetched_at)
+         VALUES (?1, ?2, unixepoch())
+         ON CONFLICT (cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`
+      )
+      .bind(key, JSON.stringify(payload))
+      .run();
+
+    return payload;
+  } catch (err) {
+    console.warn(`[garden_weather] gagal mengambil cuaca: ${err instanceof Error ? err.message : 'unknown'}`);
+    return null;
+  }
+}
+
+/**
  * Ambil curah hujan kemarin, hari ini, dan besok, lewat cache harian.
  *
  * Mengembalikan null kalau tidak tersedia — pemanggil harus memperlakukan itu
@@ -112,48 +209,32 @@ export async function getRain(
   lon: number,
   today: string
 ): Promise<DailyRain | null> {
-  const key = weatherCacheKey(lat, lon, today);
+  const payload = await fetchWeatherPayload(db, lat, lon, today);
+  return payload ? parseRain(payload) : null;
+}
 
-  const cached = await db
-    .prepare('SELECT payload FROM garden_weather_cache WHERE cache_key = ?1')
-    .bind(key)
-    .first<{ payload: string }>();
+/**
+ * Kebutuhan air presisi hari ini (#14): evapotranspirasi dikurangi hujan yang
+ * sudah turun.
+ *
+ * Mengembalikan null kalau salah satu datanya tidak tersedia — termasuk baris
+ * cache lama dari sebelum fitur ini yang belum menyimpan
+ * `et0_fao_evapotranspiration` sama sekali. Baris begitu akan digantikan cache
+ * baru begitu tanggalnya berganti, tapi sampai saat itu fitur ini diam
+ * daripada menghitung dari data yang tidak ada.
+ */
+export async function getWaterBalance(
+  db: D1Database,
+  lat: number,
+  lon: number,
+  today: string
+): Promise<WaterBalance | null> {
+  const payload = await fetchWeatherPayload(db, lat, lon, today);
+  if (!payload) return null;
 
-  if (cached) {
-    try {
-      return parseRain(JSON.parse(cached.payload));
-    } catch {
-      // Cache rusak: ambil ulang daripada gagal.
-    }
-  }
+  const et0Today = parseEt0(payload);
+  const rain = parseRain(payload);
+  if (et0Today === null || !rain) return null;
 
-  const url =
-    `${API}?latitude=${lat}&longitude=${lon}` +
-    `&daily=precipitation_sum&timezone=Asia%2FJakarta&past_days=1&forecast_days=2`;
-
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    if (!response.ok) {
-      console.warn(`[garden_weather] Open-Meteo membalas ${response.status}`);
-      return null;
-    }
-
-    const payload = await response.json();
-    const rain = parseRain(payload);
-    if (!rain) return null;
-
-    await db
-      .prepare(
-        `INSERT INTO garden_weather_cache (cache_key, payload, fetched_at)
-         VALUES (?1, ?2, unixepoch())
-         ON CONFLICT (cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`
-      )
-      .bind(key, JSON.stringify(payload))
-      .run();
-
-    return rain;
-  } catch (err) {
-    console.warn(`[garden_weather] gagal mengambil cuaca: ${err instanceof Error ? err.message : 'unknown'}`);
-    return null;
-  }
+  return computeWaterBalance(et0Today, rain.today);
 }

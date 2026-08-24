@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
-import { CITIES_ID } from '@/data/cities_id';
+import { GardenLocationPicker } from '@/components/GardenLocationPicker';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -82,6 +82,7 @@ interface WeatherResponse {
   message?: string;
   label?: string | null;
   rain?: { yesterday: number; today: number; tomorrow: number };
+  waterBalance?: { et0Today: number; rainToday: number; recommendedMm: number } | null;
   skipWatering?: boolean;
   reason?: string;
   note?: string | null;
@@ -102,6 +103,27 @@ interface ConflictResponse {
   conflicts: Array<{ plantName: string; withPlantName: string }>;
 }
 
+interface PestRiskResponse {
+  condition: 'lembap' | 'kering' | null;
+  reason: string;
+  warnings: Array<{ plantingId: string; label: string; matchedPests: string[] }>;
+}
+
+interface LayoutPair {
+  plantId: string;
+  name: string;
+  withPlantId: string;
+  withName: string;
+}
+
+interface LayoutSuggestion {
+  totalAreaNeededM2: number;
+  fitsInBed: boolean | null;
+  conflicts: LayoutPair[];
+  goodPairs: LayoutPair[];
+  isolate: string[];
+}
+
 interface SpaceResponse {
   name: string;
   spacingCm: number;
@@ -115,6 +137,7 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [succession, setSuccession] = useState<SuccessionResponse | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResponse | null>(null);
+  const [pestRisk, setPestRisk] = useState<PestRiskResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Perencana ruang
@@ -124,8 +147,17 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
   const [potLiter, setPotLiter] = useState('10');
   const [space, setSpace] = useState<SpaceResponse | null>(null);
 
-  // Lokasi kebun
-  const [savingLocation, setSavingLocation] = useState(false);
+  // Susun-tanam: cek kecocokan beberapa tanaman sekaligus untuk satu bedeng.
+  const [layoutSelected, setLayoutSelected] = useState<string[]>([]);
+  const [layoutResult, setLayoutResult] = useState<LayoutSuggestion | null>(null);
+  const uniquePlantOptions = [
+    ...new Map(plantings.filter((p) => p.plantId).map((p) => [p.plantId!, p.label])).entries(),
+  ].map(([plantId, label]) => ({ plantId, label }));
+
+  // Lokasi kebun — picker disembunyikan begitu lokasi sudah diatur, tapi
+  // selalu bisa dibuka lagi lewat tombol "Ubah lokasi". Sebelumnya begitu
+  // cuaca berhasil terbaca, tidak ada jalan untuk memilih lokasi lain lagi.
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,17 +166,19 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       try {
         // Tiap bagian berdiri sendiri; kegagalan salah satunya tidak boleh
         // mengosongkan seluruh tab.
-        const [cal, wx, suc, con] = await Promise.all([
+        const [cal, wx, suc, con, risk] = await Promise.all([
           apiFetch<CalendarResponse>('/garden/calendar'),
           apiFetch<WeatherResponse>('/garden/weather').catch(() => null),
           apiFetch<SuccessionResponse>('/garden/succession').catch(() => ({ due: [] })),
           apiFetch<ConflictResponse>('/garden/conflicts').catch(() => ({ conflicts: [] })),
+          apiFetch<PestRiskResponse>('/garden/pest-risk').catch(() => ({ condition: null, reason: '', warnings: [] })),
         ]);
         if (cancelled) return;
         setCalendar(cal);
         setWeather(wx);
         setSuccession(suc);
         setConflicts(con);
+        setPestRisk(risk);
       } catch (err) {
         if (!cancelled) setError(describeError(err, 'Gagal memuat rencana.'));
       }
@@ -155,53 +189,18 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
     };
   }, []);
 
-  const saveLocation = async (latitude: number, longitude: number, label?: string) => {
-    setSavingLocation(true);
-    setError(null);
+  const reloadWeather = async () => {
     try {
-      await apiFetch('/garden/location', {
-        method: 'POST',
-        body: JSON.stringify({ latitude, longitude, label }),
-      });
       setWeather(await apiFetch<WeatherResponse>('/garden/weather'));
     } catch (err) {
-      setError(describeError(err, 'Gagal menyimpan lokasi.'));
+      setError(describeError(err, 'Gagal memuat cuaca.'));
     }
-    setSavingLocation(false);
   };
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) {
-      setError('Perangkat ini tidak mendukung deteksi lokasi. Pilih kota di bawah.');
-      return;
-    }
-    setSavingLocation(true);
+  const handleLocationSaved = () => {
+    setShowLocationPicker(false);
     setError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        saveLocation(
-          Number(pos.coords.latitude.toFixed(4)),
-          Number(pos.coords.longitude.toFixed(4))
-        ),
-      (err) => {
-        // Dibedakan per kode. Melaporkan semuanya sebagai "izin ditolak" keliru
-        // dan menyesatkan: GPS mati atau mode pesawat memberi POSITION_UNAVAILABLE,
-        // dan pengguna akan sia-sia mencari pengaturan izin yang sebetulnya
-        // sudah benar.
-        const message =
-          err.code === err.PERMISSION_DENIED
-            ? 'Izin lokasi ditolak. Pilih kota di bawah, atau aktifkan izin lokasi di pengaturan browser.'
-            : err.code === err.POSITION_UNAVAILABLE
-              ? 'Lokasi tidak bisa dibaca — GPS mati atau perangkat sedang mode pesawat. Pilih kota di bawah.'
-              : 'Deteksi lokasi terlalu lama. Pilih kota di bawah.';
-        setError(message);
-        setSavingLocation(false);
-      },
-      // Tanpa timeout, getCurrentPosition bisa menggantung tanpa batas dan
-      // tombolnya terlihat macet selamanya.
-      { timeout: 10_000, maximumAge: 600_000 }
-    );
+    reloadWeather();
   };
 
   const checkSpace = async () => {
@@ -214,6 +213,27 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       );
     } catch (err) {
       setError(describeError(err, 'Gagal menghitung ruang.'));
+    }
+  };
+
+  const toggleLayoutPlant = (plantId: string) => {
+    setLayoutSelected((prev) =>
+      prev.includes(plantId) ? prev.filter((id) => id !== plantId) : [...prev, plantId]
+    );
+    setLayoutResult(null);
+  };
+
+  const checkLayout = async () => {
+    if (layoutSelected.length < 2) return;
+    try {
+      setLayoutResult(
+        await apiFetch<LayoutSuggestion>('/garden/layout', {
+          method: 'POST',
+          body: JSON.stringify({ candidates: layoutSelected.map((plantId) => ({ plantId, quantity: 1 })) }),
+        })
+      );
+    } catch (err) {
+      setError(describeError(err, 'Gagal menghitung susunan tanam.'));
     }
   };
 
@@ -232,73 +252,87 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
             <div className="text-xs" style={{ color: 'var(--text2)' }}>
               {weather?.message ?? 'Atur lokasi kebun supaya pengingat siram bisa menyesuaikan cuaca.'}
             </div>
-            <motion.button
-              className="py-2.5 rounded-xl text-xs font-semibold text-white"
-              style={{ background: 'var(--accentFill)', opacity: savingLocation ? 0.6 : 1 }}
-              onClick={useMyLocation}
-              disabled={savingLocation}
-              whileTap={savingLocation ? {} : { scale: 0.97 }}
-              transition={springs.snappy}
-            >
-              {savingLocation ? 'Menyimpan…' : '📍 Pakai lokasi saya'}
-            </motion.button>
-
-            {/* Jalan keluar wajib ada. GPS bisa ditolak, mati, atau perangkatnya
-                mode pesawat — tanpa pilihan manual, fiturnya mati permanen bagi
-                orang yang tidak bisa atau tidak mau memberi izin lokasi. */}
-            <div className="text-[10px] text-center font-semibold" style={{ color: 'var(--text3)' }}>
-              atau pilih kota terdekat
-            </div>
-            <select
-              className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
-              style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
-              value=""
-              disabled={savingLocation}
-              onChange={(e) => {
-                const city = CITIES_ID.find((c) => c.name === e.target.value);
-                if (city) saveLocation(city.lat, city.lon, city.name);
-              }}
-            >
-              <option value="">Pilih kota…</option>
-              {CITIES_ID.map((city) => (
-                <option key={city.name} value={city.name}>
-                  {city.name}
-                </option>
-              ))}
-            </select>
-          </>
-        ) : weather.available === false ? (
-          <>
-            <div className="text-xs" style={{ color: 'var(--text2)' }}>
-              {weather.message}
-            </div>
-            {weather.label && (
-              <div className="text-xs" style={{ color: 'var(--text3)' }}>
-                Lokasi tersimpan: {weather.label}
-              </div>
-            )}
+            <GardenLocationPicker onSaved={handleLocationSaved} onError={setError} />
           </>
         ) : (
           <>
-            <div className="flex justify-between text-xs" style={{ color: 'var(--text2)' }}>
-              <span>Kemarin {Math.round(weather.rain!.yesterday)} mm</span>
-              <span>Hari ini {Math.round(weather.rain!.today)} mm</span>
-              <span>Besok {Math.round(weather.rain!.tomorrow)} mm</span>
-            </div>
-            <div
-              className="text-sm font-semibold"
-              style={{ color: weather.skipWatering ? '#34c759' : 'var(--text)' }}
-            >
-              {weather.skipWatering ? '✓ Tidak perlu menyiram hari ini' : '💧 Siram seperti biasa'}
-            </div>
-            {(weather.reason || weather.note) && (
+            {weather.available === false ? (
               <div className="text-xs" style={{ color: 'var(--text2)' }}>
-                {weather.reason || weather.note}
+                {weather.message}
               </div>
+            ) : (
+              <>
+                <div className="flex justify-between text-xs" style={{ color: 'var(--text2)' }}>
+                  <span>Kemarin {Math.round(weather.rain!.yesterday)} mm</span>
+                  <span>Hari ini {Math.round(weather.rain!.today)} mm</span>
+                  <span>Besok {Math.round(weather.rain!.tomorrow)} mm</span>
+                </div>
+                <div
+                  className="text-sm font-semibold"
+                  style={{ color: weather.skipWatering ? '#34c759' : 'var(--text)' }}
+                >
+                  {weather.skipWatering ? '✓ Tidak perlu menyiram hari ini' : '💧 Siram seperti biasa'}
+                </div>
+                {(weather.reason || weather.note) && (
+                  <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                    {weather.reason || weather.note}
+                  </div>
+                )}
+                {weather.waterBalance && weather.waterBalance.recommendedMm > 0 && (
+                  <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                    💦 Perkiraan kebutuhan air hari ini ~{weather.waterBalance.recommendedMm} mm
+                    (evapotranspirasi {weather.waterBalance.et0Today} mm − hujan {weather.waterBalance.rainToday} mm)
+                  </div>
+                )}
+              </>
             )}
+
+            {/* Bug yang diperbaiki: sebelumnya begitu lokasi tersimpan, tidak
+                ada jalan untuk memilihnya lagi. Tombol ini selalu ada begitu
+                lokasi sudah diatur, apa pun status cuacanya. */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              {weather.label ? (
+                <span className="text-xs" style={{ color: 'var(--text3)' }}>
+                  📍 {weather.label}
+                </span>
+              ) : (
+                <span />
+              )}
+              <button
+                className="text-[11px] font-semibold shrink-0"
+                style={{ color: 'var(--accent)' }}
+                onClick={() => setShowLocationPicker((v) => !v)}
+              >
+                {showLocationPicker ? 'Batal' : 'Ubah lokasi'}
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {showLocationPicker && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={collapse}
+                >
+                  <GardenLocationPicker onSaved={handleLocationSaved} onError={setError} />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
       </Card>
+
+      {pestRisk && pestRisk.condition && pestRisk.warnings.length > 0 && (
+        <Card title={pestRisk.condition === 'lembap' ? '🍄 Waspada hama musim lembap' : '🕷️ Waspada hama musim kering'} accent="#ff9f0a" delay={0.045}>
+          <div className="text-xs" style={{ color: 'var(--text2)' }}>{pestRisk.reason}</div>
+          {pestRisk.warnings.map((w) => (
+            <div key={w.plantingId} className="text-sm" style={{ color: 'var(--text)' }}>
+              {w.label} — cek {w.matchedPests.join(', ')}
+            </div>
+          ))}
+        </Card>
+      )}
 
       {succession && succession.due.length > 0 && (
         <Card title="🌱 Waktunya semai batch berikutnya" accent="#ff9f0a" delay={0.04}>
@@ -432,6 +466,63 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
           )}
         </AnimatePresence>
       </Card>
+
+      {uniquePlantOptions.length >= 2 && (
+        <Card title="🧩 Cocok ditanam bareng?" delay={0.2}>
+          <div className="flex flex-wrap gap-2">
+            {uniquePlantOptions.map((opt) => {
+              const selected = layoutSelected.includes(opt.plantId);
+              return (
+                <button
+                  key={opt.plantId}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{
+                    background: selected ? 'var(--accentFill)' : 'var(--bg)',
+                    color: selected ? 'white' : 'var(--text2)',
+                    boxShadow: selected ? 'none' : 'var(--neu-raised-sm)',
+                  }}
+                  onClick={() => toggleLayoutPlant(opt.plantId)}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <motion.button
+            className="py-2.5 rounded-xl text-xs font-semibold text-white"
+            style={{ background: layoutSelected.length >= 2 ? 'var(--accentFill)' : 'var(--track)' }}
+            onClick={checkLayout}
+            disabled={layoutSelected.length < 2}
+            whileTap={layoutSelected.length >= 2 ? { scale: 0.97 } : {}}
+            transition={springs.snappy}
+          >
+            Cek kecocokan
+          </motion.button>
+
+          {layoutResult && (
+            <div className="flex flex-col gap-2">
+              <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                Total butuh ~{layoutResult.totalAreaNeededM2} m²
+              </div>
+              {layoutResult.conflicts.length === 0 && layoutResult.goodPairs.length === 0 && (
+                <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                  Tidak ada hubungan pendamping yang tercatat antar pilihan ini — aman ditanam bareng.
+                </div>
+              )}
+              {layoutResult.conflicts.map((pair, i) => (
+                <div key={i} className="text-xs" style={{ color: '#ff3b30' }}>
+                  ⚠️ {pair.name} sebaiknya dipisah dari {pair.withName}
+                </div>
+              ))}
+              {layoutResult.goodPairs.map((pair, i) => (
+                <div key={i} className="text-xs" style={{ color: '#34c759' }}>
+                  ✓ {pair.name} cocok berdampingan dengan {pair.withName}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -469,6 +560,48 @@ interface PestData {
   provenTreatments: Array<{ pest: string; treatment: string; times: number }>;
 }
 
+interface YieldPrediction {
+  plantingId: string;
+  name: string;
+  emoji: string;
+  predictedAmount: number;
+  unit: string;
+  confidence: 'rendah' | 'sedang' | 'tinggi';
+  sampleSize: number;
+}
+
+const CONFIDENCE_LABEL: Record<YieldPrediction['confidence'], string> = {
+  rendah: 'keyakinan rendah',
+  sedang: 'keyakinan sedang',
+  tinggi: 'keyakinan tinggi',
+};
+
+interface FailurePattern {
+  plantId: string;
+  label: string;
+  failureCount: number;
+  commonLocation: string | null;
+  commonMonth: number | null;
+  pestShare: number;
+  hypotheses: string[];
+}
+
+interface RotationWarning {
+  plantingId: string;
+  label: string;
+  location: string;
+  familyLabel: string;
+  previousLabel: string;
+  previousPlantedDate: string;
+  message: string;
+}
+
+interface BreakEven {
+  years: Array<{ year: number; cost: number; value: number; net: number; cumulativeNet: number }>;
+  breakEvenYear: number | null;
+  cumulativeNet: number;
+}
+
 interface Seed {
   id: string;
   name: string;
@@ -490,6 +623,10 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
   const [economics, setEconomics] = useState<Economics | null>(null);
   const [pests, setPests] = useState<PestData | null>(null);
   const [seeds, setSeeds] = useState<Seed[]>([]);
+  const [predictions, setPredictions] = useState<YieldPrediction[]>([]);
+  const [failurePatterns, setFailurePatterns] = useState<FailurePattern[]>([]);
+  const [rotationWarnings, setRotationWarnings] = useState<RotationWarning[]>([]);
+  const [breakEven, setBreakEven] = useState<BreakEven | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [costPlanting, setCostPlanting] = useState('');
@@ -505,14 +642,22 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
 
   const reload = async () => {
     try {
-      const [eco, pest, seed] = await Promise.all([
+      const [eco, pest, seed, yieldRes, failureRes, rotationRes, breakEvenRes] = await Promise.all([
         apiFetch<Economics>('/garden/economics'),
         apiFetch<PestData>('/garden/pests'),
         apiFetch<{ seeds: Seed[] }>('/garden/seeds'),
+        apiFetch<{ predictions: YieldPrediction[] }>('/garden/yield-prediction'),
+        apiFetch<{ patterns: FailurePattern[] }>('/garden/failure-patterns'),
+        apiFetch<{ warnings: RotationWarning[] }>('/garden/rotation-check'),
+        apiFetch<BreakEven>('/garden/economics/yearly'),
       ]);
       setEconomics(eco);
       setPests(pest);
       setSeeds(seed.seeds);
+      setPredictions(yieldRes.predictions);
+      setFailurePatterns(failureRes.patterns);
+      setRotationWarnings(rotationRes.warnings);
+      setBreakEven(breakEvenRes);
     } catch (err) {
       setError(describeError(err, 'Gagal memuat catatan.'));
     }
@@ -629,6 +774,63 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
               dihitung supaya angkanya tidak menyesatkan.
             </div>
           )}
+
+          {breakEven && breakEven.years.length > 0 && (
+            <div className="text-xs pt-1" style={{ color: 'var(--text3)', borderTop: '1px solid var(--sep)' }}>
+              {/* Cek tanda cumulativeNet langsung, bukan cuma breakEvenYear —
+                  sempat balik modal lalu rugi lagi tahun berikutnya tetap
+                  harus tampil sebagai belum balik modal saat ini. */}
+              {breakEven.cumulativeNet >= 0
+                ? `📈 Sudah balik modal${breakEven.breakEvenYear ? ` sejak ${breakEven.breakEvenYear}` : ''} — kumulatif +${rupiah(breakEven.cumulativeNet)}`
+                : `📉 Belum balik modal — kumulatif masih −${rupiah(Math.abs(breakEven.cumulativeNet))}`}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {predictions.length > 0 && (
+        <Card title="🔮 Perkiraan panen berikutnya" delay={0.02}>
+          {predictions.map((p) => (
+            <div key={p.plantingId} className="flex justify-between items-center text-sm">
+              <span style={{ color: 'var(--text)' }}>{p.emoji} {p.name}</span>
+              <span className="text-xs text-right" style={{ color: 'var(--text2)' }}>
+                ~{p.predictedAmount} {p.unit}
+                <span className="block" style={{ color: 'var(--text3)' }}>
+                  {CONFIDENCE_LABEL[p.confidence]} · {p.sampleSize} panen tercatat
+                </span>
+              </span>
+            </div>
+          ))}
+          <div className="text-xs" style={{ color: 'var(--text3)' }}>
+            Dari rata-rata panen tanaman sejenis di kebunmu sendiri, bukan tabel umum.
+          </div>
+        </Card>
+      )}
+
+      {failurePatterns.length > 0 && (
+        <Card title="🔍 Pola gagal panen" accent="#ff3b30" delay={0.03}>
+          {failurePatterns.map((f) => (
+            <div key={f.plantId} className="flex flex-col gap-0.5">
+              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                {f.label} — gagal {f.failureCount}×
+              </div>
+              {f.hypotheses.map((h, i) => (
+                <div key={i} className="text-xs" style={{ color: 'var(--text2)' }}>
+                  {h}
+                </div>
+              ))}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {rotationWarnings.length > 0 && (
+        <Card title="🔁 Rotasi tanam" accent="#ff9f0a" delay={0.035}>
+          {rotationWarnings.map((w) => (
+            <div key={w.plantingId} className="text-xs" style={{ color: 'var(--text2)' }}>
+              {w.message}
+            </div>
+          ))}
         </Card>
       )}
 

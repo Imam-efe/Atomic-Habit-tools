@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
+import { GardenLocationPicker } from '@/components/GardenLocationPicker';
 
 interface SettingDef {
   key: string;
@@ -150,6 +151,129 @@ function SettingRow({
         </span>
       )}
     </div>
+  );
+}
+
+interface GardenLocation {
+  latitude: number | null;
+  longitude: number | null;
+  label: string | null;
+}
+
+/**
+ * Kartu lokasi kebun, tersendiri dari grup pengaturan berskema.
+ *
+ * Lokasi berupa pasangan lat/lon/label, bukan skalar tunggal — bentuk yang
+ * tidak cocok dengan registry pengaturan generik (boolean/number/hour/enum).
+ * Jadi ia disimpan dan dirender terpisah, bukan dipaksa masuk skema.
+ *
+ * Bug yang melatarbelakangi kartu ini: lokasi sebelumnya cuma bisa diatur
+ * dari tab Kebun → Rencana, dan begitu tersimpan tidak ada jalan untuk
+ * menggantinya dari sana pun. Kartu ini memberi jalur kedua yang selalu
+ * bisa diubah atau dihapus, dari satu tempat yang sama dengan pengaturan
+ * lain.
+ */
+function GardenLocationCard() {
+  const [location, setLocation] = useState<GardenLocation | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const loc = await apiFetch<GardenLocation>('/garden/location');
+      const set = loc.latitude !== null ? loc : null;
+      setLocation(set);
+      setEditing(set === null);
+    } catch (err) {
+      setError(describeError(err, 'Gagal memuat lokasi.'));
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const clear = async () => {
+    if (!confirm('Hapus lokasi kebun? Pengingat siram berhenti menyesuaikan cuaca sampai lokasi diatur ulang.')) return;
+    setError(null);
+    try {
+      await apiFetch('/garden/location', { method: 'DELETE' });
+      setLocation(null);
+      setEditing(true);
+    } catch (err) {
+      setError(describeError(err, 'Gagal menghapus lokasi.'));
+    }
+  };
+
+  return (
+    <motion.div
+      className="rounded-[18px] p-4 mb-3 flex flex-col gap-2.5"
+      style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...springs.gentle, delay: 0.24 }}
+    >
+      <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>
+        📍 Lokasi kebun
+      </div>
+      <div className="text-[11px] leading-snug" style={{ color: 'var(--text3)' }}>
+        Dipakai untuk menyesuaikan pengingat siram dengan curah hujan. Bisa diganti kapan saja.
+      </div>
+
+      {error && (
+        <div
+          className="rounded-xl p-3 text-xs border-l-[3px]"
+          style={{ background: 'rgba(255, 159, 10, 0.1)', borderColor: '#ff9f0a', color: 'var(--text2)' }}
+        >
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-xs" style={{ color: 'var(--text2)' }}>
+          Memuat…
+        </div>
+      ) : location && !editing ? (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm" style={{ color: 'var(--text)' }}>
+            {location.label ?? `${location.latitude?.toFixed(2)}, ${location.longitude?.toFixed(2)}`}
+          </span>
+          <div className="flex gap-3 shrink-0">
+            <button
+              className="text-[11px] font-semibold"
+              style={{ color: 'var(--accent)' }}
+              onClick={() => setEditing(true)}
+            >
+              Ubah
+            </button>
+            <button className="text-[11px] font-semibold" style={{ color: '#ff3b30' }} onClick={clear}>
+              Hapus
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <GardenLocationPicker
+            onSaved={() => {
+              setEditing(false);
+              load();
+            }}
+            onError={setError}
+          />
+          {location && (
+            <button
+              className="text-[11px] font-semibold self-start"
+              style={{ color: 'var(--text3)' }}
+              onClick={() => setEditing(false)}
+            >
+              Batal
+            </button>
+          )}
+        </>
+      )}
+    </motion.div>
   );
 }
 
@@ -362,6 +486,11 @@ export default function PengaturanScreen() {
               </motion.div>
             );
           })}
+
+          {/* Bukan bagian skema pengaturan — lat/lon/label tidak cocok tipe
+              boolean/number/hour/enum yang didukung registry. Ditaruh dekat
+              grup Kebun karena itulah yang memakainya. */}
+          <GardenLocationCard />
 
           {/* ─────────────────────── DATABASE ─────────────────────── */}
           {database && (
