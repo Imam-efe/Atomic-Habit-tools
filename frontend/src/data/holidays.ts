@@ -100,10 +100,6 @@ export function holidaysInYear(year: number): Holiday[] {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function holidayOn(iso: string): Holiday | null {
-  return BY_DATE.get(iso) ?? null;
-}
-
 /** True once a year's decree is bundled — lets the UI distinguish "no holidays" from "no data". */
 export function hasOfficialData(year: number): boolean {
   return (COVERED_YEARS as readonly number[]).includes(year);

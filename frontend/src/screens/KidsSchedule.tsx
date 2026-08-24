@@ -30,7 +30,6 @@ export function KidsSchedule() {
   // Filter state
   const [selectedKid, setSelectedKid] = useState<string>('Semua');
   const [selectedType, setSelectedType] = useState<string>('Semua');
-  const [selectedDay, setSelectedDay] = useState<string>('Semua');
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -134,9 +133,7 @@ export function KidsSchedule() {
     return schedules.filter(s => {
       const matchKid = selectedKid === 'Semua' || s.kid_name === selectedKid;
       const matchType = selectedType === 'Semua' || s.type === selectedType;
-      const matchDay = selectedDay === 'Semua' || 
-        (s.day_of_week === selectedDay && !s.schedule_date);
-      return matchKid && matchType && matchDay;
+      return matchKid && matchType;
     });
   };
 

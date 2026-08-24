@@ -15,6 +15,7 @@ import { companionAdvice, findGardenConflicts } from '../lib/garden_companion';
 import { plantingCalendar, seasonOfMonth } from '../lib/garden_season';
 import { fitInArea, fitInBed, potFit } from '../lib/garden_space';
 import { getRain, getWaterBalance, shouldSkipWatering, wateringNote } from '../lib/garden_weather';
+import { loadSettings, num } from '../lib/settings';
 import { summarizeEconomics, computeBreakEven, type YearlyTotal } from '../lib/garden_economics';
 import { findSuccessionDue, type ActivePlanting } from '../lib/garden_succession';
 import { predictYield, type HarvestSample } from '../lib/garden_yield';
@@ -179,7 +180,9 @@ extra.get('/weather', async (c) => {
     });
   }
 
-  const verdict = shouldSkipWatering(rain);
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const skipMm = num(settings, 'garden.rain_skip_mm');
+  const verdict = shouldSkipWatering(rain, { skipMm, soakedMm: num(settings, 'garden.rain_soaked_mm') });
   // Cache dari getRain di atas biasanya masih hangat di sini, jadi ini
   // umumnya tinggal baca cache, bukan panggilan jaringan kedua.
   const waterBalance = await getWaterBalance(c.env.DB, loc.latitude, loc.longitude, jakartaToday());
@@ -192,7 +195,7 @@ extra.get('/weather', async (c) => {
     waterBalance,
     skipWatering: verdict.skip,
     reason: verdict.reason,
-    note: wateringNote(rain),
+    note: wateringNote(rain, skipMm),
   });
 });
 

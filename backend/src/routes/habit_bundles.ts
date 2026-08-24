@@ -53,6 +53,14 @@ app.post('/', async (c) => {
     return c.json({ error: 'cannot bundle habit with itself' }, 400);
   }
 
+  const owned = await db.prepare(
+    'SELECT id FROM habits WHERE id IN (?1, ?2) AND user_id = ?3'
+  ).bind(body.required_habit_id, body.desire_habit_id, user_id).all();
+
+  if ((owned.results?.length ?? 0) !== 2) {
+    return c.json({ error: 'habit not found' }, 404);
+  }
+
   try {
     const id = nanoid();
     await db.prepare(`
@@ -176,11 +184,11 @@ app.post('/:id/check', async (c) => {
   // Check if both habits completed today
   const [reqCheck, desireCheck] = await Promise.all([
     db.prepare(
-      'SELECT id FROM habit_completions WHERE habit_id = ?1 AND completed_date = ?2'
-    ).bind(bundle.required_habit_id, today).first(),
+      'SELECT id FROM habit_completions WHERE habit_id = ?1 AND completed_date = ?2 AND user_id = ?3'
+    ).bind(bundle.required_habit_id, today, user_id).first(),
     db.prepare(
-      'SELECT id FROM habit_completions WHERE habit_id = ?1 AND completed_date = ?2'
-    ).bind(bundle.desire_habit_id, today).first()
+      'SELECT id FROM habit_completions WHERE habit_id = ?1 AND completed_date = ?2 AND user_id = ?3'
+    ).bind(bundle.desire_habit_id, today, user_id).first()
   ]);
 
   const bothCompleted = reqCheck && desireCheck ? 1 : 0;

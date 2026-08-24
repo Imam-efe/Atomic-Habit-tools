@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { BankAccountRow, BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { jakartaToday } from '../lib/validate';
+import { daysInMonth } from '../lib/safe_to_spend';
 
 const financeReport = new Hono<AuthContext>();
 
@@ -139,15 +140,14 @@ financeReport.get('/forecast', async (c) => {
   const today = jakartaToday();
   const month = c.req.query('month') ?? today.slice(0, 7);
   const monthStart = `${month}-01`;
-  const [year, mon] = month.split('-').map(Number);
-  const daysInMonth = new Date(year, mon, 0).getDate();
-  const monthEnd = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+  const monthDayCount = daysInMonth(month);
+  const monthEnd = `${month}-${String(monthDayCount).padStart(2, '0')}`;
 
   // Forecasting a month that already closed is meaningless — clamp "today" to
   // the window so a past month reports itself as fully elapsed.
   const asOf = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
   const daysElapsed = Number(asOf.slice(8, 10));
-  const daysRemaining = daysInMonth - daysElapsed;
+  const daysRemaining = monthDayCount - daysElapsed;
 
   const [entriesRes, recurringRes, paymentsRes, accountsRes, limitsRes] = await Promise.all([
     c.env.DB.prepare(
@@ -219,7 +219,7 @@ financeReport.get('/forecast', async (c) => {
     .filter(l => l.monthly_limit_idr > 0)
     .map(l => {
       const spent = spentByCategory.get(l.category) ?? 0;
-      const projected = Math.round((spent / daysElapsed) * daysInMonth);
+      const projected = Math.round((spent / daysElapsed) * monthDayCount);
       return {
         category: l.category,
         limit: l.monthly_limit_idr,
@@ -236,7 +236,7 @@ financeReport.get('/forecast', async (c) => {
     as_of: asOf,
     days_elapsed: daysElapsed,
     days_remaining: daysRemaining,
-    days_in_month: daysInMonth,
+    days_in_month: monthDayCount,
     actual: { income: actualIncome, expense: actualExpense, net: actualIncome - actualExpense },
     projected: {
       income: projectedIncome,

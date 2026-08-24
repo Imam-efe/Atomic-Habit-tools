@@ -89,9 +89,6 @@ export const isTime  = (s: string): boolean => /^\d{2}:\d{2}$/.test(s);
 /** YYYY-MM */
 export const isMonth = (s: string): boolean => /^\d{4}-\d{2}$/.test(s);
 
-/** #RRGGBB */
-export const isHexColor = (s: string): boolean => /^#[0-9A-Fa-f]{6}$/.test(s);
-
 /** Returns today's date in Jakarta timezone (UTC+7) as YYYY-MM-DD */
 export function jakartaToday(): string {
   const now = new Date();
@@ -105,6 +102,12 @@ export function advanceDate(dateStr: string, recurrence: 'daily' | 'weekly' | 'm
   const dt = new Date(y, m - 1, d);
   if (recurrence === 'daily') dt.setDate(dt.getDate() + 1);
   else if (recurrence === 'weekly') dt.setDate(dt.getDate() + 7);
-  else if (recurrence === 'monthly') dt.setMonth(dt.getMonth() + 1);
+  else if (recurrence === 'monthly') {
+    // setMonth alone doesn't clamp day-of-month: Jan 31 + 1 month would
+    // overflow into March 3 instead of landing on Feb's last day. Passing
+    // the clamped day to setMonth sets year/month/day atomically instead.
+    const lastDayOfTarget = new Date(y, m + 1, 0).getDate();
+    dt.setMonth(dt.getMonth() + 1, Math.min(d, lastDayOfTarget));
+  }
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }

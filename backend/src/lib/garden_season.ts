@@ -39,11 +39,6 @@ export function parseSeason(text: string): Season[] {
   return seasons.length > 0 ? seasons : ['sepanjang-tahun'];
 }
 
-/** True kalau `text` menyebut penanaman di awal musim, bukan sembarang waktu. */
-export function prefersEarlySeason(text: string): boolean {
-  return /\bawal\b/i.test(text);
-}
-
 export interface PlantingWindow {
   plantId: string;
   name: string;
