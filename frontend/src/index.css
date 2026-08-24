@@ -367,30 +367,3 @@ textarea::placeholder {
     transition-duration: 0.01ms !important;
   }
 }
-
-/* Cetak label kebun — area cetak tersembunyi di layar, satu-satunya yang
-   tampak saat print. `visibility` (bukan `display`) dipakai supaya layout
-   grid label tetap dihitung browser sebelum print dialog membaca ukurannya. */
-.print-label-area {
-  display: none;
-}
-
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  .print-label-area, .print-label-area * {
-    visibility: visible;
-  }
-  .print-label-area {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-  }
-  @page {
-    size: A4;
-    margin: 8mm;
-  }
-}

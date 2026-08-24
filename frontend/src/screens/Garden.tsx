@@ -1420,15 +1420,66 @@ function formatLabelDate(iso: string): string {
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
+/** Ukuran layout label A4, dipakai bersama oleh render pratinjau dan PDF. */
+const LABEL_COLS = 3;
+const LABEL_GAP_MM = 2;
+const LABEL_H_MM = 30;
+const A4_MARGIN_MM = 8;
+const A4_W_MM = 210;
+const A4_H_MM = 297;
+const LABEL_W_MM = (A4_W_MM - A4_MARGIN_MM * 2 - LABEL_GAP_MM * (LABEL_COLS - 1)) / LABEL_COLS;
+const LABEL_ROWS_PER_PAGE = Math.floor((A4_H_MM - A4_MARGIN_MM * 2 + LABEL_GAP_MM) / (LABEL_H_MM + LABEL_GAP_MM));
+const LABELS_PER_PAGE = LABEL_COLS * LABEL_ROWS_PER_PAGE;
+
+/**
+ * Bangun PDF A4 berisi label yang dipilih, dipak kecil-kecil untuk hemat kertas.
+ *
+ * `jspdf` diimpor dinamis di sini, bukan di puncak file — Garden.tsx dimuat
+ * eager sebagai tab utama, jadi import statis akan menaikkan bundle awal
+ * seluruh aplikasi meski fitur cetak label jarang dipakai.
+ */
+async function buildLabelsPdf(labels: Planting[]) {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  labels.forEach((p, i) => {
+    const posInPage = i % LABELS_PER_PAGE;
+    if (i > 0 && posInPage === 0) doc.addPage();
+
+    const col = posInPage % LABEL_COLS;
+    const row = Math.floor(posInPage / LABEL_COLS);
+    const x = A4_MARGIN_MM + col * (LABEL_W_MM + LABEL_GAP_MM);
+    const y = A4_MARGIN_MM + row * (LABEL_H_MM + LABEL_GAP_MM);
+
+    doc.setDrawColor(180);
+    doc.roundedRect(x, y, LABEL_W_MM, LABEL_H_MM, 1.5, 1.5);
+
+    doc.setTextColor(20);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(p.nickname || p.name, x + 3, y + 8, { maxWidth: LABEL_W_MM - 6 });
+
+    doc.setTextColor(60);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Lokasi: ${p.location || '-'}`, x + 3, y + 16, { maxWidth: LABEL_W_MM - 6 });
+    doc.text(`Ditanam: ${formatLabelDate(p.plantedDate)}`, x + 3, y + 22, { maxWidth: LABEL_W_MM - 6 });
+  });
+
+  return doc;
+}
+
 /**
  * Cetak label kebun (#11 — susulan): pilih tanaman & jumlah label, di-pack
- * jadi grid kecil di layout A4 lewat print dialog browser sendiri — tidak
- * perlu library PDF, dan "Simpan sebagai PDF" di dialog cetak sudah cukup
- * untuk "export ke A4" yang diminta.
+ * jadi grid kecil di layout A4 dan diekspor sebagai file PDF sungguhan
+ * (bukan lewat print dialog browser) supaya bisa disimpan, dibagikan, atau
+ * diantre cetak nanti tanpa membuka aplikasi lagi.
  */
 function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClose: () => void }) {
   // qty 0 berarti tidak dipilih; > 0 berarti dipilih dengan jumlah label segitu.
   const [qty, setQty] = useState<Record<string, number>>({});
+  const [exporting, setExporting] = useState(false);
+  const [exported, setExported] = useState(false);
 
   const setQtyFor = (id: string, next: number) => {
     setQty(prev => ({ ...prev, [id]: Math.max(0, Math.min(99, next)) }));
@@ -1444,6 +1495,20 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
     for (let i = 0; i < n; i++) labels.push(p);
   }
   const totalLabels = labels.length;
+  const pageCount = Math.max(1, Math.ceil(totalLabels / LABELS_PER_PAGE));
+
+  const handleExport = async () => {
+    if (totalLabels === 0) return;
+    setExporting(true);
+    setExported(false);
+    try {
+      const doc = await buildLabelsPdf(labels);
+      doc.save(`label-tanaman-${todayISO()}.pdf`);
+      setExported(true);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <motion.div
@@ -1460,7 +1525,7 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
       >
         <p className="text-base font-extrabold mb-1" style={{ color: 'var(--text)' }}>🏷️ Cetak Label Tanaman</p>
         <p className="text-[11px] mb-4" style={{ color: 'var(--text3)' }}>
-          Pilih tanaman dan jumlah label, lalu cetak — label dipak kecil-kecil ke satu lembar A4 supaya hemat kertas.
+          Pilih tanaman dan jumlah label, lalu ekspor ke PDF — label dipak kecil-kecil ke layout A4 supaya hemat kertas. File PDF bisa disimpan atau dicetak nanti.
         </p>
 
         {plantings.length === 0 ? (
@@ -1522,15 +1587,45 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
           </div>
         )}
 
+        {totalLabels > 0 && (
+          <>
+            <p className="text-[10px] mb-2" style={{ color: 'var(--text3)' }}>
+              Pratinjau — {totalLabels} label, {pageCount} halaman A4
+            </p>
+            <div
+              className="grid gap-1.5 mb-4 p-2 rounded-xl overflow-y-auto"
+              style={{ gridTemplateColumns: 'repeat(3, 1fr)', maxHeight: '160px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+            >
+              {labels.map((p, i) => (
+                <div
+                  key={`${p.id}-${i}`}
+                  className="rounded-md p-1.5 flex flex-col justify-center"
+                  style={{ background: 'var(--surface)', minHeight: '46px' }}
+                >
+                  <p className="text-[9px] font-bold truncate" style={{ color: 'var(--text)' }}>{p.nickname || p.name}</p>
+                  <p className="text-[7.5px] truncate" style={{ color: 'var(--text3)' }}>{p.location || '-'}</p>
+                  <p className="text-[7.5px] truncate" style={{ color: 'var(--text3)' }}>{formatLabelDate(p.plantedDate)}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {exported && (
+          <p className="text-[11px] font-semibold mb-2 text-center" style={{ color: 'var(--pos)' }}>
+            ✓ PDF tersimpan — cek folder unduhan
+          </p>
+        )}
+
         <div className="flex gap-2">
           <motion.button
             className="neu-cta flex-1 py-3 rounded-xl text-sm font-bold text-white"
-            style={{ background: 'var(--accentFill)', opacity: totalLabels === 0 ? 0.6 : 1 }}
+            style={{ background: 'var(--accentFill)', opacity: totalLabels === 0 || exporting ? 0.6 : 1 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => window.print()}
-            disabled={totalLabels === 0}
+            onClick={handleExport}
+            disabled={totalLabels === 0 || exporting}
           >
-            🖨️ Cetak {totalLabels > 0 ? `${totalLabels} Label` : ''}
+            {exporting ? 'Membuat PDF...' : `📄 Ekspor PDF${totalLabels > 0 ? ` (${totalLabels} Label)` : ''}`}
           </motion.button>
           <button
             className="px-4 py-3 rounded-xl text-sm font-bold"
@@ -1541,46 +1636,6 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
           </button>
         </div>
       </motion.div>
-
-      {/* Area cetak — tersembunyi di layar (.print-label-area), satu-satunya
-          yang tampak saat window.print() lewat CSS di index.css. */}
-      <div className="print-label-area">
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '2mm',
-          }}
-        >
-          {labels.map((p, i) => (
-            <div
-              key={`${p.id}-${i}`}
-              style={{
-                border: '1px dashed #999',
-                borderRadius: '2mm',
-                padding: '2.5mm',
-                height: '28mm',
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                breakInside: 'avoid',
-              }}
-            >
-              <div style={{ fontSize: '10pt', fontWeight: 700, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {p.emoji} {p.nickname || p.name}
-              </div>
-              <div style={{ fontSize: '7.5pt', color: '#333', marginTop: '1mm' }}>
-                📍 {p.location || '—'}
-              </div>
-              <div style={{ fontSize: '7.5pt', color: '#333' }}>
-                🗓 {formatLabelDate(p.plantedDate)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </motion.div>
   );
 }
