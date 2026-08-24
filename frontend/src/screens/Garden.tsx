@@ -274,6 +274,15 @@ export function Garden() {
   useEffect(() => { loadCatalog(); }, [catalogQuery, catalogCategory]);
 
   const handleCare = async (plantingId: string, action: string) => {
+    // Panen boleh dicatat tanpa jumlah, tapi kalau diisi, dikirim ke backend
+    // supaya hasil panen otomatis masuk ke Inventaris.
+    let amount: number | undefined;
+    if (action === 'panen') {
+      const raw = window.prompt('Berapa kg hasil panennya? (kosongkan kalau tidak mau dicatat ke Inventaris)');
+      const parsed = raw ? Number(raw.replace(',', '.')) : NaN;
+      if (Number.isFinite(parsed) && parsed > 0) amount = parsed;
+    }
+
     // Optimistis: jadwal berikutnya digeser di layar sebelum server menjawab.
     setData(prev => prev && {
       ...prev,
@@ -291,7 +300,7 @@ export function Garden() {
     try {
       await apiFetch(`/garden/${plantingId}/care`, {
         method: 'POST',
-        body: JSON.stringify({ action, date: todayISO() }),
+        body: JSON.stringify({ action, date: todayISO(), ...(amount ? { amount, unit: 'kg' } : {}) }),
       });
       load();
       if (openPlanting === plantingId) loadCareLogs(plantingId);
