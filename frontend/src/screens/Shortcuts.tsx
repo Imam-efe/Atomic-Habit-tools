@@ -7,6 +7,7 @@ interface GenerateResponse {
   shortcut: string; // base64 plist
   filename: string;
   signed: boolean;
+  steps: string[];
 }
 
 /** Turn the base64 body into the bytes a .shortcut download needs. */
@@ -26,6 +27,7 @@ export default function ShortcutsScreen() {
     filename: string;
     file: Blob;
     signed: boolean;
+    steps: string[];
   } | null>(null);
   const [error, setError] = useState<{ message: string; suggestion?: string } | null>(null);
 
@@ -46,6 +48,7 @@ export default function ShortcutsScreen() {
         filename: data.filename,
         file: base64ToBlob(data.shortcut),
         signed: data.signed,
+        steps: data.steps ?? [],
       });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -209,16 +212,49 @@ export default function ShortcutsScreen() {
               >
                 {result.filename}
               </p>
-              {!result.signed && (
-                <p
-                  className="text-xs mt-2 leading-relaxed"
-                  style={{ color: 'var(--text3)' }}
-                >
-                  Shortcut belum ditandatangani. Aktifkan Pengaturan &gt; Pintasan &gt;
-                  Izinkan Pintasan Tak Tepercaya sebelum memasang.
-                </p>
-              )}
             </div>
+
+            {/* Steps to rebuild by hand — the only route onto a device while
+                the file is unsigned, since iOS rejects unsigned shortcuts. */}
+            {result.steps.length > 0 && (
+              <div className="w-full text-left flex flex-col gap-2">
+                <p className="text-xs font-bold" style={{ color: 'var(--text)' }}>
+                  Langkah di app Shortcuts:
+                </p>
+                <ol className="flex flex-col gap-1.5">
+                  {result.steps.map((step, i) => (
+                    <li
+                      key={i}
+                      className="text-xs leading-relaxed"
+                      style={{ color: 'var(--text2)' }}
+                    >
+                      {i + 1}. {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {!result.signed && (
+              <div
+                className="w-full text-left rounded-xl p-3 border-l-[3px] flex flex-col gap-1"
+                style={{
+                  background: 'rgba(255, 159, 10, 0.1)',
+                  borderColor: '#ff9f0a',
+                }}
+              >
+                <p className="text-xs font-semibold" style={{ color: 'var(--text)' }}>
+                  File belum bisa dipasang langsung
+                </p>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                  Sejak iOS 15, Apple menolak file shortcut yang belum
+                  ditandatangani, dan menandatanganinya butuh Mac. Untuk sekarang
+                  buat ulang lewat langkah di atas — buka app Shortcuts, tap +,
+                  lalu tambahkan tiap aksi berurutan. Unduhan di bawah berguna
+                  bila nanti Anda punya akses Mac untuk menandatanganinya.
+                </p>
+              </div>
+            )}
             <motion.button
               className="w-full py-3 rounded-xl text-sm font-semibold text-white"
               style={{ background: 'var(--accentFill)' }}
@@ -226,7 +262,7 @@ export default function ShortcutsScreen() {
               whileTap={{ scale: 0.97 }}
               transition={springs.snappy}
             >
-              Download Shortcut
+              {result.signed ? 'Download Shortcut' : 'Unduh file mentah (.shortcut)'}
             </motion.button>
           </motion.div>
         )}

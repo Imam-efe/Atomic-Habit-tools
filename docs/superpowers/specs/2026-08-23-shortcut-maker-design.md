@@ -19,8 +19,11 @@ Shortcut Maker enables users to generate iOS Shortcuts via natural language desc
 **Purpose:** Empower users to automate iOS tasks without learning Shortcut syntax. Extend Fayolla's scope from personal system data (habits, nutrition, finance) to general iOS automation.
 
 **Success criteria:**
-- User can describe a shortcut in natural language and receive a working `.shortcut` file
-- File installs on iOS device without trust warnings (iCloud signed)
+- User can describe a shortcut in natural language and receive the matching
+  actions, as a `.shortcut` file plus step-by-step rebuild instructions
+- ~~File installs on iOS device without trust warnings (iCloud signed)~~
+  **Not achievable without a Mac** — see "Shortcut Signing & Deployment" below.
+  Until a signer is configured the user rebuilds the shortcut from the steps.
 - Generate time < 10 seconds for typical requests
 - Error rate < 5% for valid requests (AI produces invalid plist)
 - Graceful degradation: user sees actionable suggestions on failure
@@ -172,12 +175,37 @@ User Input (description)
 - Certificate file (`.p12` or `.cer` format) + password stored as Cloudflare env vars
 - Rotate annually or on compromise
 
-**Signing library:** TBD — research options:
-- `codesign` CLI (not available on Cloudflare Workers; may need workaround)
-- Node.js + third-party library (e.g., `apple-shortcut` npm package, if it supports signing)
-- Fallback: Delegate signing to external service (trade-off: latency, complexity)
+**Signing status (resolved 2026-08-24): not available, feature ships unsigned.**
 
-**Decision point:** Confirm signing method during implementation plan phase.
+Findings that settle this:
+
+- Since iOS 15 a `.shortcut` file must be signed to import at all. Signing wraps
+  the plist in an Apple Encrypted Archive. An unsigned plist is refused outright.
+- "Allow Untrusted Shortcuts" does **not** work around this. That setting governs
+  shortcuts from outside the Gallery, not the absence of a signature.
+- Signing is only possible with `shortcuts sign` on macOS 12+. It cannot be done
+  on iOS, on Linux, or on Cloudflare Workers.
+- `--mode anyone` notarizes through iCloud, so it needs a Mac signed into an
+  Apple ID. `--mode people-who-know-me` signs locally but restricts import to
+  people who have the signer in Contacts — useless for public distribution.
+- No free hosted signing API exists. RoutineHub's signing is behind a paid
+  membership. CocoCloud (`cococloud-signing.vip`) signs **IPA** files, not
+  shortcuts, and the `api.cococloud.dev` host assumed by the first
+  implementation does not resolve at all.
+- `0xilis/shortcut-sign` does sign on Linux, but needs an ECDSA-P256 key and
+  auth data dumped from a jailbroken iOS device. Rejected: it depends on
+  jailbreaking and on extracted Apple ID key material.
+
+**Consequence:** the app cannot hand the user an installable file without a Mac.
+The endpoint returns the plist plus a step list, and the UI tells the user
+plainly that the file is unsigned and walks them through rebuilding the shortcut
+by hand in the Shortcuts app.
+
+**To enable signing later:** stand up a Mac running a signer that accepts
+`{ plist }` and returns `{ signed: "<base64>" }` (e.g. `scaxyz/shortcut-signing-server`),
+then set `SHORTCUT_SIGNING_URL` and, if it needs one, `SHORTCUT_SIGNING_KEY`.
+No code change is required; the response's `signed` flag flips and the UI drops
+the unsigned notice on its own.
 
 ### Deployment Steps
 

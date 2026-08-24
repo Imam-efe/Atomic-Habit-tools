@@ -1,10 +1,18 @@
 import {
   ACTION_CATALOG,
-  buildActions,
   buildShortcutPlist,
   catalogPrompt,
+  describeActions,
+  prepareActions,
   type ShortcutAction,
 } from './shortcut-plist';
+
+export interface GeneratedShortcut {
+  /** Shortcut plist XML. */
+  plist: string;
+  /** The same actions written as steps a person can follow. */
+  steps: string[];
+}
 
 /**
  * Only the AI binding is needed here. Typed structurally rather than against
@@ -92,7 +100,7 @@ function parseActions(payload: unknown): ShortcutAction[] {
 export async function generateShortcutPlist(
   env: ShortcutAiEnv,
   description: string
-): Promise<string> {
+): Promise<GeneratedShortcut> {
   let response: unknown;
 
   try {
@@ -119,12 +127,20 @@ export async function generateShortcutPlist(
     throw new Error('invalid_plist');
   }
 
-  const actions = buildActions(parseActions(extractJson(text)));
+  const actions = prepareActions(parseActions(extractJson(text)));
   if (actions.length === 0) {
     // Every action the model named was unknown or missing a required
     // parameter, so there is nothing installable to hand back.
     throw new Error('invalid_plist');
   }
 
-  return buildShortcutPlist(actions);
+  return {
+    plist: buildShortcutPlist(
+      actions.map((action) => ({
+        WFWorkflowActionIdentifier: action.id,
+        WFWorkflowActionParameters: action.parameters,
+      }))
+    ),
+    steps: describeActions(actions),
+  };
 }

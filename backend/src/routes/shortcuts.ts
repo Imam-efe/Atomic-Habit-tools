@@ -59,12 +59,12 @@ shortcuts.post('/generate', async (c) => {
   }
 
   try {
-    const plistXml = await generateShortcutPlist(
+    const { plist, steps } = await generateShortcutPlist(
       c.env as unknown as ShortcutAiEnv,
       description.trim()
     );
 
-    const { data, signed } = await signShortcut(plistXml, {
+    const { data, signed } = await signShortcut(plist, {
       url: c.env.SHORTCUT_SIGNING_URL,
       apiKey: c.env.SHORTCUT_SIGNING_KEY,
     });
@@ -73,6 +73,10 @@ shortcuts.post('/generate', async (c) => {
       shortcut: toBase64(data),
       filename: `shortcut-${generateTimestamp()}.shortcut`,
       signed,
+      // iOS 15+ refuses unsigned shortcut files outright, so when no signer is
+      // configured the steps are the only way the user can actually get this
+      // shortcut onto their device.
+      steps,
     });
   } catch (err) {
     // The description itself is never logged — only the failure code.

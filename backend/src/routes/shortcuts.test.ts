@@ -169,18 +169,39 @@ describe('buildShortcutPlist', () => {
 describe('generateShortcutPlist', () => {
   it('reads the uppercase AI binding and returns plist XML', async () => {
     const env = aiReturning('{"actions":[{"id":"is.workflow.actions.timer.start","params":{"minutes":10}}]}');
-    const xml = await generateShortcutPlist(env, 'set a 10 minute timer');
+    const { plist } = await generateShortcutPlist(env, 'set a 10 minute timer');
 
-    expect(xml).toContain('is.workflow.actions.timer.start');
-    expect(xml).toContain('<plist version="1.0">');
+    expect(plist).toContain('is.workflow.actions.timer.start');
+    expect(plist).toContain('<plist version="1.0">');
+  });
+
+  it('returns Indonesian steps describing the same actions as the plist', async () => {
+    const env = aiReturning(
+      '{"actions":[{"id":"is.workflow.actions.timer.start","params":{"minutes":10}},{"id":"is.workflow.actions.notification","params":{"body":"Selesai"}}]}'
+    );
+    const { steps } = await generateShortcutPlist(env, 'timer lalu beri tahu saya');
+
+    expect(steps).toEqual(['Mulai timer 10 menit', 'Tampilkan notifikasi "Selesai"']);
+  });
+
+  it('omits steps for actions dropped from the plist', async () => {
+    // Second action is unknown, third is missing its required body.
+    const env = aiReturning(
+      '{"actions":[{"id":"is.workflow.actions.takephoto"},{"id":"is.workflow.actions.madeup"},{"id":"is.workflow.actions.notification","params":{}}]}'
+    );
+    const { plist, steps } = await generateShortcutPlist(env, 'x');
+
+    expect(steps).toEqual(['Ambil foto dengan kamera']);
+    expect(plist).not.toContain('madeup');
+    expect(plist).not.toContain('notification');
   });
 
   it('tolerates markdown fences and surrounding prose', async () => {
     const env = aiReturning(
       'Sure!\n```json\n{"actions":[{"id":"is.workflow.actions.notification","params":{"body":"Hi"}}]}\n```\nHope that helps.'
     );
-    const xml = await generateShortcutPlist(env, 'notify me');
-    expect(xml).toContain('is.workflow.actions.notification');
+    const { plist } = await generateShortcutPlist(env, 'notify me');
+    expect(plist).toContain('is.workflow.actions.notification');
   });
 
   it('throws invalid_plist when the reply is not JSON', async () => {
@@ -201,10 +222,11 @@ describe('generateShortcutPlist', () => {
   it('caps the shortcut at 6 actions', async () => {
     const one = '{"id":"is.workflow.actions.getcurrentlocation"}';
     const env = aiReturning(`{"actions":[${Array(10).fill(one).join(',')}]}`);
-    const xml = await generateShortcutPlist(env, 'x');
+    const { plist, steps } = await generateShortcutPlist(env, 'x');
 
-    const count = (xml.match(/is\.workflow\.actions\.getcurrentlocation/g) ?? []).length;
+    const count = (plist.match(/is\.workflow\.actions\.getcurrentlocation/g) ?? []).length;
     expect(count).toBe(6);
+    expect(steps).toHaveLength(6);
   });
 
   it('maps an AI failure to ai_error', async () => {

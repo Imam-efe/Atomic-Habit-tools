@@ -147,14 +147,19 @@ describe('ShortcutsScreen - E2E Frontend Tests', () => {
       expect(screen.getByRole('button', { name: /Download Shortcut/i })).toBeInTheDocument();
     });
 
-    it('warns that an unsigned shortcut needs untrusted shortcuts enabled', async () => {
+    it('says an unsigned file cannot be installed directly', async () => {
       const user = userEvent.setup();
       vi.stubGlobal(
         'fetch',
         vi.fn(
           async () =>
             new Response(
-              JSON.stringify({ shortcut: btoa('<plist/>'), filename: 'a.shortcut', signed: false }),
+              JSON.stringify({
+                shortcut: btoa('<plist/>'),
+                filename: 'a.shortcut',
+                signed: false,
+                steps: ['Mulai timer 10 menit'],
+              }),
               { status: 200, headers: { 'Content-Type': 'application/json' } }
             )
         )
@@ -165,7 +170,37 @@ describe('ShortcutsScreen - E2E Frontend Tests', () => {
       await user.type(screen.getByPlaceholderText(/Deskripsi apa/), 'set a timer');
       await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
 
-      expect(await screen.findByText(/Tak Tepercaya/i)).toBeInTheDocument();
+      expect(await screen.findByText(/belum bisa dipasang langsung/i)).toBeInTheDocument();
+      // The old copy told users to enable Allow Untrusted Shortcuts, which does
+      // not bypass the iOS 15+ signing requirement and left them stuck.
+      expect(screen.queryByText(/Tak Tepercaya/i)).not.toBeInTheDocument();
+    });
+
+    it('lists the rebuild steps so the shortcut can be recreated by hand', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                shortcut: btoa('<plist/>'),
+                filename: 'a.shortcut',
+                signed: false,
+                steps: ['Mulai timer 10 menit', 'Tampilkan notifikasi "Selesai"'],
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } }
+            )
+        )
+      );
+
+      render(<ShortcutsScreen />);
+
+      await user.type(screen.getByPlaceholderText(/Deskripsi apa/), 'timer lalu beri tahu');
+      await user.click(screen.getByRole('button', { name: /Buat Shortcut/i }));
+
+      expect(await screen.findByText(/1\. Mulai timer 10 menit/)).toBeInTheDocument();
+      expect(screen.getByText(/2\. Tampilkan notifikasi "Selesai"/)).toBeInTheDocument();
     });
 
     it('renders the backend message and suggestion when generation fails', async () => {

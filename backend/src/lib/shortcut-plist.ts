@@ -31,7 +31,16 @@ interface CatalogEntry {
   /** What the action does, shown to the model so it can pick sensibly. */
   summary: string;
   params: ParamSpec[];
+  /**
+   * One line naming this step in Indonesian, for the rebuild instructions the
+   * app shows. Signing needs a Mac, so an unsigned file cannot be imported —
+   * the steps are what actually lets someone recreate the shortcut by hand.
+   */
+  describe: (params: Record<string, string | number>) => string;
 }
+
+const quote = (value: unknown) => `"${String(value)}"`;
+const percent = (value: unknown) => `${Math.round(Math.min(1, Math.max(0, Number(value))) * 100)}%`;
 
 /**
  * Only these actions can ever reach a generated file. Anything the model
@@ -45,22 +54,27 @@ export const ACTION_CATALOG: Record<string, CatalogEntry> = {
       { from: 'body', type: 'string', to: 'WFNotificationActionBody', required: true },
       { from: 'title', type: 'string', to: 'WFNotificationActionTitle' },
     ],
+    describe: (p) => `Tampilkan notifikasi ${quote(p.body)}${p.title ? ` dengan judul ${quote(p.title)}` : ''}`,
   },
   'is.workflow.actions.timer.start': {
     summary: 'Start a countdown timer. minutes (required, number).',
     params: [{ from: 'minutes', type: 'minutes', to: 'WFTimerDuration', required: true }],
+    describe: (p) => `Mulai timer ${p.minutes} menit`,
   },
   'is.workflow.actions.delay': {
     summary: 'Wait before continuing. seconds (required, number).',
     params: [{ from: 'seconds', type: 'number', to: 'WFDelayTime', required: true }],
+    describe: (p) => `Tunggu ${p.seconds} detik`,
   },
   'is.workflow.actions.gettext': {
     summary: 'Produce a fixed piece of text. text (required).',
     params: [{ from: 'text', type: 'string', to: 'WFTextActionText', required: true }],
+    describe: (p) => `Siapkan teks ${quote(p.text)}`,
   },
   'is.workflow.actions.speaktext': {
     summary: 'Speak text aloud. text (required).',
     params: [{ from: 'text', type: 'string', to: 'WFText', required: true }],
+    describe: (p) => `Bacakan teks ${quote(p.text)}`,
   },
   'is.workflow.actions.alert': {
     summary: 'Show an alert dialog. message (required), title (optional).',
@@ -68,58 +82,72 @@ export const ACTION_CATALOG: Record<string, CatalogEntry> = {
       { from: 'message', type: 'string', to: 'WFAlertActionMessage', required: true },
       { from: 'title', type: 'string', to: 'WFAlertActionTitle' },
     ],
+    describe: (p) => `Tampilkan peringatan ${quote(p.message)}${p.title ? ` dengan judul ${quote(p.title)}` : ''}`,
   },
   'is.workflow.actions.url': {
     summary: 'Produce a URL value. url (required).',
     params: [{ from: 'url', type: 'string', to: 'WFURLActionURL', required: true }],
+    describe: (p) => `Siapkan URL ${p.url}`,
   },
   'is.workflow.actions.openurl': {
     summary: 'Open a URL in Safari. url (required).',
     params: [{ from: 'url', type: 'string', to: 'WFInput', required: true }],
+    describe: (p) => `Buka URL ${p.url}`,
   },
   'is.workflow.actions.openapp': {
     summary: 'Open an app. bundleId (required, e.g. com.apple.MobileSMS).',
     params: [{ from: 'bundleId', type: 'string', to: 'WFAppIdentifier', required: true }],
+    describe: (p) => `Buka aplikasi ${p.bundleId}`,
   },
   'is.workflow.actions.addnewreminder': {
     summary: 'Create a reminder. title (required).',
     params: [{ from: 'title', type: 'string', to: 'WFCalendarItemTitle', required: true }],
+    describe: (p) => `Buat pengingat ${quote(p.title)}`,
   },
   'is.workflow.actions.sendmessage': {
     summary: 'Send a message; iOS asks for the recipient. text (required).',
     params: [{ from: 'text', type: 'string', to: 'WFSendMessageContent', required: true }],
+    describe: (p) => `Kirim pesan ${quote(p.text)} (iOS menanyakan penerimanya)`,
   },
   'is.workflow.actions.setvolume': {
     summary: 'Set output volume. level (required, 0-1).',
     params: [{ from: 'level', type: 'unitInterval', to: 'WFVolume', required: true }],
+    describe: (p) => `Atur volume ke ${percent(p.level)}`,
   },
   'is.workflow.actions.setbrightness': {
     summary: 'Set screen brightness. level (required, 0-1).',
     params: [{ from: 'level', type: 'unitInterval', to: 'WFBrightness', required: true }],
+    describe: (p) => `Atur kecerahan layar ke ${percent(p.level)}`,
   },
   'is.workflow.actions.weather.currentconditions': {
     summary: 'Get current weather. No parameters.',
     params: [],
+    describe: () => 'Ambil kondisi cuaca saat ini',
   },
   'is.workflow.actions.getcurrentlocation': {
     summary: 'Get the current location. No parameters.',
     params: [],
+    describe: () => 'Ambil lokasi saat ini',
   },
   'is.workflow.actions.getclipboard': {
     summary: 'Read the clipboard. No parameters.',
     params: [],
+    describe: () => 'Ambil isi papan klip',
   },
   'is.workflow.actions.copy': {
     summary: 'Copy the previous result to the clipboard. No parameters.',
     params: [],
+    describe: () => 'Salin hasil sebelumnya ke papan klip',
   },
   'is.workflow.actions.takephoto': {
     summary: 'Take a photo with the camera. No parameters.',
     params: [],
+    describe: () => 'Ambil foto dengan kamera',
   },
   'is.workflow.actions.playmusic': {
     summary: 'Play music. No parameters.',
     params: [],
+    describe: () => 'Putar musik',
   },
 };
 
@@ -167,12 +195,22 @@ function serialize(value: PlistValue, indent: string): string {
   return `${indent}<dict>\n${entries}\n${indent}</dict>`;
 }
 
+/** A model-picked action that survived catalog and parameter checks. */
+export interface PreparedAction {
+  id: string;
+  /** Parameters as supplied, for describing the step to a person. */
+  supplied: Record<string, string | number>;
+  /** Parameters mapped to their WF* keys, for the plist. */
+  parameters: Record<string, PlistValue>;
+}
+
 /**
- * Turn model-picked actions into WFWorkflowActions entries, dropping anything
- * the catalog does not know and anything missing a required parameter.
+ * Drop anything the catalog does not know and anything missing a required
+ * parameter. The plist and the human-readable steps are both derived from this
+ * one result, so they can never describe different shortcuts.
  */
-export function buildActions(actions: ShortcutAction[]): PlistValue[] {
-  const built: PlistValue[] = [];
+export function prepareActions(actions: ShortcutAction[]): PreparedAction[] {
+  const prepared: PreparedAction[] = [];
 
   for (const action of actions) {
     const entry = ACTION_CATALOG[action.id];
@@ -214,13 +252,26 @@ export function buildActions(actions: ShortcutAction[]): PlistValue[] {
 
     if (missingRequired) continue;
 
-    built.push({
-      WFWorkflowActionIdentifier: action.id,
-      WFWorkflowActionParameters: parameters,
-    });
+    prepared.push({ id: action.id, supplied, parameters });
   }
 
-  return built;
+  return prepared;
+}
+
+/** Map prepared actions to the WFWorkflowActions entries the plist carries. */
+export function buildActions(actions: ShortcutAction[]): PlistValue[] {
+  return prepareActions(actions).map((action) => ({
+    WFWorkflowActionIdentifier: action.id,
+    WFWorkflowActionParameters: action.parameters,
+  }));
+}
+
+/**
+ * Name each step in Indonesian so someone can rebuild the shortcut by hand in
+ * the Shortcuts app — the only route open while the file cannot be signed.
+ */
+export function describeActions(actions: PreparedAction[]): string[] {
+  return actions.map((action) => ACTION_CATALOG[action.id].describe(action.supplied));
 }
 
 /** Wrap built actions in the root structure Shortcuts expects, as plist XML. */
