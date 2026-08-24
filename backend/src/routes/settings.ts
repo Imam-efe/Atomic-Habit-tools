@@ -30,6 +30,7 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'garden_seeds', label: 'Stok benih', group: 'Kebun', userScoped: true },
   { table: 'garden_costs', label: 'Biaya kebun', group: 'Kebun', userScoped: true },
   { table: 'garden_pest_log', label: 'Catatan hama', group: 'Kebun', userScoped: true },
+  { table: 'cooking_recipes', label: 'Resep tersimpan', group: 'Masakan', userScoped: true },
   { table: 'notes', label: 'Catatan', group: 'Lainnya', userScoped: true },
   { table: 'calendar_events', label: 'Agenda', group: 'Lainnya', userScoped: true },
   { table: 'kids_schedules', label: 'Jadwal anak', group: 'Lainnya', userScoped: true },

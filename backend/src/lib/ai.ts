@@ -67,6 +67,10 @@ export async function runJson<T>(
   schema: Record<string, unknown>,
   opts: { model?: string; maxTokens?: number } = {}
 ): Promise<T | null> {
+  // Sama seperti runText: binding yang hilang harus terdengar sebagai galat
+  // yang jelas, bukan sebagai TypeError yang membingungkan di log.
+  if (!env.AI) throw new Error('AI binding not available');
+
   const res = (await (env.AI as unknown as LooseAi).run(opts.model ?? SCHEMA_MODEL, {
     messages,
     guided_json: schema,

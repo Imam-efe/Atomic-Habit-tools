@@ -8,8 +8,8 @@
  */
 
 import type { ExpiringItem } from './daily';
+import { TEXT_MODEL } from './ai';
 
-const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const AI_TIMEOUT_MS = 8000;
 
 export interface RecipeIdea {
@@ -98,7 +98,7 @@ export async function suggestRecipes(
   let response: unknown;
   try {
     response = await Promise.race([
-      env.AI.run(MODEL, {
+      env.AI.run(TEXT_MODEL, {
         messages: [
           {
             role: 'system',

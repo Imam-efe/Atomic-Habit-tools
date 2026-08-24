@@ -6,6 +6,7 @@ import {
   prepareActions,
   type ShortcutAction,
 } from './shortcut-plist';
+import { TEXT_MODEL } from './ai';
 
 export interface GeneratedShortcut {
   /** Shortcut plist XML. */
@@ -24,8 +25,6 @@ export interface ShortcutAiEnv {
   };
 }
 
-/** Same model the rest of the backend's AI features run on. */
-const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
 const AI_TIMEOUT_MS = 8000;
 
@@ -105,7 +104,7 @@ export async function generateShortcutPlist(
 
   try {
     response = await Promise.race([
-      env.AI.run(MODEL, {
+      env.AI.run(TEXT_MODEL, {
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: description },

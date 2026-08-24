@@ -8,6 +8,7 @@ import { formatRp } from '@/lib/currency';
 import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
 import { todayISO, daysAgoISO } from '@/lib/date';
+import { AiPanel } from '@/components/AiPanel';
 
 interface BudgetEntry {
   id: string;
@@ -711,6 +712,12 @@ export function Budget() {
           </svg>
         </motion.button>
       </div>
+
+      <AiPanel
+        module="uang"
+        suggestions={['Bulan ini boros di mana?', 'Berapa sisa aman hari ini?']}
+        onChanged={() => load()}
+      />
 
       {/* Main Tabs switcher */}
       <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>

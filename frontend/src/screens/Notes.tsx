@@ -4,6 +4,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
+import { AiPanel } from '@/components/AiPanel';
 
 interface Note {
   id: string;
@@ -165,6 +166,12 @@ export function Notes() {
           </svg>
         </motion.button>
       </div>
+
+      <AiPanel
+        module="catatan"
+        suggestions={['Catat ide untuk minggu depan', 'Apa saja yang sudah kucatat?']}
+        onChanged={() => load()}
+      />
 
       <AnimatePresence>
         {showAdd && (

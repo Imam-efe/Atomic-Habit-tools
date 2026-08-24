@@ -9,6 +9,7 @@ import {
 import { nextHoliday, resolveYear } from '@/data/holidays';
 import type { RemoteHoliday, ResolvedHoliday } from '@/data/holidays';
 import { observancesOn } from '@/data/observances';
+import { AiPanel } from '@/components/AiPanel';
 
 interface CalendarEvent {
   id: string;
@@ -255,6 +256,12 @@ export function Calendar() {
       <p className="text-xs mb-5" style={{ color: 'var(--text3)' }}>
         {formatLong(today)}
       </p>
+
+      <AiPanel
+        module="kalender"
+        suggestions={['Agenda apa saja minggu ini?', 'Tambahkan kontrol dokter Jumat jam 9']}
+        onChanged={() => { loadEvents(); loadAgenda(selected); }}
+      />
 
       {/* Month switcher */}
       <div className="flex items-center justify-between mb-3">
