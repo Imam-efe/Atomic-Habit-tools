@@ -9,6 +9,9 @@ import { formatRp } from '@/lib/currency';
 import { canShare, shareProgress } from '@/lib/share';
 import { isVoiceSupported } from '@/lib/voice';
 import { useAppBadge } from '@/hooks';
+import { resolveYear } from '@/data/holidays';
+import type { RemoteHoliday, ResolvedHoliday } from '@/data/holidays';
+import { observancesOn } from '@/data/observances';
 
 interface DashboardData {
   habitsTotal: number;
@@ -46,6 +49,32 @@ interface NetWorthData {
   history: { month: string; assets: number; liabilities: number; net_worth: number }[];
 }
 
+interface Brief {
+  date: string;
+  habits: { pending: number; total: number };
+  events: Array<{ id: string; title: string; event_time: string | null }>;
+  bills: { bills: Array<{ id: string; personName: string; daysUntil: number }>; total: number };
+  missed: Array<{ id: string; name: string }>;
+  expiring: Array<{ id: string; name: string; daysLeft: number }>;
+  kids: Array<{ kidName: string; title: string }>;
+}
+
+interface PatternResult {
+  patterns: Array<{ id: string; text: string }>;
+}
+
+interface AgendaItem {
+  source: string;
+  id: string;
+  title: string;
+  detail?: string | null;
+  time?: string | null;
+}
+
+const PATTERN_LABELS: Record<string, string> = {
+  sleep: 'Tidur', steps: 'Langkah', spend: 'Pengeluaran', habits: 'Kebiasaan',
+};
+
 export function Dashboard() {
   const { session } = useAuthStore();
   const { setTab } = useUIStore();
@@ -82,6 +111,12 @@ export function Dashboard() {
   // null if that call fails, so the panel is never blocked on it.
   const [aiInsight, setAiInsight] = useState<string | null>(null);
   const [loadingAiInsight, setLoadingAiInsight] = useState(false);
+
+  // Insight lintas modul tambahan: Pagi Ini, Pola, dan agenda/info dari Kalender.
+  const [brief, setBrief] = useState<Brief | null>(null);
+  const [patterns, setPatterns] = useState<PatternResult | null>(null);
+  const [agenda, setAgenda] = useState<AgendaItem[]>([]);
+  const [todayHoliday, setTodayHoliday] = useState<ResolvedHoliday | null>(null);
 
   const now = new Date();
   const hour = now.getHours();
@@ -131,6 +166,22 @@ export function Dashboard() {
         apiFetch<NutritionData>(`/nutrition?date=${todayStr}`),
         apiFetch<any>(`/budget?month=${monthStr}`)
       ]);
+
+      // Pagi Ini, Pola, dan Kalender (agenda + info hari ini) — tiap sumber
+      // berdiri sendiri lewat .catch(null) supaya satu modul yang gagal tidak
+      // mengosongkan seluruh panel insight.
+      const year = Number(todayStr.slice(0, 4));
+      const [briefRes, patternsRes, agendaRes, holidaysRes] = await Promise.all([
+        apiFetch<Brief>('/daily/brief').catch(() => null),
+        apiFetch<PatternResult>('/daily/patterns').catch(() => null),
+        apiFetch<{ date: string; items: AgendaItem[] }>(`/calendar/agenda?date=${todayStr}`).catch(() => null),
+        apiFetch<{ holidays: RemoteHoliday[] }>(`/holidays?year=${year}`).catch(() => null),
+      ]);
+      setBrief(briefRes);
+      setPatterns(patternsRes);
+      setAgenda(agendaRes?.items ?? []);
+      const resolved = resolveYear(year, holidaysRes?.holidays ?? []);
+      setTodayHoliday(resolved.holidays.find(h => h.date === todayStr) ?? null);
 
       // 1. Habits Evaluation
       const totalHabs = data?.habitsTotal ?? 0;
@@ -443,6 +494,113 @@ export function Dashboard() {
                         {insights.budgetText}
                       </p>
                     </div>
+
+                    {/* Pagi Ini — ringkasan lintas modul */}
+                    {brief && (
+                      <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
+                        <span className="text-xs font-bold text-white block mb-1.5">🌤️ Pagi Ini</span>
+                        <ul className="flex flex-col gap-1">
+                          {(() => {
+                            const lines: string[] = [];
+                            lines.push(
+                              brief.habits.pending > 0
+                                ? `${brief.habits.pending} dari ${brief.habits.total} kebiasaan belum selesai hari ini`
+                                : brief.habits.total > 0
+                                  ? 'Semua kebiasaan sudah selesai hari ini ✅'
+                                  : 'Belum ada kebiasaan terdaftar'
+                            );
+                            if (brief.missed.length > 0) {
+                              lines.push(`⚠️ Berisiko bolos dua kali: ${brief.missed.map(m => m.name).join(', ')}`);
+                            }
+                            if (brief.bills.total > 0) {
+                              lines.push(`💳 ${brief.bills.bills.length} tagihan jatuh tempo · Rp${Math.round(brief.bills.total).toLocaleString('id-ID')}`);
+                            }
+                            if (brief.expiring.length > 0) {
+                              lines.push(`🥫 ${brief.expiring.length} bahan makanan mau kedaluwarsa`);
+                            }
+                            if (brief.kids.length > 0) {
+                              lines.push(`👶 ${brief.kids.length} jadwal anak besok`);
+                            }
+                            return lines.map((line, i) => (
+                              <li key={i} className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>{line}</li>
+                            ));
+                          })()}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Pola — hubungan antar modul */}
+                    {patterns && (
+                      <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
+                        <span className="text-xs font-bold text-white block mb-1.5">🔗 Pola</span>
+                        {patterns.patterns.length > 0 ? (
+                          <ul className="flex flex-col gap-1.5">
+                            {patterns.patterns.slice(0, 3).map(p => (
+                              <li key={p.id} className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                                <span className="font-bold" style={{ color: 'var(--text)' }}>{PATTERN_LABELS[p.id] ?? p.id}:</span> {p.text}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                            Belum ada pola yang cukup kuat — butuh lebih banyak data.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Agenda pada kalender — gabungan agenda pribadi + due-item lintas modul hari ini */}
+                    {(() => {
+                      const todayStr = now.toISOString().slice(0, 10);
+                      const items = [
+                        ...(brief?.events.map(e => ({ id: e.id, title: e.title, time: e.event_time })) ?? []),
+                        ...agenda.map(a => ({ id: a.id, title: a.title, time: a.time ?? null })),
+                      ];
+                      const observances = observancesOn(todayStr);
+                      return (
+                        <>
+                          <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
+                            <span className="text-xs font-bold text-white block mb-1.5">🗓️ Agenda Hari Ini</span>
+                            {items.length > 0 ? (
+                              <ul className="flex flex-col gap-1">
+                                {items.map((it, i) => (
+                                  <li key={`${it.id}-${i}`} className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                                    • {it.title}{it.time ? ` — ${it.time}` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                                Tidak ada agenda tercatat hari ini.
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Info kalender hari ini — libur nasional/cuti bersama & peringatan */}
+                          <div className="p-3.5 rounded-2xl bg-zinc-950/10 dark:bg-white/5 border" style={{ borderColor: 'var(--sep)' }}>
+                            <span className="text-xs font-bold text-white block mb-1.5">ℹ️ Info Kalender</span>
+                            <p className="text-xs leading-relaxed" style={{ color: 'var(--text2)' }}>
+                              {now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                            </p>
+                            {todayHoliday && (
+                              <p className="text-xs leading-relaxed mt-1" style={{ color: todayHoliday.kind === 'libur' ? 'var(--neg)' : 'var(--warn)' }}>
+                                {todayHoliday.kind === 'libur' ? '🔴 Libur Nasional' : '🟠 Cuti Bersama'}: {todayHoliday.name}
+                              </p>
+                            )}
+                            {observances.length > 0 && (
+                              <p className="text-xs leading-relaxed mt-1" style={{ color: 'var(--text2)' }}>
+                                {observances.map(o => o.name).join(', ')}
+                              </p>
+                            )}
+                            {!todayHoliday && observances.length === 0 && (
+                              <p className="text-xs leading-relaxed mt-1" style={{ color: 'var(--text3)' }}>
+                                Hari biasa, tidak ada libur atau peringatan khusus.
+                              </p>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     {/* AI-generated insight — only appears if the backend has
                         ANTHROPIC_API_KEY configured; silently absent otherwise. */}

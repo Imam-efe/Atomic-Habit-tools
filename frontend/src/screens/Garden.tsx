@@ -152,6 +152,14 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 
 const METHODS = ['benih', 'bibit', 'stek', 'umbi'];
 
+/** Pertanyaan siap-pakai — satu ketuk untuk sudut pandang insight yang berbeda. */
+const QUICK_QUESTIONS = [
+  'Kapan waktu terbaik panen?',
+  'Kenapa pertumbuhannya lambat?',
+  'Apa risiko hama sekarang?',
+  'Bagaimana pola siram & pupukku?',
+];
+
 /**
  * Hari ini menurut jam Jakarta, bukan UTC.
  *
@@ -241,6 +249,9 @@ export function Garden() {
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnoseError, setDiagnoseError] = useState('');
+
+  // Cetak label — pilih tanaman & jumlah, di-pack ke layout A4.
+  const [labelPrintOpen, setLabelPrintOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -341,8 +352,8 @@ export function Garden() {
     loadPhotos(plantingId);
   };
 
-  const handleAsk = async (plantingId: string) => {
-    const question = askQuestion.trim();
+  const handleAsk = async (plantingId: string, questionOverride?: string) => {
+    const question = (questionOverride ?? askQuestion).trim();
     if (!question) return;
     setAsking(true);
     setAskAnswer('');
@@ -506,6 +517,15 @@ export function Garden() {
             Sayur & buah: jadwal siram, pupuk, panen
           </p>
         </div>
+        <motion.button
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setLabelPrintOpen(true)}
+          title="Cetak label tanaman"
+        >
+          🏷️
+        </motion.button>
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base"
           style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
@@ -728,7 +748,7 @@ export function Garden() {
                               {insightLoading ? 'Menulis...' : 'Analisa'}
                             </button>
                           </div>
-                          <p className="text-[11px] leading-relaxed" style={{ color: insight ? 'var(--text)' : 'var(--text3)' }}>
+                          <p className="text-[11px] leading-relaxed whitespace-pre-line" style={{ color: insight ? 'var(--text)' : 'var(--text3)' }}>
                             {insight || 'Nilai pola perawatanmu terhadap umur tanaman ini.'}
                           </p>
                         </div>
@@ -738,6 +758,19 @@ export function Garden() {
                           <p className="text-[10px] font-extrabold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text3)' }}>
                             💬 Tanya soal tanaman ini
                           </p>
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {QUICK_QUESTIONS.map(q => (
+                              <button
+                                key={q}
+                                className="text-[10px] px-2 py-1 rounded-full"
+                                style={{ background: 'var(--surface)', color: 'var(--text2)' }}
+                                onClick={() => { setAskQuestion(q); handleAsk(p.id, q); }}
+                                disabled={asking}
+                              >
+                                {q}
+                              </button>
+                            ))}
+                          </div>
                           <div className="flex gap-2">
                             <input
                               className="flex-1 px-2.5 py-2 rounded-lg text-[11px] outline-none"
@@ -1216,6 +1249,15 @@ export function Garden() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {labelPrintOpen && (
+          <LabelPrintSheet
+            plantings={(data?.plantings ?? []).filter(p => p.status === 'tumbuh' || p.status === 'panen')}
+            onClose={() => setLabelPrintOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1367,6 +1409,178 @@ function DiagnosePanel(props: {
           </button>
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/** Format tanggal pendek untuk label — "planted_date" YYYY-MM-DD → "3 Jan 2026". */
+function formatLabelDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * Cetak label kebun (#11 — susulan): pilih tanaman & jumlah label, di-pack
+ * jadi grid kecil di layout A4 lewat print dialog browser sendiri — tidak
+ * perlu library PDF, dan "Simpan sebagai PDF" di dialog cetak sudah cukup
+ * untuk "export ke A4" yang diminta.
+ */
+function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClose: () => void }) {
+  // qty 0 berarti tidak dipilih; > 0 berarti dipilih dengan jumlah label segitu.
+  const [qty, setQty] = useState<Record<string, number>>({});
+
+  const setQtyFor = (id: string, next: number) => {
+    setQty(prev => ({ ...prev, [id]: Math.max(0, Math.min(99, next)) }));
+  };
+
+  const toggle = (id: string) => {
+    setQty(prev => ({ ...prev, [id]: prev[id] > 0 ? 0 : 1 }));
+  };
+
+  const labels: Planting[] = [];
+  for (const p of plantings) {
+    const n = qty[p.id] ?? 0;
+    for (let i = 0; i < n; i++) labels.push(p);
+  }
+  const totalLabels = labels.length;
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-sheet flex items-end justify-center bg-black/60 backdrop-blur-sm"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="w-full max-w-[460px] rounded-t-3xl p-5 max-h-[85vh] flex flex-col"
+        style={{ background: 'var(--surface)' }}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={springs.smooth}
+        onClick={e => e.stopPropagation()}
+      >
+        <p className="text-base font-extrabold mb-1" style={{ color: 'var(--text)' }}>🏷️ Cetak Label Tanaman</p>
+        <p className="text-[11px] mb-4" style={{ color: 'var(--text3)' }}>
+          Pilih tanaman dan jumlah label, lalu cetak — label dipak kecil-kecil ke satu lembar A4 supaya hemat kertas.
+        </p>
+
+        {plantings.length === 0 ? (
+          <p className="text-[12px] py-6 text-center" style={{ color: 'var(--text3)' }}>
+            Belum ada tanaman aktif untuk dibuatkan label.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 overflow-y-auto mb-4">
+            {plantings.map(p => {
+              const n = qty[p.id] ?? 0;
+              const checked = n > 0;
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-xl p-2.5"
+                  style={{ background: 'var(--bg)', boxShadow: checked ? 'var(--neu-inset)' : 'none' }}
+                >
+                  <button
+                    className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm"
+                    style={{
+                      background: checked ? 'var(--accentFill)' : 'var(--surface)',
+                      color: checked ? '#fff' : 'var(--text3)',
+                      boxShadow: checked ? 'none' : 'var(--neu-raised-sm)',
+                    }}
+                    onClick={() => toggle(p.id)}
+                  >
+                    {checked ? '✓' : p.emoji}
+                  </button>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-bold truncate" style={{ color: 'var(--text)' }}>
+                      {p.nickname || p.name}
+                    </p>
+                    <p className="text-[10px] truncate" style={{ color: 'var(--text3)' }}>
+                      {p.location || 'tanpa lokasi'} · {formatLabelDate(p.plantedDate)}
+                    </p>
+                  </div>
+                  {checked && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        className="w-6 h-6 rounded-md text-xs font-bold"
+                        style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                        onClick={() => setQtyFor(p.id, n - 1)}
+                      >
+                        −
+                      </button>
+                      <span className="text-[12px] font-bold w-4 text-center" style={{ color: 'var(--text)' }}>{n}</span>
+                      <button
+                        className="w-6 h-6 rounded-md text-xs font-bold"
+                        style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                        onClick={() => setQtyFor(p.id, n + 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <motion.button
+            className="neu-cta flex-1 py-3 rounded-xl text-sm font-bold text-white"
+            style={{ background: 'var(--accentFill)', opacity: totalLabels === 0 ? 0.6 : 1 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => window.print()}
+            disabled={totalLabels === 0}
+          >
+            🖨️ Cetak {totalLabels > 0 ? `${totalLabels} Label` : ''}
+          </motion.button>
+          <button
+            className="px-4 py-3 rounded-xl text-sm font-bold"
+            style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+            onClick={onClose}
+          >
+            Tutup
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Area cetak — tersembunyi di layar (.print-label-area), satu-satunya
+          yang tampak saat window.print() lewat CSS di index.css. */}
+      <div className="print-label-area">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '2mm',
+          }}
+        >
+          {labels.map((p, i) => (
+            <div
+              key={`${p.id}-${i}`}
+              style={{
+                border: '1px dashed #999',
+                borderRadius: '2mm',
+                padding: '2.5mm',
+                height: '28mm',
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                breakInside: 'avoid',
+              }}
+            >
+              <div style={{ fontSize: '10pt', fontWeight: 700, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {p.emoji} {p.nickname || p.name}
+              </div>
+              <div style={{ fontSize: '7.5pt', color: '#333', marginTop: '1mm' }}>
+                📍 {p.location || '—'}
+              </div>
+              <div style={{ fontSize: '7.5pt', color: '#333' }}>
+                🗓 {formatLabelDate(p.plantedDate)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </motion.div>
   );
 }

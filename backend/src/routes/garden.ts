@@ -986,11 +986,11 @@ garden.post('/:id/insight', async (c) => {
       [
         {
           role: 'system',
-          content: 'Kamu pendamping berkebun untuk pekebun rumahan Indonesia. Baca data satu tanaman dan riwayat perawatannya, lalu tulis 1 paragraf pendek (3-5 kalimat) dalam Bahasa Indonesia: apa yang sudah bagus, apa yang perlu diperbaiki, dan satu langkah paling penting untuk minggu ini. Spesifik pada angka yang diberikan. Tanpa markdown, tanpa daftar bernomor.',
+          content: 'Kamu pendamping berkebun untuk pekebun rumahan Indonesia. Baca data satu tanaman dan riwayat perawatannya, lalu tulis penilaian dalam Bahasa Indonesia, 2 paragraf pendek dipisah baris kosong, total 6-9 kalimat. Paragraf 1: nilai pola siram/pupuk pengguna dibanding anjuran katalog (apa yang sudah bagus, apa yang meleset, seberapa jauh), dan prospek tanaman ini — sesuai jadwal panen atau tertinggal, berikut risiko yang perlu diwaspadai kalau ada. Paragraf 2: satu langkah paling penting untuk minggu ini, konkret dan bisa langsung dikerjakan. Spesifik pada angka yang diberikan, jangan mengulang angka yang sama dua kali. Tanpa markdown, tanpa daftar bernomor.',
         },
         { role: 'user', content: data.context },
       ],
-      { maxTokens: 350 }
+      { maxTokens: 500 }
     );
   } catch (err) {
     console.error('Garden insight failed', err);

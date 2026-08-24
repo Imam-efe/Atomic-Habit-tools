@@ -13,7 +13,10 @@
 
 import type { Env } from '../types';
 
-export const TEXT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+// llama-3.1-8b-instruct (no suffix) is deprecated on the Workers AI catalog —
+// the -fp8 variant is the actively supported replacement with the same
+// context window class, lower cost, and no request-time errors.
+export const TEXT_MODEL = '@cf/meta/llama-3.1-8b-instruct-fp8';
 export const SCHEMA_MODEL = '@cf/meta/llama-4-scout-17b-16e-instruct';
 
 /** One OpenAI-style content part. Text-only messages may pass a bare string. */
