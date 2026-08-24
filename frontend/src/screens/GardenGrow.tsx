@@ -97,6 +97,14 @@ interface Sowing {
   transplantedDate: string | null;
 }
 
+/** Stok benih di laci, dipakai untuk mengurangi jumlahnya saat menyemai. */
+interface SeedStock {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+}
+
 interface SourceScore {
   brand: string;
   batches: number;
@@ -573,10 +581,21 @@ export function GrowRecordSections() {
   const [sowName, setSowName] = useState('');
   const [sowBrand, setSowBrand] = useState('');
   const [sowCount, setSowCount] = useState('20');
+  // Benih yang dipakai. Kalau diisi, backend ikut mengurangi stoknya — itulah
+  // satu-satunya cara angka di laci tetap berhubungan dengan yang ditanam.
+  const [sowSeedId, setSowSeedId] = useState('');
+  const [seeds, setSeeds] = useState<SeedStock[]>([]);
 
   const loadSowings = async () => {
     try {
-      setSowings(await apiFetch<SowingsResponse>('/garden/sowings'));
+      // Stok ikut dimuat ulang: menyemai mengurangi jumlahnya, dan daftar
+      // yang tertinggal akan menawarkan benih yang sudah habis.
+      const [s, seedRes] = await Promise.all([
+        apiFetch<SowingsResponse>('/garden/sowings'),
+        apiFetch<{ seeds: SeedStock[] }>('/garden/seeds').catch(() => ({ seeds: [] })),
+      ]);
+      setSowings(s);
+      setSeeds(seedRes.seeds);
     } catch (err) {
       setError(describeError(err, 'Gagal memuat pembibitan.'));
     }
@@ -596,16 +615,18 @@ export function GrowRecordSections() {
     let cancelled = false;
 
     (async () => {
-      const [s, t, k, a, st] = await Promise.all([
+      const [s, t, k, a, st, seedRes] = await Promise.all([
         apiFetch<SowingsResponse>('/garden/sowings').catch(() => null),
         apiFetch<{ scores: TreatmentScore[]; pending: PendingReview[] }>('/garden/treatments')
           .catch(() => ({ scores: [], pending: [] })),
         apiFetch<KitchenReport>('/garden/kitchen').catch(() => null),
         apiFetch<AnnualReport>('/garden/annual-report').catch(() => null),
         apiFetch<GardenStreak>('/garden/streak').catch(() => null),
+        apiFetch<{ seeds: SeedStock[] }>('/garden/seeds').catch(() => ({ seeds: [] })),
       ]);
       if (cancelled) return;
       setSowings(s);
+      setSeeds(seedRes.seeds);
       setScores(t.scores);
       setPending(t.pending);
       setKitchen(k);
@@ -625,10 +646,12 @@ export function GrowRecordSections() {
           name: sowName.trim(),
           brand: sowBrand.trim() || undefined,
           seedCount: Number(sowCount),
+          seedId: sowSeedId || undefined,
         }),
       });
       setSowName('');
       setSowBrand('');
+      setSowSeedId('');
       await loadSowings();
     } catch (err) {
       setError(describeError(err, 'Gagal menyimpan catatan semai.'));
@@ -869,6 +892,35 @@ export function GrowRecordSections() {
             Semai
           </button>
         </div>
+
+        {seeds.length > 0 && (
+          <select
+            className="w-full px-2.5 py-2 rounded-lg text-[11px] outline-none" style={inputStyle}
+            value={sowSeedId}
+            aria-label="Ambil dari stok benih"
+            onChange={(e) => {
+              const id = e.target.value;
+              setSowSeedId(id);
+              // Nama diisikan supaya tidak perlu mengetik ulang apa yang sudah
+              // tercatat di laci; yang sudah diketik pengguna tidak ditimpa.
+              const picked = seeds.find((sd) => sd.id === id);
+              if (picked && !sowName.trim()) setSowName(picked.name);
+            }}
+          >
+            <option value="">Tanpa mengurangi stok benih</option>
+            {seeds.map((sd) => (
+              <option key={sd.id} value={sd.id}>
+                {sd.name} · sisa {sd.quantity} {sd.unit}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {sowSeedId && !seeds.find((sd) => sd.id === sowSeedId && sd.unit.toLowerCase() === 'butir') && (
+          <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
+            Stok ini bersatuan bukan butir, jadi jumlahnya tidak dikurangi otomatis.
+          </p>
+        )}
 
         {sowings && sowings.summary.totalBatches > 0 && (
           <p className="text-[10px]" style={{ color: 'var(--text3)' }}>

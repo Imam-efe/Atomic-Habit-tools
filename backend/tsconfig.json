@@ -11,5 +11,14 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  // Berkas uji dikeluarkan dari sini dan diperiksa lewat tsconfig.test.json.
+  //
+  // Alasannya bukan kemalasan: `types` di atas sengaja hanya berisi
+  // @cloudflare/workers-types, supaya kode Worker tidak bisa diam-diam memakai
+  // API Node yang tidak ada di runtime produksi dan baru ketahuan setelah
+  // deploy. Berkas uji justru butuh Node (node:sqlite untuk menjalankan
+  // migrasi sungguhan), jadi keduanya tidak bisa memakai satu konfigurasi
+  // tanpa salah satunya kehilangan jaminan itu.
+  "exclude": ["src/**/*.test.ts", "src/test/**"]
 }

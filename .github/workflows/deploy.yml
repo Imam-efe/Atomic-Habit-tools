@@ -5,7 +5,47 @@ on:
     branches: [main]
 
 jobs:
+  # Gerbang sebelum apa pun menyentuh produksi.
+  #
+  # Migrasi berjalan lebih dulu di deploy-backend, jadi push yang rusak bukan
+  # hanya gagal terpasang — skema produksi sudah terlanjur berubah saat
+  # kegagalannya ketahuan. Uji dan pemeriksaan tipe karena itu harus lulus
+  # sebelum kedua pekerjaan deploy boleh mulai.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          # node:sqlite dipakai uji rute untuk menjalankan migrasi sungguhan.
+          node-version: '22'
+
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+
+      # Dua konfigurasi: kode Worker diperiksa tanpa tipe Node sama sekali,
+      # supaya API yang tidak ada di runtime produksi ketahuan di sini.
+      - name: Typecheck backend
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Test backend
+        working-directory: backend
+        run: npm test -- --run
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test -- --run
+
   deploy-backend:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,6 +77,7 @@ jobs:
         run: npm run deploy
 
   deploy-frontend:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
