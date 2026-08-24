@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { springs, collapse } from '@/tokens/motion';
+import { collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 
 interface StackHabit {

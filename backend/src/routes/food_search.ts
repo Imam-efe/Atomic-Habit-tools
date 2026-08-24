@@ -5,7 +5,7 @@ import { runJson, runText, SCHEMA_MODEL } from '../lib/ai';
 import { searchCuratedFoods, type CuratedFood } from '../data/foods_id';
 import type { Env } from '../types';
 import { jakartaToday } from '../lib/validate';
-import { ALG_UMUM, computeAlgPercent, buildWarnings, scaleServing, type AlgNutrients } from '../lib/nutrition_insight';
+import { computeAlgPercent, buildWarnings, scaleServing, type AlgNutrients } from '../lib/nutrition_insight';
 
 const foodSearch = new Hono<AuthContext>();
 foodSearch.use('/*', requireAuth);

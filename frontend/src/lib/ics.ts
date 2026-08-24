@@ -1,3 +1,4 @@
+import { todayISO } from './date';
 interface HabitReminder {
   id: string;
   name: string;
@@ -20,7 +21,9 @@ function todayStamp() {
  */
 export function buildHabitReminderIcs(habits: HabitReminder[]): string {
   const stamp = todayStamp();
-  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  // WIB, seperti sisa aplikasi: dini hari toISOString() memberi tanggal
+  // kemarin dan deret pengingatnya mulai sehari lebih awal.
+  const today = todayISO().replace(/-/g, '');
 
   const events = habits.map((h) => {
     const [hh, mm] = h.reminderTime.split(':');
