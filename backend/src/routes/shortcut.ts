@@ -258,4 +258,92 @@ shortcut.get('/notifications', requireShortcutToken, async (c) => {
   });
 });
 
+// Metrik yang diterima dari Apple Health, beserta batas wajarnya.
+//
+// Batas ini menolak kiriman yang jelas keliru — Automation Shortcuts gampang
+// salah satuan (jam vs menit) dan satu angka nyasar akan merusak pencarian pola
+// selama berminggu-minggu, dalam diam.
+const HEALTH_METRICS: Record<string, { min: number; max: number; label: string }> = {
+  sleep_minutes: { min: 0, max: 24 * 60, label: 'menit tidur' },
+  steps: { min: 0, max: 200_000, label: 'langkah' },
+  resting_hr: { min: 20, max: 220, label: 'detak istirahat' },
+  active_energy: { min: 0, max: 20_000, label: 'kalori aktif' },
+  weight_kg: { min: 20, max: 400, label: 'berat badan' },
+};
+
+// POST /api/shortcut/health — terima metrik Apple Health dari Automation iOS.
+//
+// Menerima satu metrik ({metric, value}) maupun beberapa sekaligus
+// ({metrics: {...}}), karena satu Automation biasanya mengirim tidur, langkah,
+// dan detak dalam satu panggilan.
+shortcut.post('/health', requireShortcutToken, async (c) => {
+  const user = c.get('shortcutUser');
+  const body = await c.req
+    .json<{ date?: string; metric?: string; value?: number; metrics?: Record<string, number> }>()
+    .catch(() => null);
+  if (!body) return c.json({ error: 'invalid body' }, 400);
+
+  const date = body.date ?? getJakartaToday();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ error: 'date harus YYYY-MM-DD' }, 400);
+  }
+
+  const incoming: Record<string, number> =
+    body.metrics && typeof body.metrics === 'object'
+      ? body.metrics
+      : body.metric
+        ? { [body.metric]: body.value as number }
+        : {};
+
+  if (Object.keys(incoming).length === 0) {
+    return c.json({ error: 'sertakan metric+value atau metrics' }, 400);
+  }
+
+  const saved: string[] = [];
+  const rejected: Array<{ metric: string; reason: string }> = [];
+
+  for (const [metric, raw] of Object.entries(incoming)) {
+    const spec = HEALTH_METRICS[metric];
+    if (!spec) {
+      rejected.push({ metric, reason: 'metrik tidak dikenal' });
+      continue;
+    }
+
+    const value = typeof raw === 'number' ? raw : Number(raw);
+    if (!Number.isFinite(value) || value < spec.min || value > spec.max) {
+      rejected.push({ metric, reason: `${spec.label} harus antara ${spec.min} dan ${spec.max}` });
+      continue;
+    }
+
+    // Kiriman ulang di hari yang sama menimpa: Automation bisa jalan lebih dari
+    // sekali dan angka terakhir yang paling lengkap.
+    await c.env.DB.prepare(
+      `INSERT INTO health_metrics (user_id, metric_date, metric, value, source, recorded_at)
+       VALUES (?1, ?2, ?3, ?4, 'shortcuts', unixepoch())
+       ON CONFLICT (user_id, metric_date, metric) DO UPDATE SET
+         value = excluded.value, recorded_at = excluded.recorded_at`
+    )
+      .bind(user.id, date, metric, value)
+      .run();
+
+    saved.push(metric);
+  }
+
+  return c.json({ date, saved, rejected }, rejected.length > 0 && saved.length === 0 ? 400 : 200);
+});
+
+// GET /api/shortcut/health — baca metrik tersimpan, untuk memastikan Automation jalan
+shortcut.get('/health', requireShortcutToken, async (c) => {
+  const user = c.get('shortcutUser');
+  const date = c.req.query('date') ?? getJakartaToday();
+
+  const rows = await c.env.DB.prepare(
+    'SELECT metric, value, recorded_at FROM health_metrics WHERE user_id = ?1 AND metric_date = ?2'
+  )
+    .bind(user.id, date)
+    .all<{ metric: string; value: number; recorded_at: number }>();
+
+  return c.json({ date, metrics: rows.results ?? [] });
+});
+
 export default shortcut;
