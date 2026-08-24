@@ -5,6 +5,8 @@ import {
   wateringNote,
   weatherCacheKey,
   parseRain,
+  parseEt0,
+  computeWaterBalance,
   RAIN_SKIP_MM,
   RAIN_SOAKED_MM,
 } from './garden_weather';
@@ -78,6 +80,36 @@ describe('weatherCacheKey / parseRain', () => {
       today: 5,
       tomorrow: 0,
     });
+  });
+});
+
+describe('parseEt0', () => {
+  it('membaca nilai hari ini dari balasan Open-Meteo', () => {
+    expect(parseEt0({ daily: { et0_fao_evapotranspiration: [3.1, 4.2, 3.8] } })).toBe(4.2);
+  });
+
+  it('mengembalikan null untuk balasan yang tidak lengkap', () => {
+    expect(parseEt0({ daily: { et0_fao_evapotranspiration: [4.2] } })).toBeNull();
+    expect(parseEt0({})).toBeNull();
+  });
+
+  it('mengembalikan null untuk nilai null dari API, bukan nol', () => {
+    // Beda dari curah hujan: et0 null berarti "belum bisa dihitung", bukan 0.
+    expect(parseEt0({ daily: { et0_fao_evapotranspiration: [3.1, null, 3.8] } })).toBeNull();
+  });
+});
+
+describe('computeWaterBalance', () => {
+  it('menyarankan siram sebesar selisih evapotranspirasi dan hujan', () => {
+    expect(computeWaterBalance(5, 2)).toEqual({ et0Today: 5, rainToday: 2, recommendedMm: 3 });
+  });
+
+  it('tidak pernah menyarankan angka negatif saat hujan melebihi evapotranspirasi', () => {
+    expect(computeWaterBalance(3, 10).recommendedMm).toBe(0);
+  });
+
+  it('membulatkan ke satu desimal', () => {
+    expect(computeWaterBalance(5.55, 1.11).recommendedMm).toBe(4.4);
   });
 });
 

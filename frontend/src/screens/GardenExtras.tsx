@@ -82,6 +82,7 @@ interface WeatherResponse {
   message?: string;
   label?: string | null;
   rain?: { yesterday: number; today: number; tomorrow: number };
+  waterBalance?: { et0Today: number; rainToday: number; recommendedMm: number } | null;
   skipWatering?: boolean;
   reason?: string;
   note?: string | null;
@@ -102,6 +103,12 @@ interface ConflictResponse {
   conflicts: Array<{ plantName: string; withPlantName: string }>;
 }
 
+interface PestRiskResponse {
+  condition: 'lembap' | 'kering' | null;
+  reason: string;
+  warnings: Array<{ plantingId: string; label: string; matchedPests: string[] }>;
+}
+
 interface SpaceResponse {
   name: string;
   spacingCm: number;
@@ -115,6 +122,7 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [succession, setSuccession] = useState<SuccessionResponse | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResponse | null>(null);
+  const [pestRisk, setPestRisk] = useState<PestRiskResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Perencana ruang
@@ -136,17 +144,19 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       try {
         // Tiap bagian berdiri sendiri; kegagalan salah satunya tidak boleh
         // mengosongkan seluruh tab.
-        const [cal, wx, suc, con] = await Promise.all([
+        const [cal, wx, suc, con, risk] = await Promise.all([
           apiFetch<CalendarResponse>('/garden/calendar'),
           apiFetch<WeatherResponse>('/garden/weather').catch(() => null),
           apiFetch<SuccessionResponse>('/garden/succession').catch(() => ({ due: [] })),
           apiFetch<ConflictResponse>('/garden/conflicts').catch(() => ({ conflicts: [] })),
+          apiFetch<PestRiskResponse>('/garden/pest-risk').catch(() => ({ condition: null, reason: '', warnings: [] })),
         ]);
         if (cancelled) return;
         setCalendar(cal);
         setWeather(wx);
         setSuccession(suc);
         setConflicts(con);
+        setPestRisk(risk);
       } catch (err) {
         if (!cancelled) setError(describeError(err, 'Gagal memuat rencana.'));
       }
@@ -225,6 +235,12 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
                     {weather.reason || weather.note}
                   </div>
                 )}
+                {weather.waterBalance && weather.waterBalance.recommendedMm > 0 && (
+                  <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                    💦 Perkiraan kebutuhan air hari ini ~{weather.waterBalance.recommendedMm} mm
+                    (evapotranspirasi {weather.waterBalance.et0Today} mm − hujan {weather.waterBalance.rainToday} mm)
+                  </div>
+                )}
               </>
             )}
 
@@ -263,6 +279,17 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
           </>
         )}
       </Card>
+
+      {pestRisk && pestRisk.condition && pestRisk.warnings.length > 0 && (
+        <Card title={pestRisk.condition === 'lembap' ? '🍄 Waspada hama musim lembap' : '🕷️ Waspada hama musim kering'} accent="#ff9f0a" delay={0.045}>
+          <div className="text-xs" style={{ color: 'var(--text2)' }}>{pestRisk.reason}</div>
+          {pestRisk.warnings.map((w) => (
+            <div key={w.plantingId} className="text-sm" style={{ color: 'var(--text)' }}>
+              {w.label} — cek {w.matchedPests.join(', ')}
+            </div>
+          ))}
+        </Card>
+      )}
 
       {succession && succession.due.length > 0 && (
         <Card title="🌱 Waktunya semai batch berikutnya" accent="#ff9f0a" delay={0.04}>
@@ -433,6 +460,42 @@ interface PestData {
   provenTreatments: Array<{ pest: string; treatment: string; times: number }>;
 }
 
+interface YieldPrediction {
+  plantingId: string;
+  name: string;
+  emoji: string;
+  predictedAmount: number;
+  unit: string;
+  confidence: 'rendah' | 'sedang' | 'tinggi';
+  sampleSize: number;
+}
+
+const CONFIDENCE_LABEL: Record<YieldPrediction['confidence'], string> = {
+  rendah: 'keyakinan rendah',
+  sedang: 'keyakinan sedang',
+  tinggi: 'keyakinan tinggi',
+};
+
+interface FailurePattern {
+  plantId: string;
+  label: string;
+  failureCount: number;
+  commonLocation: string | null;
+  commonMonth: number | null;
+  pestShare: number;
+  hypotheses: string[];
+}
+
+interface RotationWarning {
+  plantingId: string;
+  label: string;
+  location: string;
+  familyLabel: string;
+  previousLabel: string;
+  previousPlantedDate: string;
+  message: string;
+}
+
 interface Seed {
   id: string;
   name: string;
@@ -454,6 +517,9 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
   const [economics, setEconomics] = useState<Economics | null>(null);
   const [pests, setPests] = useState<PestData | null>(null);
   const [seeds, setSeeds] = useState<Seed[]>([]);
+  const [predictions, setPredictions] = useState<YieldPrediction[]>([]);
+  const [failurePatterns, setFailurePatterns] = useState<FailurePattern[]>([]);
+  const [rotationWarnings, setRotationWarnings] = useState<RotationWarning[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const [costPlanting, setCostPlanting] = useState('');
@@ -469,14 +535,20 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
 
   const reload = async () => {
     try {
-      const [eco, pest, seed] = await Promise.all([
+      const [eco, pest, seed, yieldRes, failureRes, rotationRes] = await Promise.all([
         apiFetch<Economics>('/garden/economics'),
         apiFetch<PestData>('/garden/pests'),
         apiFetch<{ seeds: Seed[] }>('/garden/seeds'),
+        apiFetch<{ predictions: YieldPrediction[] }>('/garden/yield-prediction'),
+        apiFetch<{ patterns: FailurePattern[] }>('/garden/failure-patterns'),
+        apiFetch<{ warnings: RotationWarning[] }>('/garden/rotation-check'),
       ]);
       setEconomics(eco);
       setPests(pest);
       setSeeds(seed.seeds);
+      setPredictions(yieldRes.predictions);
+      setFailurePatterns(failureRes.patterns);
+      setRotationWarnings(rotationRes.warnings);
     } catch (err) {
       setError(describeError(err, 'Gagal memuat catatan.'));
     }
@@ -593,6 +665,52 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
               dihitung supaya angkanya tidak menyesatkan.
             </div>
           )}
+        </Card>
+      )}
+
+      {predictions.length > 0 && (
+        <Card title="🔮 Perkiraan panen berikutnya" delay={0.02}>
+          {predictions.map((p) => (
+            <div key={p.plantingId} className="flex justify-between items-center text-sm">
+              <span style={{ color: 'var(--text)' }}>{p.emoji} {p.name}</span>
+              <span className="text-xs text-right" style={{ color: 'var(--text2)' }}>
+                ~{p.predictedAmount} {p.unit}
+                <span className="block" style={{ color: 'var(--text3)' }}>
+                  {CONFIDENCE_LABEL[p.confidence]} · {p.sampleSize} panen tercatat
+                </span>
+              </span>
+            </div>
+          ))}
+          <div className="text-xs" style={{ color: 'var(--text3)' }}>
+            Dari rata-rata panen tanaman sejenis di kebunmu sendiri, bukan tabel umum.
+          </div>
+        </Card>
+      )}
+
+      {failurePatterns.length > 0 && (
+        <Card title="🔍 Pola gagal panen" accent="#ff3b30" delay={0.03}>
+          {failurePatterns.map((f) => (
+            <div key={f.plantId} className="flex flex-col gap-0.5">
+              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                {f.label} — gagal {f.failureCount}×
+              </div>
+              {f.hypotheses.map((h, i) => (
+                <div key={i} className="text-xs" style={{ color: 'var(--text2)' }}>
+                  {h}
+                </div>
+              ))}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {rotationWarnings.length > 0 && (
+        <Card title="🔁 Rotasi tanam" accent="#ff9f0a" delay={0.035}>
+          {rotationWarnings.map((w) => (
+            <div key={w.plantingId} className="text-xs" style={{ color: 'var(--text2)' }}>
+              {w.message}
+            </div>
+          ))}
         </Card>
       )}
 

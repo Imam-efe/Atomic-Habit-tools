@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { GardenPlanner, GardenRecords, type PlantingOption } from '../GardenExtras';
@@ -28,6 +28,7 @@ const emptyPlannerRoutes = {
   '/garden/weather': { configured: false, message: 'Atur lokasi kebun dulu.' },
   '/garden/succession': { due: [] },
   '/garden/conflicts': { conflicts: [] },
+  '/garden/pest-risk': { condition: null, reason: '', warnings: [] },
 };
 
 describe('GardenPlanner', () => {
@@ -178,6 +179,75 @@ describe('GardenPlanner', () => {
     expect(screen.getByRole('button', { name: 'Ubah lokasi' })).toBeInTheDocument();
   });
 
+  it('menampilkan perkiraan kebutuhan air dari evapotranspirasi', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/weather': {
+        configured: true,
+        available: true,
+        label: 'Bandung',
+        rain: { yesterday: 0, today: 2, tomorrow: 0 },
+        waterBalance: { et0Today: 5, rainToday: 2, recommendedMm: 3 },
+        skipWatering: false,
+        reason: null,
+        note: null,
+      },
+    }));
+
+    render(<GardenPlanner plantings={plantings} />);
+    expect(await screen.findByText(/~3 mm/)).toBeInTheDocument();
+  });
+
+  it('tidak menampilkan kebutuhan air kalau hujan sudah mencukupi', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/weather': {
+        configured: true,
+        available: true,
+        label: 'Bandung',
+        rain: { yesterday: 0, today: 20, tomorrow: 0 },
+        waterBalance: { et0Today: 4, rainToday: 20, recommendedMm: 0 },
+        skipWatering: true,
+        reason: 'Hari ini diperkirakan hujan 20 mm — cukup menggantikan siram.',
+        note: null,
+      },
+    }));
+
+    render(<GardenPlanner plantings={plantings} />);
+    await screen.findByText('✓ Tidak perlu menyiram hari ini');
+    expect(screen.queryByText(/kebutuhan air/)).not.toBeInTheDocument();
+  });
+
+  it('memperingatkan risiko hama musim lembap untuk tanaman relevan', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/pest-risk': {
+        condition: 'lembap',
+        reason: 'Curah hujan tinggi (35 mm dalam 3 hari) — kondisi lembap mendukung jamur, busuk, dan siput.',
+        warnings: [{ plantingId: 'p1', label: 'Bedeng A', matchedPests: ['siput'] }],
+      },
+    }));
+
+    render(<GardenPlanner plantings={plantings} />);
+    expect(await screen.findByText('🍄 Waspada hama musim lembap')).toBeInTheDocument();
+    expect(screen.getByText(/Bedeng A — cek siput/)).toBeInTheDocument();
+  });
+
+  it('diam soal risiko hama kalau tidak ada tanaman yang relevan', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyPlannerRoutes,
+      '/garden/pest-risk': {
+        condition: 'kering',
+        reason: 'Tidak ada hujan sama sekali dalam 3 hari.',
+        warnings: [],
+      },
+    }));
+
+    render(<GardenPlanner plantings={plantings} />);
+    await screen.findByText(/Bagus ditanam bulan ini/);
+    expect(screen.queryByText(/Waspada hama/)).not.toBeInTheDocument();
+  });
+
   it('menandai semai yang sudah terlewat', async () => {
     vi.stubGlobal('fetch', routeFetch({
       ...emptyPlannerRoutes,
@@ -239,6 +309,9 @@ const emptyRecordRoutes = {
   },
   '/garden/pests': { incidents: [], provenTreatments: [] },
   '/garden/seeds': { seeds: [] },
+  '/garden/yield-prediction': { predictions: [] },
+  '/garden/failure-patterns': { patterns: [] },
+  '/garden/rotation-check': { warnings: [] },
 };
 
 describe('GardenRecords', () => {
@@ -330,6 +403,72 @@ describe('GardenRecords', () => {
     expect(screen.getByText('Kedaluwarsa')).toBeInTheDocument();
     // Benih lewat tanggal masih bisa tumbuh — itu dijelaskan, bukan dibuang.
     expect(screen.getByText(/daya tumbuhnya turun/)).toBeInTheDocument();
+  });
+
+  it('menampilkan perkiraan panen dari riwayat sendiri', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyRecordRoutes,
+      '/garden/yield-prediction': {
+        predictions: [{
+          plantingId: 'p2', name: 'Cabai pot', emoji: '🌶️',
+          predictedAmount: 2.5, unit: 'kg', confidence: 'sedang', sampleSize: 4,
+        }],
+      },
+    }));
+
+    render(<GardenRecords plantings={plantings} />);
+
+    // Judul kartu unik; "Cabai pot" sendiri juga muncul di opsi dropdown lain
+    // di layar yang sama, jadi pencarian dipersempit ke dalam kartu ini saja.
+    const heading = await screen.findByText('🔮 Perkiraan panen berikutnya');
+    const card = within(heading.parentElement!);
+    expect(card.getByText('🌶️ Cabai pot')).toBeInTheDocument();
+    expect(card.getByText(/keyakinan sedang/)).toBeInTheDocument();
+    expect(card.getByText(/4 panen tercatat/)).toBeInTheDocument();
+  });
+
+  it('menampilkan hipotesis pola gagal panen berulang', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyRecordRoutes,
+      '/garden/failure-patterns': {
+        patterns: [{
+          plantId: 'cabai-rawit', label: 'Cabai Rawit', failureCount: 3,
+          commonLocation: 'Bedeng A', commonMonth: null, pestShare: 0,
+          hypotheses: ['Gagal 3 kali, hampir semuanya di lokasi "Bedeng A".'],
+        }],
+      },
+    }));
+
+    render(<GardenRecords plantings={plantings} />);
+
+    const heading = await screen.findByText('🔍 Pola gagal panen');
+    const card = within(heading.parentElement!);
+    expect(card.getByText(/Cabai Rawit — gagal 3×/)).toBeInTheDocument();
+    expect(card.getByText(/Bedeng A/)).toBeInTheDocument();
+  });
+
+  it('memperingatkan rotasi tanam famili sama di lokasi sama', async () => {
+    vi.stubGlobal('fetch', routeFetch({
+      ...emptyRecordRoutes,
+      '/garden/rotation-check': {
+        warnings: [{
+          plantingId: 'p2', label: 'Cabai', location: 'Bedeng A',
+          familyLabel: 'terong-terongan', previousLabel: 'Tomat', previousPlantedDate: '2026-01-01',
+          message: 'Cabai di lokasi "Bedeng A" satu famili (terong-terongan) dengan Tomat.',
+        }],
+      },
+    }));
+
+    render(<GardenRecords plantings={plantings} />);
+    expect(await screen.findByText(/satu famili \(terong-terongan\) dengan Tomat/)).toBeInTheDocument();
+  });
+
+  it('tidak menampilkan kartu perkiraan panen tanpa riwayat', async () => {
+    vi.stubGlobal('fetch', routeFetch(emptyRecordRoutes));
+    render(<GardenRecords plantings={plantings} />);
+
+    await screen.findByText('🧾 Catat biaya');
+    expect(screen.queryByText(/Perkiraan panen berikutnya/)).not.toBeInTheDocument();
   });
 
   it('mengirim biaya umum tanpa penanaman tertentu', async () => {

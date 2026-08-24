@@ -4,6 +4,7 @@ import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import { runJson, runText, SCHEMA_MODEL } from '../lib/ai';
 import { PLANTS, PLANT_BY_ID, CATEGORY_LABELS, type Plant } from '../data/plants';
+import { growthPhase, fertilizeGuidance } from '../lib/garden_fertilize_phase';
 
 const garden = new Hono<AuthContext>();
 garden.use('/*', requireAuth);
@@ -338,6 +339,42 @@ garden.get('/schedule', async (c) => {
     todayDue: due.filter(d => d.dueDate === today),
     upcoming: due.filter(d => d.dueDate > today),
   });
+});
+
+// GET /api/garden/fertilize-plan — pupuk yang cocok untuk fase pertumbuhan saat ini
+garden.get('/fertilize-plan', async (c) => {
+  const user = c.get('user');
+  const today = jakartaToday();
+
+  const [rows, lastMap] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+              planted_date, expected_harvest_date, status, note
+       FROM garden_plantings WHERE user_id = ?1 AND status IN ('tumbuh','panen') AND plant_id IS NOT NULL`
+    ).bind(user.sub).all<PlantingRow>(),
+    lastActions(c.env.DB, user.sub),
+  ]);
+
+  const plantings = rows.results ?? [];
+  const plantMap = await resolvePlants(
+    c.env.DB,
+    [...new Set(plantings.map(p => p.plant_id).filter((id): id is string => !!id))]
+  );
+
+  const plan = plantings.map(p => {
+    const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
+    const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
+    const phase = growthPhase(care.ageDays, plant?.daysToHarvest[0] ?? 0, care.lastHarvest !== null);
+    return {
+      plantingId: p.id,
+      name: plant?.name ?? p.custom_name ?? 'Tanaman',
+      emoji: plant?.emoji ?? '🌱',
+      phase,
+      guidance: fertilizeGuidance(phase),
+    };
+  });
+
+  return c.json({ plan });
 });
 
 // POST /api/garden — tanam sesuatu

@@ -91,6 +91,20 @@ interface ScheduleResponse {
   upcoming: DueItem[];
 }
 
+interface FertilizePlanEntry {
+  plantingId: string;
+  name: string;
+  emoji: string;
+  phase: 'semai' | 'vegetatif' | 'generatif';
+  guidance: string;
+}
+
+const PHASE_LABEL: Record<FertilizePlanEntry['phase'], string> = {
+  semai: '🌱 Semai',
+  vegetatif: '🌿 Vegetatif',
+  generatif: '🌸 Berbunga/berbuah',
+};
+
 interface CareLog {
   id: string;
   action: string;
@@ -162,7 +176,10 @@ export function Garden() {
   const [tab, setTab] = useState<'kebun' | 'jadwal' | 'katalog' | 'rencana' | 'catatan'>('kebun');
   const [data, setData] = useState<GardenResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
+  const [fertilizePlan, setFertilizePlan] = useState<FertilizePlanEntry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const fertilizeByPlanting = new Map(fertilizePlan.map((f) => [f.plantingId, f]));
 
   // Bentuk ringkas untuk tab Rencana dan Catatan — keduanya hanya butuh id,
   // label, dan id katalognya.
@@ -212,12 +229,14 @@ export function Garden() {
   const load = async () => {
     setLoading(true);
     try {
-      const [g, s] = await Promise.all([
+      const [g, s, f] = await Promise.all([
         apiFetch<GardenResponse>('/garden'),
         apiFetch<ScheduleResponse>('/garden/schedule?days=14'),
+        apiFetch<{ plan: FertilizePlanEntry[] }>('/garden/fertilize-plan'),
       ]);
       setData(g);
       setSchedule(s);
+      setFertilizePlan(f.plan);
     } catch {}
     setLoading(false);
   };
@@ -608,6 +627,18 @@ export function Garden() {
                         </p>
                         {p.note && (
                           <p className="text-[11px] italic" style={{ color: 'var(--text3)' }}>📝 {p.note}</p>
+                        )}
+
+                        {/* Fase pertumbuhan & pupuk — hanya untuk tanaman berkatalog */}
+                        {fertilizeByPlanting.get(p.id) && (
+                          <div className="rounded-xl p-3" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                            <p className="text-[10px] font-extrabold uppercase tracking-wider mb-1" style={{ color: 'var(--text3)' }}>
+                              {PHASE_LABEL[fertilizeByPlanting.get(p.id)!.phase]}
+                            </p>
+                            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text)' }}>
+                              {fertilizeByPlanting.get(p.id)!.guidance}
+                            </p>
+                          </div>
                         )}
 
                         {/* Insight AI */}
