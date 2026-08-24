@@ -9,6 +9,7 @@ import { useUndoToastStore } from '@/stores/toastStore';
 import { useUIStore } from '@/stores/uiStore';
 import { buildHabitReminderIcs, downloadIcs } from '@/lib/ics';
 import { bestForegroundFor } from '@/lib/color';
+import { AiPanel } from '@/components/AiPanel';
 
 interface Goal {
   id: string;
@@ -500,6 +501,12 @@ export function Habits() {
           </motion.button>
         </div>
       </div>
+
+      <AiPanel
+        module="kebiasaan"
+        suggestions={['Buat kebiasaan baca 10 menit setelah sarapan', 'Kebiasaan mana yang paling sering bolong?']}
+        onChanged={() => load()}
+      />
 
       {/* Add Habit Modal */}
       <AnimatePresence>

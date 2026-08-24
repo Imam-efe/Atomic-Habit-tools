@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
+import { TEXT_MODEL } from '../lib/ai';
 
 const insights = new Hono<AuthContext>();
 insights.use('/*', requireAuth);
@@ -15,7 +16,6 @@ interface AiInsightBody {
   expense: number;
 }
 
-const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 
 // POST /api/insights/ai — a personalized paragraph from the day's stats,
 // layered on top of the always-available rule-based insight text the
@@ -27,7 +27,7 @@ insights.post('/ai', async (c) => {
   if (!body) return c.json({ error: 'Invalid body' }, 400);
 
   try {
-    const response = await c.env.AI.run(MODEL, {
+    const response = await c.env.AI.run(TEXT_MODEL, {
       messages: [
         {
           role: 'system',

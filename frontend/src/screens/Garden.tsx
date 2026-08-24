@@ -7,6 +7,7 @@ import { compressImage } from '@/lib/image';
 import { isNetworkError, newClientId, queueFor } from '@/lib/offlineQueue';
 import { useAuthStore } from '@/stores/authStore';
 import { todayISO } from '@/lib/date';
+import { AiPanel } from '@/components/AiPanel';
 
 interface Plant {
   id: string;
@@ -638,6 +639,12 @@ export function Garden() {
           🔬
         </motion.button>
       </div>
+
+      <AiPanel
+        module="kebun"
+        suggestions={['Buatkan daftar tanaman untuk pemula', 'Tanaman mana yang perlu disiram?']}
+        onChanged={() => load()}
+      />
 
       {/* Ringkasan */}
       {summary && summary.total > 0 && (

@@ -5,6 +5,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
 import { NUTRITION_MACROS } from '@/constants/colors';
+import { AiPanel } from '@/components/AiPanel';
 
 interface FoodLog {
   id: string;
@@ -392,6 +393,12 @@ export function Nutrition() {
           </motion.button>
         </div>
       </div>
+
+      <AiPanel
+        module="nutrisi"
+        suggestions={['Protein hari ini cukup?', 'Apa yang sebaiknya kumakan malam ini?']}
+        onChanged={() => load()}
+      />
 
       <h1 className="text-3xl font-extrabold tracking-tight mb-6" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>
         Nutrisi

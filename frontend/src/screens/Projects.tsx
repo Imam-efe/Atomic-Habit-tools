@@ -4,6 +4,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { todayISO } from '@/lib/date';
+import { AiPanel } from '@/components/AiPanel';
 
 interface Task {
   id: string;
@@ -221,6 +222,12 @@ export function Projects() {
           </svg>
         </motion.button>
       </div>
+
+      <AiPanel
+        module="proyek"
+        suggestions={['Tugas apa yang belum selesai?', 'Buat proyek renovasi dengan 3 tugas']}
+        onChanged={() => load()}
+      />
 
       <h1 className="text-3xl font-extrabold tracking-tight mb-6" style={{ color: 'var(--text)', letterSpacing: '-0.6px' }}>
         Projects

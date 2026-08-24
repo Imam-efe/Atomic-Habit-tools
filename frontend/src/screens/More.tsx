@@ -468,6 +468,7 @@ export function More() {
             { label: 'Nutrisi', id: 'nutrition', desc: 'Log makanan & hitung kkal / protein', path: null },
             { label: 'Kalender Haid', id: 'menstrual', desc: 'Pelacakan menstruasi & masa subur', path: null },
             { label: 'Stok & Inventaris', id: 'inventory', desc: 'Manajemen stok makanan & produk', path: null },
+            { label: 'Masakan', id: 'masakan', desc: 'Saran masakan dari bahan yang ada, plus daftar yang kurang', path: null },
             { label: 'Jadwal Anak', id: 'kids-schedule', desc: 'Jadwal pelajaran, rutinitas & aktivitas anak', path: null },
             { label: 'Laporan Keuangan', id: 'financial-report', desc: 'Rekap Laba Rugi, Neraca, & Utang', path: null },
             { label: 'Review Mingguan', id: 'weekly-review', desc: 'Refleksi kebiasaan & penyesuaian mingguan', path: null },

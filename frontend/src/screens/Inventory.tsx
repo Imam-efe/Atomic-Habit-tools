@@ -4,6 +4,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 import { todayISO } from '@/lib/date';
+import { AiPanel } from '@/components/AiPanel';
 
 interface RescueRecipe {
   name: string;
@@ -348,6 +349,12 @@ export function Inventory() {
           </svg>
         </motion.button>
       </div>
+
+      <AiPanel
+        module="inventaris"
+        suggestions={['Bahan apa yang harus segera dipakai?', 'Tambahkan telur 10 butir']}
+        onChanged={() => load()}
+      />
 
       {/* Tabs */}
       <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>

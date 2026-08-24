@@ -569,7 +569,7 @@ const FRESH_DAYS: Record<string, number> = {
  * Kunci utama garden_harvest_stock yang menjaganya: memanggil ulang endpoint
  * perawatan tidak boleh menggandakan stok.
  */
-async function addHarvestToInventory(
+export async function addHarvestToInventory(
   db: D1Database,
   userId: string,
   plantingId: string,
