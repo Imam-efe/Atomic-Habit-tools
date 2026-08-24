@@ -200,17 +200,3 @@ for (const o of OBSERVANCES) {
 export function observancesOn(iso: string): Observance[] {
   return BY_MD.get(iso.slice(5)) ?? [];
 }
-
-/** Every observance in a month (1-12), grouped by day. */
-export function observancesInMonth(month: number): Map<number, Observance[]> {
-  const mm = String(month).padStart(2, '0');
-  const out = new Map<number, Observance[]>();
-  for (const o of OBSERVANCES) {
-    if (!o.md.startsWith(mm + '-')) continue;
-    const day = Number(o.md.slice(3));
-    const list = out.get(day);
-    if (list) list.push(o);
-    else out.set(day, [o]);
-  }
-  return out;
-}

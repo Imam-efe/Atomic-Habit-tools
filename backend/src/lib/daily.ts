@@ -21,6 +21,13 @@ export function shiftDate(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Selisih hari dari `from` ke `to`, keduanya YYYY-MM-DD. Negatif berarti `to` sebelum `from`. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round(
+    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
+  );
+}
+
 export interface DueBill {
   id: string;
   personName: string;
@@ -75,9 +82,7 @@ export async function getBillRadar(
     personName: row.person_name,
     amount: row.amount_idr,
     dueDate: row.due_date,
-    daysUntil: Math.round(
-      (new Date(`${row.due_date}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000
-    ),
+    daysUntil: daysBetween(today, row.due_date),
   }));
 
   const total = bills.reduce((sum, bill) => sum + bill.amount, 0);
@@ -213,8 +218,6 @@ export async function getExpiringItems(
     quantity: row.quantity,
     unit: row.unit,
     expiryDate: row.expiry_date,
-    daysLeft: Math.round(
-      (new Date(`${row.expiry_date}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000
-    ),
+    daysLeft: daysBetween(today, row.expiry_date),
   }));
 }

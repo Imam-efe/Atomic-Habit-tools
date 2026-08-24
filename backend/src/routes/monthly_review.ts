@@ -3,6 +3,7 @@ import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import { runText } from '../lib/ai';
+import { daysInMonth } from '../lib/safe_to_spend';
 
 const monthlyReview = new Hono<AuthContext>();
 monthlyReview.use('/*', requireAuth);
@@ -29,11 +30,6 @@ function prevMonth(month: string): string {
   const [y, m] = month.split('-').map(Number);
   const d = new Date(y, m - 2, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function daysInMonth(month: string): number {
-  const [y, m] = month.split('-').map(Number);
-  return new Date(y, m, 0).getDate();
 }
 
 interface MonthStats {

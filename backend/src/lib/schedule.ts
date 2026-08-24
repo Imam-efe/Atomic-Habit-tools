@@ -148,6 +148,7 @@ export function describeSchedule(spec: ScheduleSpec): string {
         ? `${minutes / 60} jam`
         : `${minutes} menit`;
       const quiet = parseHHMM(spec.quiet_from) !== null && parseHHMM(spec.quiet_to) !== null
+        && spec.quiet_from !== spec.quiet_to
         ? ` (senyap ${spec.quiet_from}–${spec.quiet_to})`
         : '';
       return `Setiap ${every}${quiet}`;

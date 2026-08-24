@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PLANTS } from '../data/plants';
 import { resolveTerm, companionAdvice, findGardenConflicts } from './garden_companion';
-import { seasonOfMonth, parseSeason, prefersEarlySeason, plantingCalendar } from './garden_season';
+import { seasonOfMonth, parseSeason, plantingCalendar } from './garden_season';
 import { fitInArea, fitInBed, potFit } from './garden_space';
 
 const byId = (id: string) => {
@@ -119,10 +119,6 @@ describe('parseSeason', () => {
     expect(parseSeason('entah kapan')).toEqual(['sepanjang-tahun']);
   });
 
-  it('mendeteksi anjuran menanam di awal musim', () => {
-    expect(prefersEarlySeason('Awal musim hujan')).toBe(true);
-    expect(prefersEarlySeason('Kemarau')).toBe(false);
-  });
 });
 
 describe('plantingCalendar', () => {

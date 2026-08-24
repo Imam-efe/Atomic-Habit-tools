@@ -11,6 +11,7 @@
  */
 
 import type { Plant } from '../data/plants';
+import { shiftDate, daysBetween } from './daily';
 
 export interface SuccessionCandidate {
   plantingId: string;
@@ -23,18 +24,6 @@ export interface SuccessionCandidate {
   sowDate: string;
   /** Sisa hari sampai tanggal semai; negatif berarti sudah terlewat. */
   daysUntilSow: number;
-}
-
-function addDays(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
-  );
 }
 
 /**
@@ -78,7 +67,7 @@ export function findSuccessionDue(
     // Hanya sekali cabut. Panen berulang tidak mengosongkan bedengan.
     if (!plant || plant.repeatHarvest) continue;
 
-    const sowDate = addDays(planting.nextHarvest, -sowLeadDays(plant.daysToHarvest[0]));
+    const sowDate = shiftDate(planting.nextHarvest, -sowLeadDays(plant.daysToHarvest[0]));
     const daysUntilSow = daysBetween(today, sowDate);
     if (daysUntilSow > withinDays) continue;
 

@@ -63,29 +63,41 @@ export async function sendPushToUser(
     }),
   };
 
-  for (const row of rows) {
-    try {
-      const payload = await buildPushPayload(payloadObj, {
-        endpoint: row.endpoint,
-        expirationTime: null,
-        keys: { p256dh: row.p256dh, auth: row.auth },
-      }, vapid);
-      setUrgencyHigh(payload.headers);
+  const deliveries = await Promise.allSettled(rows.map(async (row) => {
+    const payload = await buildPushPayload(payloadObj, {
+      endpoint: row.endpoint,
+      expirationTime: null,
+      keys: { p256dh: row.p256dh, auth: row.auth },
+    }, vapid);
+    setUrgencyHigh(payload.headers);
 
-      const res = await fetch(row.endpoint, payload);
-      if (res.ok) {
-        result.sent++;
-      } else {
-        result.failed++;
-        if (res.status === 410 || res.status === 404) {
-          await env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1')
-            .bind(row.endpoint).run();
-        }
-      }
-    } catch (err) {
-      result.failed++;
-      console.error('Push delivery failed', err);
+    const res = await fetch(row.endpoint, payload);
+    if (!res.ok) {
+      const expired = res.status === 410 || res.status === 404;
+      throw Object.assign(new Error(`push failed: ${res.status}`), { endpoint: row.endpoint, expired });
     }
+  }));
+
+  const expiredEndpoints: string[] = [];
+  for (const outcome of deliveries) {
+    if (outcome.status === 'fulfilled') {
+      result.sent++;
+    } else {
+      result.failed++;
+      console.error('Push delivery failed', outcome.reason);
+      const endpoint = (outcome.reason as { endpoint?: string; expired?: boolean })?.endpoint;
+      if (endpoint && (outcome.reason as { expired?: boolean })?.expired) {
+        expiredEndpoints.push(endpoint);
+      }
+    }
+  }
+
+  if (expiredEndpoints.length > 0) {
+    await env.DB.batch(
+      expiredEndpoints.map((endpoint) =>
+        env.DB.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1').bind(endpoint)
+      )
+    );
   }
 
   return result;
