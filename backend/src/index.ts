@@ -27,6 +27,9 @@ import garden, { computeCareState, lastActions, resolvePlants, type PlantingRow 
 import gardenExtra from './routes/garden_extra';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
+import { pendingReviews } from './lib/garden_treatment';
+import { forecastHarvest, expectedCareCount } from './lib/garden_harvest_forecast';
+import { classifyWeather } from './lib/garden_weather_events';
 import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
 import { loadSettings, num, bool } from './lib/settings';
 import { PLANT_BY_ID } from './data/plants';
@@ -53,6 +56,18 @@ import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
+import { daysBetween } from './lib/daily';
+
+/**
+ * Jeda sebelum bibit yang baru berkecambah layak diingatkan untuk dipindah.
+ *
+ * Memindahkan kecambah di hari yang sama ia dihitung justru mematikannya —
+ * akarnya belum cukup untuk menahan guncangan pindah media.
+ */
+const TRANSPLANT_READY_DAYS = 7;
+
+/** Sejauh mana ke depan panen layak diingatkan. Terlalu jauh berarti diabaikan. */
+const HARVEST_NOTICE_DAYS = 3;
 import {
   triggerBillRadar,
   triggerKidsPrep,
@@ -569,6 +584,10 @@ async function triggerGardenCare(env: Env) {
         })
       : { skip: false, reason: '' };
     const rainNote = rain ? wateringNote(rain, num(settings, 'garden.rain_skip_mm')) : null;
+    // Cuaca ekstrem disebut terpisah dari anjuran siram: hujan 60 mm bukan
+    // sekadar "tidak perlu menyiram", melainkan alasan memeriksa genangan —
+    // dan itu penjelasan yang selama ini hilang saat tanaman tiba-tiba mati.
+    const weatherEvent = rain ? classifyWeather(rain) : { kind: 'normal' as const, note: '' };
 
     const [rows, lastMap] = await Promise.all([
       env.DB.prepare(
@@ -629,6 +648,7 @@ async function triggerGardenCare(env: Env) {
     if (rainSkipped > 0) parts.push(`☔ ${rainSkipped} tanaman tidak perlu disiram. ${rainVerdict.reason}`);
     if (fertilize.length) parts.push(`🌿 Pupuk: ${fertilize.join(', ')}`);
     if (harvest.length) parts.push(`🧺 Siap panen: ${harvest.join(', ')}`);
+    if (weatherEvent.note) parts.push(`⚠️ ${weatherEvent.note}`);
 
     const title = harvest.length > 0 ? '🧺 Ada yang siap dipanen!' : '🌱 Kebun perlu dirawat';
     const body = parts.join('\n');
@@ -714,6 +734,186 @@ async function triggerSuccession(env: Env) {
   }
 }
 
+/**
+ * Menagih penilaian penanganan hama, dan mengingatkan bibit yang sudah siap
+ * dipindah tanam.
+ *
+ * Keduanya digabung dalam satu push karena sama-sama pekerjaan kebun yang
+ * tidak mendesak per jam tapi hilang kalau tidak pernah ditanyakan. Kolom
+ * `worked` di garden_pest_log sudah ada sejak awal namun selalu kosong justru
+ * karena tidak ada yang pernah menagihnya; ini yang menutup lingkarannya.
+ */
+async function triggerGardenFollowUp(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT s.user_id
+    FROM push_subscriptions s
+    WHERE EXISTS (SELECT 1 FROM garden_pest_log p WHERE p.user_id = s.user_id AND p.worked IS NULL)
+       OR EXISTS (
+            SELECT 1 FROM garden_sowings g
+             WHERE g.user_id = s.user_id
+               AND g.germinated_count > 0
+               AND g.transplanted_date IS NULL
+          )
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.garden_care')) continue;
+    // Ikut jam perawatan kebun, alasan yang sama dengan semai: satu waktu
+    // buka ponsel untuk semua urusan kebun.
+    if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
+
+    const [pestRows, sowRows] = await Promise.all([
+      env.DB.prepare(
+        `SELECT pest, treatment, spotted_date FROM garden_pest_log
+          WHERE user_id = ?1 AND worked IS NULL`
+      ).bind(userId).all<{ pest: string; treatment: string | null; spotted_date: string }>(),
+      env.DB.prepare(
+        `SELECT name, germinated_count, germinated_date FROM garden_sowings
+          WHERE user_id = ?1 AND germinated_count > 0 AND transplanted_date IS NULL`
+      ).bind(userId).all<{ name: string; germinated_count: number; germinated_date: string | null }>(),
+    ]);
+
+    const reviews = pendingReviews(
+      (pestRows.results ?? []).map((r) => ({
+        pest: r.pest,
+        treatment: r.treatment,
+        worked: null,
+        spottedDate: r.spotted_date,
+        resolvedDate: null,
+      })),
+      today
+    );
+
+    // Bibit baru layak diingatkan setelah beberapa hari, bukan di hari yang
+    // sama ia dihitung — memindahkan kecambah yang masih terlalu muda justru
+    // membunuhnya.
+    const readySeedlings = (sowRows.results ?? []).filter(
+      (r) => r.germinated_date !== null && daysBetween(r.germinated_date, today) >= TRANSPLANT_READY_DAYS
+    );
+
+    if (reviews.length === 0 && readySeedlings.length === 0) continue;
+
+    const lines: string[] = [];
+    for (const r of reviews.slice(0, 3)) {
+      lines.push(`🧪 ${r.pest}${r.treatment ? ` (${r.treatment})` : ''} — berhasil? sudah ${r.daysSince} hari`);
+    }
+    for (const s of readySeedlings.slice(0, 3)) {
+      lines.push(`🌱 ${s.germinated_count} bibit ${s.name} siap dipindah tanam`);
+    }
+
+    const title = reviews.length > 0 && readySeedlings.length > 0
+      ? '🌿 Kebun perlu ditengok'
+      : reviews.length > 0
+        ? '🧪 Penanganan hama berhasil?'
+        : '🌱 Bibit siap pindah tanam';
+    const body = lines.join('\n');
+
+    if (!(await claimDailyAlert(env.DB, userId, 'garden_followup', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'garden_followup', title, body, { url: '/kebun' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/kebun' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'garden_followup', today);
+    }
+  }
+}
+
+/**
+ * Pengingat menjelang panen.
+ *
+ * Memakai perkiraan adaptif, bukan tanggal katalog: tanaman yang perawatannya
+ * tertinggal memang belum siap dipanen di tanggal brosurnya, dan diingatkan
+ * terlalu awal justru mengajari pengguna mengabaikan notifikasi.
+ */
+async function triggerHarvestDue(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT g.user_id
+    FROM garden_plantings g
+    JOIN push_subscriptions s ON s.user_id = g.user_id
+    WHERE g.status = 'tumbuh'
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.garden_care')) continue;
+    if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
+
+    const [plantingRes, careRes] = await Promise.all([
+      env.DB.prepare(
+        `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+                planted_date, expected_harvest_date, status, note
+           FROM garden_plantings WHERE user_id = ?1 AND status = 'tumbuh'`
+      ).bind(userId).all<PlantingRow>(),
+      env.DB.prepare(
+        `SELECT planting_id, action, COUNT(*) AS n FROM garden_care_log
+          WHERE user_id = ?1 AND action IN ('siram','pupuk') GROUP BY planting_id, action`
+      ).bind(userId).all<{ planting_id: string; action: string; n: number }>(),
+    ]);
+
+    const rows = plantingRes.results ?? [];
+    if (rows.length === 0) continue;
+
+    const plants = await resolvePlants(
+      env.DB, rows.map((r) => r.plant_id).filter((id): id is string => !!id)
+    );
+
+    const counts = new Map<string, { siram: number; pupuk: number }>();
+    for (const r of careRes.results ?? []) {
+      const e = counts.get(r.planting_id) ?? { siram: 0, pupuk: 0 };
+      if (r.action === 'siram') e.siram = r.n;
+      if (r.action === 'pupuk') e.pupuk = r.n;
+      counts.set(r.planting_id, e);
+    }
+
+    const due: string[] = [];
+    for (const row of rows) {
+      const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
+      if (!plant) continue;
+
+      const actual = counts.get(row.id) ?? { siram: 0, pupuk: 0 };
+      const forecast = forecastHarvest(
+        row.planted_date,
+        plant.daysToHarvest[0],
+        {
+          waterExpected: expectedCareCount(row.planted_date, today, plant.waterIntervalDays),
+          waterActual: actual.siram,
+          fertilizeExpected: expectedCareCount(row.planted_date, today, plant.fertilizeIntervalDays),
+          fertilizeActual: actual.pupuk,
+        },
+        today,
+        row.expected_harvest_date
+      );
+
+      const daysUntil = daysBetween(today, forecast.estimatedDate);
+      if (daysUntil < 0 || daysUntil > HARVEST_NOTICE_DAYS) continue;
+
+      const label = row.nickname || plant.name || row.custom_name || 'Tanaman';
+      const when = daysUntil === 0 ? 'hari ini' : `${daysUntil} hari lagi`;
+      due.push(`${plant.emoji} ${label} — perkiraan panen ${when}`);
+    }
+
+    if (due.length === 0) continue;
+
+    const title = '🧺 Menjelang panen';
+    const body = `${due.join('\n')}\nSiapkan wadah dan waktu memanennya.`;
+
+    if (!(await claimDailyAlert(env.DB, userId, 'harvest_due', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'harvest_due', title, body, { url: '/kebun' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/kebun' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'harvest_due', today);
+    }
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -729,6 +929,8 @@ const handler = {
       triggerWeeklyRecap(env),
       triggerGardenCare(env).catch((err) => console.error('Garden care push failed', err)),
       triggerSuccession(env).catch((err) => console.error('Succession push failed', err)),
+      triggerGardenFollowUp(env).catch((err) => console.error('Garden follow-up push failed', err)),
+      triggerHarvestDue(env).catch((err) => console.error('Harvest due push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       triggerMorningBrief(env).catch((err) => console.error('Morning brief push failed', err)),
       triggerBillRadar(env).catch((err) => console.error('Bill radar push failed', err)),

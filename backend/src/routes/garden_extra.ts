@@ -32,6 +32,20 @@ import { planSupplies, type SupplyPlanting } from '../lib/garden_supplies';
 import { rankTreatments, pendingReviews, type TreatmentRecord } from '../lib/garden_treatment';
 import { inspectBed, suggestSlot, type Bed, type BedSlot } from '../lib/garden_bed_map';
 import { buildKitchenReport, priceKey, type HarvestEntry } from '../lib/garden_kitchen';
+import {
+  calibrateFromHistory, effectiveDaysToHarvest, type HarvestCycle,
+} from '../lib/garden_calibration';
+import { computeGardenStreak } from '../lib/garden_streak';
+import {
+  computeUnitCosts, type PlantCostEntry, type PlantHarvestEntry, type UnitCost,
+} from '../lib/garden_unit_cost';
+import {
+  planNextSeason, type SeasonCandidate, type EconomicSignal,
+  type FailureSignal, type SeedOnHand, type RotationBlock,
+} from '../lib/garden_next_season';
+import { suggestRecipes } from '../lib/rescue';
+import { classifyWeather } from '../lib/garden_weather_events';
+import { runJson, SCHEMA_MODEL } from '../lib/ai';
 
 const extra = new Hono<AuthContext>();
 extra.use('/*', requireAuth);
@@ -204,6 +218,10 @@ extra.get('/weather', async (c) => {
     skipWatering: verdict.skip,
     reason: verdict.reason,
     note: wateringNote(rain, skipMm),
+    // Kejadian ekstrem disebut terpisah dari anjuran siram — keduanya
+    // menjawab pertanyaan berbeda, dan yang kedua ini yang nanti menjelaskan
+    // kenapa sebuah tanaman gagal.
+    weatherEvent: classifyWeather(rain),
   });
 });
 
@@ -1002,6 +1020,11 @@ extra.get('/harvest-forecast', async (c) => {
     counts.set(r.planting_id, e);
   }
 
+  // Umur panen katalog dikoreksi lebih dulu oleh riwayat panen kebun ini,
+  // baru kemudian dikoreksi kepatuhan perawatan. Urutannya penting: yang
+  // pertama memperbaiki titik berangkatnya, yang kedua memperbaiki jaraknya.
+  const calibrations = await loadCalibrations(c.env.DB, user.sub);
+
   const forecasts = [];
   for (const row of rows) {
     const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
@@ -1009,10 +1032,14 @@ extra.get('/harvest-forecast', async (c) => {
     // dikoreksi, jadi tanaman itu dilewati daripada ditebak.
     if (!plant) continue;
 
+    const { days, calibrated } = effectiveDaysToHarvest(
+      row.plant_id ?? '', plant.daysToHarvest[0], calibrations
+    );
+
     const actual = counts.get(row.id) ?? { siram: 0, pupuk: 0 };
     const forecast = forecastHarvest(
       row.planted_date,
-      plant.daysToHarvest[0],
+      days,
       {
         waterExpected: expectedCareCount(row.planted_date, today, plant.waterIntervalDays),
         waterActual: actual.siram,
@@ -1027,6 +1054,9 @@ extra.get('/harvest-forecast', async (c) => {
       plantingId: row.id,
       name: row.nickname || plant.name || row.custom_name || 'Tanaman',
       emoji: plant.emoji,
+      // Disebut supaya pengguna tahu angkanya sudah belajar dari kebunnya
+      // sendiri, bukan lagi menyalin brosur benih.
+      calibrated,
       ...forecast,
     });
   }
@@ -1410,6 +1440,346 @@ extra.get('/annual-report', async (c) => {
     netIdr: value.harvestValueIdr - costs,
     items: value.items,
     unpricedHarvests: value.unpricedHarvests,
+  });
+});
+
+// ───────────────── #20 KALIBRASI KATALOG DARI PANEN ─────────────────
+
+/**
+ * Umur panen nyata per tanaman, dari penanaman yang benar-benar sampai panen.
+ *
+ * Dipakai bersama oleh endpoint kalibrasi dan perkiraan panen, supaya
+ * keduanya tidak bisa memberi angka yang berbeda untuk tanaman yang sama.
+ */
+async function loadCalibrations(db: D1Database, userId: string) {
+  const rows = await db.prepare(
+    // Panen PERTAMA per penanaman — panen kedua dan seterusnya bukan penanda
+    // umur panen, melainkan panen berulang.
+    `SELECT p.plant_id AS plant_id, p.planted_date AS planted_date,
+            MIN(l.action_date) AS first_harvest
+       FROM garden_care_log l
+       JOIN garden_plantings p ON p.id = l.planting_id
+      WHERE l.user_id = ?1 AND l.action = 'panen' AND p.plant_id IS NOT NULL
+      GROUP BY l.planting_id`
+  ).bind(userId).all<{ plant_id: string; planted_date: string; first_harvest: string }>();
+
+  const cycles: HarvestCycle[] = (rows.results ?? []).map((r) => ({
+    plantId: r.plant_id,
+    plantedDate: r.planted_date,
+    firstHarvestDate: r.first_harvest,
+  }));
+
+  const catalogDays = new Map<string, number>();
+  for (const cyc of cycles) {
+    const plant = PLANT_BY_ID.get(cyc.plantId);
+    if (plant) catalogDays.set(cyc.plantId, plant.daysToHarvest[0]);
+  }
+
+  return calibrateFromHistory(cycles, catalogDays);
+}
+
+// GET /api/garden/calibration — umur panen katalog vs kenyataan di kebun ini
+extra.get('/calibration', async (c) => {
+  const user = c.get('user');
+  const calibrations = await loadCalibrations(c.env.DB, user.sub);
+
+  return c.json({
+    calibrations: calibrations.map((cal) => ({
+      ...cal,
+      name: PLANT_BY_ID.get(cal.plantId)?.name ?? cal.plantId,
+      emoji: PLANT_BY_ID.get(cal.plantId)?.emoji ?? '🌱',
+    })),
+  });
+});
+
+// ───────────────────── #21 STREAK MERAWAT KEBUN ─────────────────────
+
+// GET /api/garden/streak — rentetan hari merawat kebun
+extra.get('/streak', async (c) => {
+  const user = c.get('user');
+  const rows = await c.env.DB.prepare(
+    `SELECT DISTINCT action_date AS date FROM garden_care_log
+      WHERE user_id = ?1 ORDER BY action_date DESC LIMIT 400`
+  ).bind(user.sub).all<{ date: string }>();
+
+  return c.json(computeGardenStreak(rows.results ?? [], jakartaToday()));
+});
+
+// ───────────────────── #22 HPP PER SATUAN PANEN ─────────────────────
+
+/** Biaya dan panen per tanaman, dipakai HPP dan rencana musim depan. */
+async function loadUnitCosts(db: D1Database, userId: string): Promise<UnitCost[]> {
+  const [costRows, harvestRows, priceRows] = await Promise.all([
+    db.prepare(
+      // Biaya tanpa planting_id adalah biaya umum (pupuk sekarung untuk semua
+      // tanaman) — tidak bisa dibebankan ke satu tanaman, jadi dilewati di
+      // sini daripada dibagi rata dengan asumsi yang tidak pernah benar.
+      `SELECT p.plant_id, p.custom_name, cst.amount_idr
+         FROM garden_costs cst
+         JOIN garden_plantings p ON p.id = cst.planting_id
+        WHERE cst.user_id = ?1`
+    ).bind(userId).all<{ plant_id: string | null; custom_name: string | null; amount_idr: number }>(),
+    db.prepare(
+      `SELECT p.plant_id, p.custom_name, l.amount, l.unit
+         FROM garden_care_log l
+         JOIN garden_plantings p ON p.id = l.planting_id
+        WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL`
+    ).bind(userId).all<{ plant_id: string | null; custom_name: string | null; amount: number; unit: string | null }>(),
+    db.prepare('SELECT plant_key, price_idr FROM garden_plant_price WHERE user_id = ?1')
+      .bind(userId).all<{ plant_key: string; price_idr: number }>(),
+  ]);
+
+  const nameOf = (plantId: string | null, custom: string | null) =>
+    (plantId ? PLANT_BY_ID.get(plantId)?.name : undefined) ?? custom ?? 'Tanaman';
+
+  const costs: PlantCostEntry[] = (costRows.results ?? []).map((r) => ({
+    plantKey: priceKey(r.plant_id, r.custom_name),
+    name: nameOf(r.plant_id, r.custom_name),
+    costIdr: r.amount_idr,
+  }));
+
+  const harvests: PlantHarvestEntry[] = (harvestRows.results ?? []).map((r) => ({
+    plantKey: priceKey(r.plant_id, r.custom_name),
+    name: nameOf(r.plant_id, r.custom_name),
+    amount: r.amount,
+    unit: r.unit ?? 'kg',
+  }));
+
+  const prices = new Map<string, number>();
+  for (const p of priceRows.results ?? []) prices.set(p.plant_key, p.price_idr);
+
+  return computeUnitCosts(costs, harvests, prices);
+}
+
+// GET /api/garden/unit-cost — lebih murah menanam sendiri atau membeli?
+extra.get('/unit-cost', async (c) => {
+  const user = c.get('user');
+  return c.json({ plants: await loadUnitCosts(c.env.DB, user.sub) });
+});
+
+// ──────────────────── #23 RENCANA TANAM MUSIM DEPAN ────────────────────
+
+// GET /api/garden/next-season?month= — gabungan rotasi, musim, gagal, HPP, benih
+extra.get('/next-season', async (c) => {
+  const user = c.get('user');
+
+  const monthParam = Number(c.req.query('month'));
+  // Default bulan depan: perencanaan musim tanam memang dilakukan sebelumnya,
+  // bukan di hari tanamnya.
+  const month = Number.isInteger(monthParam) && monthParam >= 1 && monthParam <= 12
+    ? monthParam
+    : (Number(jakartaToday().slice(5, 7)) % 12) + 1;
+
+  const [unitCosts, failedRows, seedRows, rotationRows] = await Promise.all([
+    loadUnitCosts(c.env.DB, user.sub),
+    c.env.DB.prepare(
+      `SELECT plant_id, COUNT(*) AS n FROM garden_plantings
+        WHERE user_id = ?1 AND status = 'gagal' AND plant_id IS NOT NULL
+        GROUP BY plant_id`
+    ).bind(user.sub).all<{ plant_id: string; n: number }>(),
+    c.env.DB.prepare(
+      'SELECT plant_id, name, expiry_date FROM garden_seeds WHERE user_id = ?1'
+    ).bind(user.sub).all<{ plant_id: string | null; name: string; expiry_date: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT id, plant_id, nickname, custom_name, location, planted_date
+         FROM garden_plantings
+        WHERE user_id = ?1 AND plant_id IS NOT NULL AND location IS NOT NULL AND location != ''`
+    ).bind(user.sub).all<{
+      id: string; plant_id: string; nickname: string | null;
+      custom_name: string | null; location: string; planted_date: string;
+    }>(),
+  ]);
+
+  const candidates: SeasonCandidate[] = plantingCalendar(PLANTS, month).map((w) => ({
+    plantId: w.plantId,
+    name: w.name,
+    emoji: w.emoji,
+    fit: w.fit,
+    daysToHarvestMin: w.daysToHarvest[0],
+  }));
+
+  // HPP memakai plant_key (id katalog untuk tanaman berkatalog), dan kandidat
+  // musim selalu berasal dari katalog — jadi keduanya bertemu di id yang sama.
+  const economics: EconomicSignal[] = unitCosts.map((u) => ({
+    plantId: u.plantKey,
+    verdict: u.verdict,
+    savingPerUnitIdr: u.savingPerUnitIdr,
+  }));
+
+  const failures: FailureSignal[] = (failedRows.results ?? []).map((r) => ({
+    plantId: r.plant_id,
+    failures: r.n,
+  }));
+
+  const today = jakartaToday();
+  const seeds: SeedOnHand[] = (seedRows.results ?? []).map((s) => ({
+    plantId: s.plant_id,
+    name: s.name,
+    expired: !!s.expiry_date && s.expiry_date < today,
+  }));
+
+  const history: LocationPlanting[] = (rotationRows.results ?? []).map((r) => ({
+    plantingId: r.id,
+    plantId: r.plant_id,
+    label: PLANT_BY_ID.get(r.plant_id)?.name ?? r.nickname ?? r.custom_name ?? 'Tanaman',
+    location: r.location,
+    plantedDate: r.planted_date,
+  }));
+
+  // Peringatan rotasi yang sudah ada dibaca ulang sebagai larangan lokasi:
+  // satu sumber kebenaran untuk aturan famili, dipakai di dua tempat.
+  const rotationBlocks: RotationBlock[] = checkRotation(history).map((w) => ({
+    location: w.location,
+    plantId: history.find((h) => h.plantingId === w.plantingId)?.plantId ?? '',
+    reason: w.message,
+  }));
+
+  return c.json({
+    month,
+    plan: planNextSeason(candidates, economics, failures, seeds, rotationBlocks),
+  });
+});
+
+// ─────────────────── #24 PANEN JADI SARAN MASAK ───────────────────
+
+// GET /api/garden/harvest-recipes?days= — masak apa dari panen belakangan ini
+extra.get('/harvest-recipes', async (c) => {
+  const user = c.get('user');
+  const today = jakartaToday();
+  const daysParam = Number(c.req.query('days'));
+  const days = Number.isFinite(daysParam) && daysParam > 0 && daysParam <= 30 ? daysParam : 3;
+  const since = new Date(new Date(`${today}T00:00:00Z`).getTime() - days * 86400000)
+    .toISOString().slice(0, 10);
+
+  const rows = await c.env.DB.prepare(
+    `SELECT p.plant_id, p.nickname, p.custom_name, l.amount, l.unit, l.action_date
+       FROM garden_care_log l
+       JOIN garden_plantings p ON p.id = l.planting_id
+      WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL
+        AND l.action_date >= ?2`
+  ).bind(user.sub, since).all<{
+    plant_id: string | null; nickname: string | null; custom_name: string | null;
+    amount: number; unit: string | null; action_date: string;
+  }>();
+
+  const harvests = rows.results ?? [];
+  if (harvests.length === 0) {
+    return c.json({ since, harvests: [], recipes: [] });
+  }
+
+  // Bentuknya dicocokkan dengan ExpiringItem supaya bisa memakai suggestRecipes
+  // yang sudah ada — panen segar dan bahan mau kedaluwarsa sama-sama "bahan
+  // yang ada di tangan sekarang", jadi tidak perlu prompt kedua.
+  const items = harvests.map((h, i) => ({
+    id: `${i}`,
+    name: (h.plant_id ? PLANT_BY_ID.get(h.plant_id)?.name : undefined)
+      ?? h.nickname ?? h.custom_name ?? 'hasil panen',
+    quantity: h.amount,
+    unit: h.unit ?? 'kg',
+    expiryDate: h.action_date,
+    // Panen segar tidak sedang dikejar tanggal kedaluwarsa; 0 membuat
+    // suggestRecipes menyebutnya "hari ini" alih-alih "sudah lewat".
+    daysLeft: 0,
+  }));
+
+  let recipes: Awaited<ReturnType<typeof suggestRecipes>> = [];
+  try {
+    recipes = await suggestRecipes(c.env, items);
+  } catch (err) {
+    console.error('Harvest recipes failed', err);
+    return c.json({ error: 'AI service unavailable', detail: String(err) }, 502);
+  }
+
+  return c.json({
+    since,
+    harvests: items.map((i) => ({ name: i.name, amount: i.quantity, unit: i.unit })),
+    recipes,
+  });
+});
+
+// ────────────── #25 BANDINGKAN FOTO PERTUMBUHAN (AI) ──────────────
+
+interface RawGrowthCheck {
+  verdict?: string;
+  observation?: string;
+  concern?: string;
+  action?: string;
+}
+
+const GROWTH_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['tumbuh-baik', 'lambat', 'bermasalah'] },
+    observation: { type: 'string', description: 'Apa yang berubah antara dua foto, 1-2 kalimat' },
+    concern: { type: 'string', description: 'Hal yang perlu diwaspadai, kosongkan kalau tidak ada' },
+    action: { type: 'string', description: 'Satu langkah paling berguna untuk minggu ini' },
+  },
+  required: ['verdict', 'observation'],
+} as const;
+
+// POST /api/garden/:id/growth-check — bandingkan dua foto jurnal dengan AI
+extra.post('/:id/growth-check', async (c) => {
+  const user = c.get('user');
+  const plantingId = c.req.param('id');
+
+  const photos = await c.env.DB.prepare(
+    `SELECT id, image, taken_date FROM garden_photos
+      WHERE planting_id = ?1 AND user_id = ?2 ORDER BY taken_date ASC`
+  ).bind(plantingId, user.sub).all<{ id: string; image: string; taken_date: string }>();
+
+  const list = photos.results ?? [];
+  if (list.length < 2) {
+    return c.json({ error: 'Butuh minimal dua foto jurnal untuk dibandingkan' }, 422);
+  }
+
+  const before = list[0];
+  const after = list[list.length - 1];
+  const gapDays = Math.max(0, Math.round(
+    (new Date(`${after.taken_date}T00:00:00Z`).getTime()
+      - new Date(`${before.taken_date}T00:00:00Z`).getTime()) / 86400000
+  ));
+
+  let raw: RawGrowthCheck | null = null;
+  try {
+    raw = await runJson<RawGrowthCheck>(
+      c.env,
+      [
+        {
+          role: 'system',
+          content: 'Kamu ahli hortikultura Indonesia. Kamu diberi dua foto tanaman yang sama: foto pertama lebih lama, foto kedua lebih baru. Nilai perkembangannya. Jawab dalam Bahasa Indonesia, ringkas, dan jujur kalau fotonya tidak cukup jelas untuk dinilai.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: `Jarak antara kedua foto ${gapDays} hari. Foto pertama (lebih lama):` },
+            { type: 'image_url', image_url: { url: before.image } },
+            { type: 'text', text: 'Foto kedua (lebih baru):' },
+            { type: 'image_url', image_url: { url: after.image } },
+          ],
+        },
+      ],
+      GROWTH_SCHEMA as unknown as Record<string, unknown>,
+      { model: SCHEMA_MODEL, maxTokens: 500 }
+    );
+  } catch (err) {
+    console.error('Growth check failed', err);
+    return c.json({ error: 'AI service unavailable', detail: String(err) }, 502);
+  }
+
+  if (!raw?.observation) {
+    return c.json({ error: 'Tidak bisa menilai dari kedua foto ini' }, 422);
+  }
+
+  return c.json({
+    fromDate: before.taken_date,
+    toDate: after.taken_date,
+    gapDays,
+    verdict: ['tumbuh-baik', 'lambat', 'bermasalah'].includes(raw.verdict ?? '')
+      ? raw.verdict
+      : 'tumbuh-baik',
+    observation: raw.observation.slice(0, 400),
+    concern: (raw.concern ?? '').slice(0, 300),
+    action: (raw.action ?? '').slice(0, 300),
   });
 });
 

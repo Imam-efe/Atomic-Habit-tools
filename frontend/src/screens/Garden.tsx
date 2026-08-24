@@ -153,6 +153,28 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 const METHODS = ['benih', 'bibit', 'stek', 'umbi'];
 
 /** Pertanyaan siap-pakai — satu ketuk untuk sudut pandang insight yang berbeda. */
+interface GrowthCheck {
+  fromDate: string;
+  toDate: string;
+  gapDays: number;
+  verdict: string;
+  observation: string;
+  concern: string;
+  action: string;
+}
+
+const GROWTH_LABEL: Record<string, string> = {
+  'tumbuh-baik': '✅ Tumbuh baik',
+  lambat: '🐌 Pertumbuhan lambat',
+  bermasalah: '⚠️ Ada masalah',
+};
+
+const GROWTH_COLOR: Record<string, string> = {
+  'tumbuh-baik': 'var(--pos)',
+  lambat: 'var(--warn)',
+  bermasalah: 'var(--neg)',
+};
+
 const QUICK_QUESTIONS = [
   'Kapan waktu terbaik panen?',
   'Kenapa pertumbuhannya lambat?',
@@ -234,6 +256,10 @@ export function Garden() {
   // Jurnal foto — timeline pertumbuhan per tanaman.
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Penilaian pertumbuhan dari dua foto jurnal.
+  const [growth, setGrowth] = useState<GrowthCheck | null>(null);
+  const [growthLoading, setGrowthLoading] = useState(false);
 
   // Tanya AI bebas dengan konteks tanaman yang sedang dibuka.
   const [askQuestion, setAskQuestion] = useState('');
@@ -359,6 +385,9 @@ export function Garden() {
     setInsight('');
     setAskQuestion('');
     setAskAnswer('');
+    // Tanpa ini, penilaian pertumbuhan tanaman sebelumnya ikut terbawa dan
+    // terbaca sebagai penilaian tanaman yang baru dibuka.
+    setGrowth(null);
     loadCareLogs(plantingId);
     loadPhotos(plantingId);
   };
@@ -378,6 +407,20 @@ export function Garden() {
       setAskAnswer('Gagal menjawab. Coba lagi nanti.');
     }
     setAsking(false);
+  };
+
+  const handleGrowthCheck = async (plantingId: string) => {
+    setGrowthLoading(true);
+    setGrowth(null);
+    try {
+      setGrowth(await apiFetch<GrowthCheck>(`/garden/${plantingId}/growth-check`, { method: 'POST' }));
+    } catch {
+      setGrowth({
+        fromDate: '', toDate: '', gapDays: 0, verdict: 'bermasalah',
+        observation: 'Gagal menilai foto. Coba lagi nanti.', concern: '', action: '',
+      });
+    }
+    setGrowthLoading(false);
   };
 
   const handleAddJournalPhoto = async (plantingId: string, file: File) => {
@@ -877,6 +920,47 @@ export function Garden() {
                                 );
                               })}
                             </div>
+                          )}
+
+                          {/* Dua foto sudah cukup untuk dibandingkan — di situlah
+                              jurnal foto berhenti jadi album dan mulai menjawab
+                              "tanamanku maju atau jalan di tempat?". */}
+                          {photos.length >= 2 && (
+                            <>
+                              <button
+                                className="w-full mt-2 py-2 rounded-xl text-[11px] font-bold"
+                                style={{
+                                  background: 'var(--bg)',
+                                  color: growthLoading ? 'var(--text3)' : 'var(--accent)',
+                                  boxShadow: 'var(--neu-raised-sm)',
+                                }}
+                                onClick={() => handleGrowthCheck(p.id)}
+                                disabled={growthLoading}
+                              >
+                                {growthLoading ? 'Membandingkan...' : '✨ Bandingkan foto pertama & terakhir'}
+                              </button>
+                              {growth && (
+                                <div className="rounded-xl p-2.5 mt-2" style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}>
+                                  <p className="text-[10px] font-bold uppercase tracking-wide"
+                                    style={{ color: GROWTH_COLOR[growth.verdict] ?? 'var(--text2)' }}>
+                                    {GROWTH_LABEL[growth.verdict] ?? growth.verdict} · rentang {growth.gapDays} hari
+                                  </p>
+                                  <p className="text-[11px] leading-relaxed mt-1" style={{ color: 'var(--text)' }}>
+                                    {growth.observation}
+                                  </p>
+                                  {growth.concern && (
+                                    <p className="text-[11px] leading-relaxed mt-1" style={{ color: 'var(--warn)' }}>
+                                      ⚠️ {growth.concern}
+                                    </p>
+                                  )}
+                                  {growth.action && (
+                                    <p className="text-[11px] leading-relaxed mt-1" style={{ color: 'var(--text2)' }}>
+                                      → {growth.action}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
 
