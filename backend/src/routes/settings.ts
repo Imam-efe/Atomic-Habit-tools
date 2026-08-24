@@ -44,11 +44,11 @@ const DATA_TABLES: Array<{ table: string; label: string; group: string; userScop
  */
 const PURGEABLE: Array<{ table: string; label: string; userScoped: boolean; ageColumn: string }> = [
   { table: 'notification_events', label: 'Riwayat notifikasi', userScoped: true, ageColumn: 'created_at' },
-  { table: 'notification_deliveries', label: 'Riwayat pengiriman', userScoped: false, ageColumn: 'fired_at' },
+  { table: 'notification_deliveries', label: 'Riwayat pengiriman', userScoped: true, ageColumn: 'fired_at' },
   { table: 'daily_alert_sent', label: 'Penanda alert harian', userScoped: true, ageColumn: 'sent_at' },
   { table: 'garden_care_alert_sent', label: 'Penanda alert kebun', userScoped: false, ageColumn: 'sent_at' },
   { table: 'garden_weather_cache', label: 'Cache cuaca', userScoped: false, ageColumn: 'fetched_at' },
-  { table: 'food_cache', label: 'Cache pencarian makanan', userScoped: false, ageColumn: 'created_at' },
+  { table: 'food_facts_cache', label: 'Cache pencarian makanan', userScoped: false, ageColumn: 'created_at' },
 ];
 
 // GET /api/settings — skema beserta nilai yang berlaku

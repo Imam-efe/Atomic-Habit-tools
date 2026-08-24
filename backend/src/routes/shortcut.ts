@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { validate } from '../lib/validate';
+import { updateHabitStreak } from './habits';
 
 type ShortcutContext = {
   Variables: {
@@ -134,8 +135,8 @@ shortcut.post('/habits/toggle', requireShortcutToken, async (c) => {
 
   // Find habit by name
   const habit = (await c.env.DB.prepare(
-    'SELECT id, name, streak, last_completed_date FROM habits WHERE lower(name) = lower(?1) AND user_id = ?2'
-  ).bind(hName, user.id).first()) as { id: string; name: string; streak: number; last_completed_date: string | null } | null;
+    'SELECT id, name FROM habits WHERE lower(name) = lower(?1) AND user_id = ?2'
+  ).bind(hName, user.id).first()) as { id: string; name: string } | null;
 
   if (!habit) {
     return c.json({ error: `Habit "${hName}" not found` }, 404);
@@ -151,15 +152,7 @@ shortcut.post('/habits/toggle', requireShortcutToken, async (c) => {
   if (existing) {
     // Uncheck habit
     await c.env.DB.prepare('DELETE FROM habit_completions WHERE id = ?1').bind(existing.id).run();
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const yesterdayDone = await c.env.DB.prepare(
-      'SELECT id FROM habit_completions WHERE habit_id = ?1 AND completed_date = ?2'
-    ).bind(habit.id, yesterday).first();
-
-    const newStreak = yesterdayDone ? Math.max(0, habit.streak - 1) : 0;
-    await c.env.DB.prepare('UPDATE habits SET streak = ?1, last_completed_date = ?2 WHERE id = ?3')
-      .bind(newStreak, yesterdayDone ? yesterday : null, habit.id).run();
-
+    const newStreak = await updateHabitStreak(c.env.DB, habit.id, today);
     return c.json({ success: true, habitName: habit.name, doneToday: false, streak: newStreak });
   } else {
     // Check habit
@@ -169,11 +162,7 @@ shortcut.post('/habits/toggle', requireShortcutToken, async (c) => {
       'INSERT INTO habit_completions (id, habit_id, user_id, completed_date, created_at) VALUES (?1, ?2, ?3, ?4, ?5)'
     ).bind(compId, habit.id, user.id, today, now).run();
 
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const newStreak = habit.last_completed_date === yesterday ? habit.streak + 1 : 1;
-    await c.env.DB.prepare('UPDATE habits SET streak = ?1, last_completed_date = ?2 WHERE id = ?3')
-      .bind(newStreak, today, habit.id).run();
-
+    const newStreak = await updateHabitStreak(c.env.DB, habit.id, today);
     return c.json({ success: true, habitName: habit.name, doneToday: true, streak: newStreak });
   }
 });

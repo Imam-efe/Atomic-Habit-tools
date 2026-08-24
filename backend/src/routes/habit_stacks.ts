@@ -102,11 +102,13 @@ app.post('/', async (c) => {
     `).bind(stackId, user_id, body.name.trim(), body.description || null, now).run();
 
     // Add habits to stack
-    for (let i = 0; i < habitIds.length; i++) {
-      await db.prepare(`
-        INSERT INTO habit_stack_items (id, stack_id, habit_id, position, created_at)
-        VALUES (?1, ?2, ?3, ?4, ?5)
-      `).bind(nanoid(), stackId, habitIds[i], i + 1, now).run();
+    if (habitIds.length > 0) {
+      await db.batch(habitIds.map((habitId, i) =>
+        db.prepare(`
+          INSERT INTO habit_stack_items (id, stack_id, habit_id, position, created_at)
+          VALUES (?1, ?2, ?3, ?4, ?5)
+        `).bind(nanoid(), stackId, habitId, i + 1, now)
+      ));
     }
 
     return c.json({ id: stackId, success: true });
@@ -179,11 +181,13 @@ app.put('/:id', async (c) => {
       await db.prepare('DELETE FROM habit_stack_items WHERE stack_id = ?1').bind(stack_id).run();
 
       const now = Math.floor(Date.now() / 1000);
-      for (let i = 0; i < habitIds.length; i++) {
-        await db.prepare(`
-          INSERT INTO habit_stack_items (id, stack_id, habit_id, position, created_at)
-          VALUES (?1, ?2, ?3, ?4, ?5)
-        `).bind(nanoid(), stack_id, habitIds[i], i + 1, now).run();
+      if (habitIds.length > 0) {
+        await db.batch(habitIds.map((habitId, i) =>
+          db.prepare(`
+            INSERT INTO habit_stack_items (id, stack_id, habit_id, position, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+          `).bind(nanoid(), stack_id, habitId, i + 1, now)
+        ));
       }
     }
 
