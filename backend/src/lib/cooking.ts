@@ -160,6 +160,54 @@ export function bacaResep(payload: unknown, stok: readonly StockItem[]): RecipeS
   return out.sort((a, b) => b.readiness - a.readiness);
 }
 
+export interface PlannedDay {
+  /** YYYY-MM-DD. */
+  date: string;
+  recipe: RecipeSuggestion;
+}
+
+/**
+ * Baca rencana mingguan, lalu satukan bahan kurangnya jadi satu daftar.
+ *
+ * Inilah gunanya merencanakan seminggu sekaligus alih-alih tujuh kali sehari:
+ * bawang yang kurang di tiga resep adalah satu baris di daftar belanja, bukan
+ * tiga. Tanpa penyatuan ini pengguna berdiri di pasar membaca daftar yang
+ * menyebut bahan yang sama berulang kali dengan penulisan sedikit berbeda.
+ */
+export function bacaRencana(
+  payload: unknown,
+  stok: readonly StockItem[],
+  tanggalMulai: string
+): { days: PlannedDay[]; shoppingList: string[] } {
+  const raw = (payload as { rencana?: unknown })?.rencana;
+  if (!Array.isArray(raw)) return { days: [], shoppingList: [] };
+
+  const days: PlannedDay[] = [];
+  const belanja: string[] = [];
+  const mulai = Date.parse(`${tanggalMulai}T00:00:00Z`);
+
+  for (const [index, item] of raw.slice(0, 7).entries()) {
+    if (typeof item !== 'object' || item === null) continue;
+
+    // Satu entri rencana dibaca dengan pembaca resep yang sama, supaya
+    // pemilahan ada/kurang tunduk pada aturan yang persis sama.
+    const [recipe] = bacaResep({ resep: [item] }, stok);
+    if (!recipe) continue;
+
+    const date = Number.isNaN(mulai)
+      ? tanggalMulai
+      : new Date(mulai + index * 86400000).toISOString().slice(0, 10);
+
+    days.push({ date, recipe });
+
+    for (const b of recipe.missing) {
+      if (!belanja.some((x) => normalkan(x) === normalkan(b))) belanja.push(b);
+    }
+  }
+
+  return { days, shoppingList: belanja };
+}
+
 /**
  * Urutkan stok untuk dimasukkan ke prompt.
  *

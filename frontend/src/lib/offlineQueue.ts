@@ -92,6 +92,21 @@ export interface FlushResult {
   remaining: number;
 }
 
+/**
+ * Antrean yang sedang di-flush, dikunci per akun.
+ *
+ * Penjaganya harus di tingkat modul, bukan di dalam `queueFor`: panel AI ada
+ * di sepuluh layar dan layar Kebun punya flush-nya sendiri, jadi satu
+ * peristiwa `online` membangunkan belasan pemanggil sekaligus. Kalau tiap
+ * pemanggil memegang penjaganya sendiri, semuanya mengira dialah satu-satunya
+ * dan antrean yang sama dikirim berkali-kali.
+ *
+ * Server memang menolak kiriman ulang lewat clientId, jadi tidak ada baris
+ * ganda — tapi mengandalkan itu berarti setiap endpoint baru yang diantre
+ * harus ikut mengingat aturannya, dan yang lupa akan menulis dua kali.
+ */
+const flushingKeys = new Set<string>();
+
 export interface OfflineQueue {
   size(): number;
   /** Benar bila entri baru masuk; salah bila permintaan yang sama sudah antre. */
@@ -108,9 +123,6 @@ export interface OfflineQueue {
  */
 export function queueFor(userId: string): OfflineQueue {
   const storageKey = `${STORAGE_PREFIX}:${userId}`;
-  // Penjaga flush ganda: layar ini memanggil flush saat dibuka DAN saat
-  // peristiwa `online`, yang bisa terjadi hampir bersamaan.
-  let flushing = false;
 
   function read(): QueuedWrite[] {
     try {
@@ -177,11 +189,11 @@ export function queueFor(userId: string): OfflineQueue {
     },
 
     async flush(send) {
-      if (flushing) return { sent: 0, failed: 0, remaining: read().length };
+      if (flushingKeys.has(storageKey)) return { sent: 0, failed: 0, remaining: read().length };
       const snapshot = read();
       if (snapshot.length === 0) return { sent: 0, failed: 0, remaining: 0 };
 
-      flushing = true;
+      flushingKeys.add(storageKey);
       const done = new Set<string>();
       const attempted = new Map<string, number>();
       let sent = 0;
@@ -216,7 +228,7 @@ export function queueFor(userId: string): OfflineQueue {
           }
         }
       } finally {
-        flushing = false;
+        flushingKeys.delete(storageKey);
       }
 
       // Dibaca ulang, bukan memakai `snapshot`: pengguna bisa mencatat

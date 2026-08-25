@@ -42,6 +42,11 @@ interface Recipe {
   readiness: number;
 }
 
+interface PlannedDay {
+  date: string;
+  recipe: Recipe;
+}
+
 interface SavedRecipe extends Omit<Recipe, 'readiness'> {
   id: string;
   note: string | null;
@@ -78,6 +83,11 @@ export function Masakan() {
   const [error, setError] = useState('');
   const [openRecipe, setOpenRecipe] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Rencana mingguan: tujuh hari sekaligus, dan satu daftar belanja untuk
+  // semuanya — bukan tujuh tugas belanja terpisah.
+  const [plan, setPlan] = useState<{ days: PlannedDay[]; shoppingList: string[] } | null>(null);
+  const [planning, setPlanning] = useState(false);
 
   const loadIngredients = async () => {
     try {
@@ -175,10 +185,32 @@ export function Masakan() {
       if (Number.isFinite(jumlah) && jumlah > 0) used.push({ name: bahan, quantity: jumlah });
     }
 
+    // Masak lalu makan adalah satu peristiwa. Mencatatnya dua kali — sekali di
+    // sini, sekali lagi di Nutrisi — membuat yang kedua hampir selalu terlewat,
+    // dan log makan jadi bolong justru di hari pengguna benar-benar memasak.
+    //
+    // Kalorinya ditanyakan, tidak ditebak: resep tidak menyimpan gizi, dan
+    // mengarang angka lebih buruk daripada tidak mencatat.
+    let meal: { portion: string; calories?: number } | undefined;
+    const kalori = window.prompt(
+      `Catat ${r.name} ke log makan hari ini? Isi perkiraan kalorinya, atau kosongkan untuk melewati.`
+    );
+    if (kalori !== null && kalori.trim()) {
+      const n = Number(kalori.replace(/[^\d.]/g, ''));
+      meal = {
+        portion: r.servings ? `1 dari ${r.servings} porsi` : '1 porsi',
+        ...(Number.isFinite(n) && n > 0 ? { calories: n } : {}),
+      };
+    }
+
     setBusyId(r.id);
     try {
-      await apiFetch(`/cooking/recipes/${r.id}/cook`, { method: 'POST', body: JSON.stringify({ used }) });
+      const res = await apiFetch<{ mealLogged: boolean }>(`/cooking/recipes/${r.id}/cook`, {
+        method: 'POST',
+        body: JSON.stringify({ used, meal }),
+      });
       await Promise.all([loadSaved(), loadIngredients()]);
+      if (res.mealLogged) setMessage(`${r.name} masuk log makan hari ini.`);
     } catch {
       setError('Gagal menandai sudah dimasak.');
     }
@@ -205,6 +237,41 @@ export function Masakan() {
       setError('Gagal menghapus resep.');
     }
     setBusyId(null);
+  };
+
+  const buatRencana = async () => {
+    setPlanning(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await apiFetch<{ days: PlannedDay[]; shoppingList: string[] }>('/cooking/plan', {
+        method: 'POST',
+        body: JSON.stringify({ note: craving.trim() || undefined }),
+      });
+      setPlan(res);
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.body.message ?? err.body.error ?? 'Gagal menyusun rencana.'
+          : 'Tidak ada jaringan.'
+      );
+    }
+    setPlanning(false);
+  };
+
+  const belanjaMingguan = async () => {
+    if (!plan || plan.shoppingList.length === 0) return;
+    setPlanning(true);
+    try {
+      await apiFetch('/cooking/plan/shop', {
+        method: 'POST',
+        body: JSON.stringify({ items: plan.shoppingList }),
+      });
+      setMessage(`Satu tugas belanja berisi ${plan.shoppingList.length} bahan masuk ke Kalender.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.body.error ?? 'Gagal membuat tugas belanja.' : 'Tidak ada jaringan.');
+    }
+    setPlanning(false);
   };
 
   const dipilih = picked.size + extra.length;
@@ -332,10 +399,71 @@ export function Masakan() {
           >
             {loading ? 'Memikirkan…' : dipilih > 0 ? `Cari masakan dari ${dipilih} bahan` : 'Cari masakan dari semua bahan'}
           </button>
+
+          <button
+            className="w-full py-2.5 rounded-xl text-[12px] font-bold disabled:opacity-50"
+            style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+            onClick={buatRencana}
+            disabled={planning}
+          >
+            {planning ? 'Menyusun…' : 'Susun rencana 7 hari'}
+          </button>
         </div>
 
         {error && <p className="text-[11px]" style={{ color: 'var(--neg)' }}>{error}</p>}
         {message && <p className="text-[11px]" style={{ color: 'var(--text2)' }}>{message}</p>}
+
+        {/* Rencana mingguan */}
+        {plan && plan.days.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: 'var(--text3)' }}>
+              Rencana {plan.days.length} hari
+            </p>
+
+            {plan.shoppingList.length > 0 && (
+              <div className="rounded-2xl p-3.5 space-y-2" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+                <p className="text-[12px] font-bold" style={{ color: 'var(--text)' }}>
+                  Belanja untuk seminggu · {plan.shoppingList.length} bahan
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--text2)' }}>
+                  {plan.shoppingList.join(', ')}
+                </p>
+                <button
+                  className="neu-cta px-3 py-2 rounded-xl text-[11px] font-bold text-white disabled:opacity-50"
+                  style={{ background: 'var(--accentFill)' }}
+                  onClick={belanjaMingguan}
+                  disabled={planning}
+                >
+                  Kirim ke Kalender sebagai satu tugas
+                </button>
+              </div>
+            )}
+
+            {plan.days.map((d) => (
+              <div key={d.date} className="rounded-2xl p-3 flex items-center justify-between gap-2"
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+                <div className="min-w-0">
+                  <p className="text-[10px]" style={{ color: 'var(--text3)' }}>{d.date}</p>
+                  <p className="text-[12px] font-semibold truncate" style={{ color: 'var(--text)' }}>
+                    {d.recipe.name}
+                  </p>
+                  {d.recipe.missing.length > 0 && (
+                    <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
+                      perlu beli: {d.recipe.missing.join(', ')}
+                    </p>
+                  )}
+                </div>
+                <button
+                  className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex-shrink-0"
+                  style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-inset)' }}
+                  onClick={() => save(d.recipe)}
+                >
+                  Simpan
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Hasil saran */}
         {recipes.length > 0 && (

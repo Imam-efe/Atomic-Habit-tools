@@ -51,6 +51,14 @@ export interface ToolResult {
   ringkasan: string;
   /** Id baris yang dibuat, supaya UI bisa menawarkan pembatalan. */
   ids?: string[];
+  /**
+   * Keadaan sebelumnya yang perlu diketahui untuk membatalkan.
+   *
+   * Hanya alat yang mengubah baris di luar yang dibuatnya sendiri yang
+   * mengisinya — menghapus baris baru saja tidak cukup kalau alatnya juga
+   * sempat menaikkan status sesuatu.
+   */
+  undoMeta?: Record<string, unknown>;
 }
 
 export interface AgentTool {
@@ -63,6 +71,24 @@ export interface AgentTool {
   args: Record<string, unknown>;
   required: string[];
   run(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult>;
+
+  /**
+   * Tabel tempat alat ini membuat baris.
+   *
+   * Pembatalan bawaan menghapus id yang tercatat dari tabel ini, jadi
+   * sebagian besar alat tidak perlu menulis kode pembatalan sama sekali.
+   * Namanya berasal dari daftar tertutup di berkas ini, bukan dari masukan
+   * siapa pun, dan ada uji yang memastikan tabelnya benar-benar ada.
+   */
+  table: string;
+
+  /**
+   * Pembatalan khusus, untuk alat yang efeknya lebih dari sekadar baris baru.
+   *
+   * Dipanggil SEBELUM baris utamanya dihapus, supaya masih bisa membaca
+   * apa pun yang menggantung padanya.
+   */
+  undo?(ctx: ToolContext, ids: string[], meta: Record<string, unknown>): Promise<void>;
 }
 
 /** Galat yang pesannya memang ditujukan untuk dibaca pengguna. */
@@ -142,6 +168,7 @@ export function cocokkanTanaman(nama: string): string | null {
 const tools: AgentTool[] = [
   {
     name: 'kebun.tanam',
+    table: 'garden_plantings',
     module: 'kebun',
     risk: 'aman',
     description:
@@ -194,6 +221,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'kebun.rawat',
+    table: 'garden_care_log',
     module: 'kebun',
     risk: 'aman',
     description:
@@ -255,12 +283,56 @@ const tools: AgentTool[] = [
       }
 
       const catatan = stockItemId ? ' Hasilnya masuk Inventaris.' : '';
-      return { ringkasan: `${aksi} untuk ${nama} dicatat.${catatan}`, ids: [id] };
+      return {
+        ringkasan: `${aksi} untuk ${nama} dicatat.${catatan}`,
+        ids: [id],
+        // Status sebelum panen disimpan: tanpa ini pembatalan tidak tahu
+        // apakah tanaman ini memang sudah berstatus 'panen' sejak sebelumnya.
+        undoMeta: { plantingId: target.id, statusSebelum: target.status },
+      };
+    },
+
+    /**
+     * Membatalkan panen berarti mengembalikan tiga hal, bukan satu.
+     *
+     * Log perawatannya dihapus pembatalan bawaan, tapi panen juga menaikkan
+     * status tanaman dan membuat baris stok di Inventaris. Membiarkan
+     * keduanya menghasilkan keadaan yang tidak pernah bisa dijelaskan:
+     * tanaman berstatus panen tanpa catatan panen, dan stok dapur yang
+     * asalnya sudah tidak ada.
+     */
+    async undo(ctx, ids, meta) {
+      const plantingId = typeof meta.plantingId === 'string' ? meta.plantingId : null;
+      const statusSebelum = typeof meta.statusSebelum === 'string' ? meta.statusSebelum : null;
+
+      // Stok hasil panen ditelusuri lewat baris klaim yang dibuat saat panen.
+      for (const careLogId of ids) {
+        const klaim = await ctx.db.prepare(
+          'SELECT inventory_item_id FROM garden_harvest_stock WHERE care_log_id = ?1 AND user_id = ?2'
+        ).bind(careLogId, ctx.userId).first<{ inventory_item_id: string }>();
+
+        if (klaim) {
+          await ctx.db.batch([
+            ctx.db.prepare('DELETE FROM inventory_items WHERE id = ?1 AND user_id = ?2')
+              .bind(klaim.inventory_item_id, ctx.userId),
+            ctx.db.prepare('DELETE FROM garden_harvest_stock WHERE care_log_id = ?1 AND user_id = ?2')
+              .bind(careLogId, ctx.userId),
+          ]);
+        }
+      }
+
+      // Status hanya diturunkan kalau aksi ini yang menaikkannya.
+      if (plantingId && statusSebelum === 'tumbuh') {
+        await ctx.db.prepare(
+          "UPDATE garden_plantings SET status = 'tumbuh' WHERE id = ?1 AND user_id = ?2 AND status = 'panen'"
+        ).bind(plantingId, ctx.userId).run();
+      }
     },
   },
 
   {
     name: 'inventaris.tambah',
+    table: 'inventory_items',
     module: 'inventaris',
     risk: 'aman',
     description: 'Menambahkan barang ke inventaris dapur/rumah, misalnya hasil belanja.',
@@ -320,6 +392,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'kebiasaan.buat',
+    table: 'habits',
     module: 'kebiasaan',
     risk: 'aman',
     description:
@@ -377,6 +450,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'kalender.tambah',
+    table: 'calendar_events',
     module: 'kalender',
     risk: 'aman',
     description: 'Menambahkan agenda, tugas, atau pengingat ke kalender.',
@@ -409,6 +483,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'catatan.buat',
+    table: 'notes',
     module: 'catatan',
     risk: 'aman',
     description: 'Menyimpan catatan bebas. Pakai kalau pengguna minta sesuatu dicatat, dirangkum, atau disimpan untuk dibaca lagi nanti.',
@@ -431,6 +506,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'proyek.tambah_tugas',
+    table: 'tasks',
     module: 'proyek',
     risk: 'aman',
     description: 'Menambahkan tugas ke sebuah proyek. Proyek dibuat otomatis kalau namanya belum ada.',
@@ -475,6 +551,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'nutrisi.catat_makan',
+    table: 'food_logs',
     module: 'nutrisi',
     risk: 'aman',
     description:
@@ -536,6 +613,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'masakan.simpan_resep',
+    table: 'cooking_recipes',
     module: 'masakan',
     risk: 'aman',
     description:
@@ -599,6 +677,7 @@ const tools: AgentTool[] = [
 
   {
     name: 'uang.catat',
+    table: 'budget_entries',
     module: 'uang',
     risk: 'konfirmasi',
     description:
