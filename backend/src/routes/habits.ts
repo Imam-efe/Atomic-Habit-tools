@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { HabitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate, jakartaToday } from '../lib/validate';
+import { validate, jakartaToday, parseTersimpan } from '../lib/validate';
 import { getMondayOf } from './weekly_review';
 import { runJson } from '../lib/ai';
 
@@ -274,7 +274,7 @@ habits.get('/', async (c) => {
       twoMin: h.two_min,
       streak: h.streak,
       milestone: h.milestone,
-      goalIds: JSON.parse(h.goal_ids ?? '[]'),
+      goalIds: parseTersimpan<string[]>(h.goal_ids, []),
       doneToday: completionsMap.has(h.id),
       isTwoMinToday: completionsMap.get(h.id) ?? false,
       reminderTime: h.action_time,
@@ -686,13 +686,21 @@ habits.post('/:id/diagnose', async (c) => {
 // Returns { habitId, name, color, dates[], startDate, today }[] for all user habits
 habits.get('/completions', async (c) => {
   const user = c.get('user');
-  const weeks = Math.min(parseInt(c.req.query('weeks') ?? '52', 10), 104);
+  // `?weeks=` kosong dan `?weeks=abc` sama-sama menghasilkan NaN, dan NaN
+  // yang masuk ke setDate() membuat toISOString() melempar RangeError —
+  // permintaan yang salah ketik jadi galat 500, bukan jawaban wajar.
+  const weeksParam = Number(c.req.query('weeks'));
+  const weeks = Number.isFinite(weeksParam)
+    ? Math.min(104, Math.max(1, Math.round(weeksParam)))
+    : 52;
 
   const today = jakartaToday();
+  // Dihitung di UTC dari ujung ke ujung. Membangun `Date` pada tengah malam
+  // waktu lokal lalu mengembalikannya lewat `toISOString()` mencampur dua zona
+  // dalam satu tanggal, dan heatmap-nya bergeser sehari di luar UTC.
   const startDate = (() => {
-    const parts = today.split('-');
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    d.setDate(d.getDate() - weeks * 7);
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - weeks * 7);
     return d.toISOString().slice(0, 10);
   })();
 

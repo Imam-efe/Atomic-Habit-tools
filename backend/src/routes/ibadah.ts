@@ -14,10 +14,10 @@ import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import {
   hitungZakatMaal, hitungZakatPenghasilan, statusHaul,
-  NISAB_GRAM_EMAS, NISAB_GRAM_PERAK, KADAR_ZAKAT, type JenisNisab,
+  NISAB_GRAM_EMAS, NISAB_GRAM_PERAK, KADAR_ZAKAT, HAUL_HARI, type JenisNisab,
 } from '../lib/zakat';
 import { hitungJadwalSalat, salatBerikutnya, type AsrMethod, type PrayerMethod, type PrayerName } from '../lib/prayer';
-import { puasaMendatang, ringkasPuasa, puasaPada, LABEL_PUASA } from '../lib/fasting';
+import { puasaMendatang, ringkasPuasa, puasaPada, jenisPuasaDikenal, LABEL_PUASA } from '../lib/fasting';
 
 const ibadah = new Hono<AuthContext>();
 ibadah.use('/*', requireAuth);
@@ -59,11 +59,28 @@ ibadah.get('/zakat', async (c) => {
   const today = jakartaToday();
   const pengaturan = await bacaPengaturanZakat(c.env.DB, user.sub);
 
-  const [snapshot, saldo, penghasilan, dibayar] = await Promise.all([
-    // Aset dan kewajiban terakhir yang sudah dihitung modul Kekayaan Bersih.
+  // Batas haul: satu tahun Hijriah ke depan. Hanya utang yang jatuh tempo di
+  // dalam rentang ini yang mengurangi harta zakat.
+  const batasHaul = new Date(Date.parse(`${today}T00:00:00Z`) + HAUL_HARI * 86400000)
+    .toISOString().slice(0, 10);
+
+  const [utangPiutang, saldo, penghasilan, dibayar] = await Promise.all([
+    // Dibaca langsung dari `debts`, bukan dari snapshot Kekayaan Bersih.
+    // Snapshot itu hanya ditulis saat pengguna membuka layarnya, jadi bisa
+    // berbulan-bulan basi — dan zakat yang dihitung dari angka basi lebih
+    // buruk daripada zakat yang menolak menghitung.
+    //
+    // Utang yang dikurangkan hanya yang jatuh tempo dalam haul ini. Kalau
+    // seluruh sisa KPR dua puluh tahun ikut dikurangkan, hampir tidak ada
+    // orang berumah yang pernah wajib zakat, dan itu bukan yang dimaksud.
     c.env.DB.prepare(
-      'SELECT assets, liabilities, month FROM net_worth_snapshots WHERE user_id = ?1 ORDER BY month DESC LIMIT 1'
-    ).bind(user.sub).first<{ assets: number; liabilities: number; month: string }>(),
+      `SELECT
+         COALESCE(SUM(CASE WHEN type = 'receivable' THEN amount_idr ELSE 0 END), 0) AS piutang,
+         COALESCE(SUM(CASE WHEN type != 'receivable'
+                            AND (due_date IS NULL OR due_date <= ?2)
+                           THEN amount_idr ELSE 0 END), 0) AS utang_dekat
+       FROM debts WHERE user_id = ?1 AND status != 'paid'`
+    ).bind(user.sub, batasHaul).first<{ piutang: number; utang_dekat: number }>(),
     c.env.DB.prepare(
       'SELECT COALESCE(SUM(balance), 0) AS total FROM bank_accounts WHERE user_id = ?1'
     ).bind(user.sub).first<{ total: number }>(),
@@ -86,13 +103,14 @@ ibadah.get('/zakat', async (c) => {
   const jenis: JenisNisab = pengaturan.nisab_type === 'perak' ? 'perak' : 'emas';
   const harga = pengaturan.metal_price_per_gram;
 
-  // Kas diambil dari saldo rekening; sisa aset dari snapshot kekayaan bersih
-  // dikurangi kas supaya tidak dihitung dua kali.
+  // Kas dari saldo rekening; piutang adalah harta yang diharapkan kembali,
+  // jadi ia menambah — bukan mengurangi.
   const kas = saldo?.total ?? 0;
-  const asetLain = Math.max(0, (snapshot?.assets ?? 0) - kas);
+  const piutang = utangPiutang?.piutang ?? 0;
+  const utangDekat = utangPiutang?.utang_dekat ?? 0;
 
   const maal = hitungZakatMaal(
-    { kas, logamMulia: 0, investasi: asetLain, utangJatuhTempo: snapshot?.liabilities ?? 0 },
+    { kas, logamMulia: 0, investasi: piutang, utangJatuhTempo: utangDekat },
     harga,
     jenis
   );
@@ -118,10 +136,11 @@ ibadah.get('/zakat', async (c) => {
     // sekadar mempercayainya.
     sumber: {
       kas: 'Saldo seluruh rekening',
-      asetLain: snapshot ? `Aset di Kekayaan Bersih ${snapshot.month} dikurangi saldo rekening` : null,
-      utang: snapshot ? `Kewajiban di Kekayaan Bersih ${snapshot.month}` : null,
+      piutang: 'Piutang yang belum tertagih di modul Utang',
+      utang: `Utang yang jatuh tempo sebelum ${batasHaul}, atau tanpa tanggal`,
       penghasilan: 'Rata-rata pemasukan 90 hari terakhir',
     },
+    rincian: { kas, piutang, utangJatuhTempo: utangDekat },
     maal,
     penghasilan: { ...gaji, rataBulanan: rataPenghasilan },
     haul,
@@ -349,7 +368,7 @@ ibadah.post('/puasa', async (c) => {
     ? body.date
     : jakartaToday();
 
-  const kind = typeof body.kind === 'string' && LABEL_PUASA[body.kind as keyof typeof LABEL_PUASA]
+  const kind = jenisPuasaDikenal(body.kind)
     ? body.kind
     : (puasaPada(date)[0] ?? 'lainnya');
 

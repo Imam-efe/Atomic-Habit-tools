@@ -32,6 +32,20 @@ export const LABEL_PUASA: Record<JenisPuasa, string> = {
   lainnya: 'Puasa sunnah',
 };
 
+const JENIS_DIKENAL = new Set<string>(Object.keys(LABEL_PUASA));
+
+/**
+ * Benar hanya untuk jenis puasa yang memang ada.
+ *
+ * Memakai `LABEL_PUASA[kind]` sebagai pemeriksaan tidak cukup: pencarian
+ * properti juga menemukan kunci bawaan Object seperti `constructor` dan
+ * `toString`, dan nilainya lolos uji "ada isinya". Akibatnya string sembarang
+ * bisa tersimpan sebagai jenis puasa, lalu tampil tanpa label di layar.
+ */
+export function jenisPuasaDikenal(kind: unknown): kind is JenisPuasa {
+  return typeof kind === 'string' && JENIS_DIKENAL.has(kind);
+}
+
 export interface HijriDate {
   day: number;
   month: number;
@@ -181,7 +195,7 @@ export function ringkasPuasa(
 ): RingkasanPuasa {
   const hitung = new Map<JenisPuasa, number>();
   for (const l of log) {
-    const kind = (LABEL_PUASA[l.kind as JenisPuasa] ? l.kind : 'lainnya') as JenisPuasa;
+    const kind: JenisPuasa = jenisPuasaDikenal(l.kind) ? l.kind : 'lainnya';
     hitung.set(kind, (hitung.get(kind) ?? 0) + 1);
   }
 

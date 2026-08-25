@@ -8,6 +8,29 @@ const debts = new Hono<AuthContext>();
 
 debts.use('/*', requireAuth);
 
+/**
+ * Arah uang untuk satu baris `debts`.
+ *
+ * Tabel ini menyimpan dua hal yang berlawanan dalam bentuk yang sama: utang
+ * (kita berutang) dan piutang (orang berutang ke kita). Yang membedakan hanya
+ * satu kolom, dan kode yang lupa membacanya tetap jalan tanpa error —
+ * hasilnya cuma angka yang salah arah.
+ *
+ * Melunasi utang mengeluarkan uang; menerima pelunasan piutang memasukkan
+ * uang. Keduanya sama-sama satu baris di `debt_payments`, jadi tandanya harus
+ * ditentukan di sini, sekali, dan dipakai semua jalur.
+ */
+function arahUang(type: string): {
+  masuk: boolean;
+  entryType: 'income' | 'expense';
+  category: string;
+  labelNota: string;
+} {
+  return type === 'receivable'
+    ? { masuk: true, entryType: 'income', category: 'Lainnya', labelNota: 'Terima piutang' }
+    : { masuk: false, entryType: 'expense', category: 'Cicilan & Utang', labelNota: 'Bayar hutang' };
+}
+
 // GET /api/debts
 debts.get('/', async (c) => {
   const user = c.get('user');
@@ -87,11 +110,21 @@ debts.put('/:id', async (c) => {
   });
   if (err) return c.json({ error: err }, 400);
 
-  const type = body.type ?? 'debt';
+  const lama = await c.env.DB.prepare(
+    'SELECT type, due_date, note, status FROM debts WHERE id = ?1 AND user_id = ?2'
+  ).bind(id, user.sub).first<{ type: string; due_date: string | null; note: string | null; status: string }>();
+
+  if (!lama) return c.json({ error: 'debt not found' }, 404);
+
+  // Kolom yang tidak dikirim dipertahankan, bukan dikembalikan ke bawaan.
+  // Layar Pelunasan Utang hanya mengirim status, nama, dan jumlah — dengan
+  // nilai bawaan, melunasi utang ikut menghapus tanggal jatuh tempo dan
+  // catatannya, dan mengubah piutang jadi utang.
+  const type = body.type ?? lama.type;
   const amount = Math.round(body.amount!);
-  const dueDate = body.due_date || null;
-  const note = body.note || null;
-  const status = body.status ?? 'unpaid';
+  const dueDate = body.due_date === undefined ? lama.due_date : (body.due_date || null);
+  const note = body.note === undefined ? lama.note : (body.note || null);
+  const status = body.status ?? lama.status;
 
   const res = await c.env.DB.prepare(
     `UPDATE debts
@@ -111,10 +144,16 @@ debts.delete('/:id', async (c) => {
 
   // Check debt exists first
   const debtExists = await c.env.DB.prepare(
-    `SELECT id FROM debts WHERE id = ?1 AND user_id = ?2`
-  ).bind(id, user.sub).first();
+    `SELECT id, type FROM debts WHERE id = ?1 AND user_id = ?2`
+  ).bind(id, user.sub).first<{ id: string; type: string }>();
 
   if (!debtExists) return c.json({ error: 'debt not found' }, 404);
+
+  // Membatalkan sebuah pencatatan harus menempuh jalan pulang yang sama
+  // persis: uang yang tadinya masuk ditarik lagi, yang tadinya keluar
+  // dikembalikan. Selalu menambah akan menciptakan uang dari piutang yang
+  // dihapus.
+  const arahHapus = arahUang(debtExists.type);
 
   // Fetch paid payments that have linked budget entries to reverse
   const paidRows = await c.env.DB.prepare(
@@ -136,7 +175,7 @@ debts.delete('/:id', async (c) => {
     if (p.bank_account_id) {
       stmts.push(
         c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
-          .bind(p.amount_idr, p.bank_account_id, user.sub)
+          .bind(arahHapus.masuk ? -p.amount_idr : p.amount_idr, p.bank_account_id, user.sub)
       );
     }
   }
@@ -191,25 +230,30 @@ debts.post('/:id/payments', async (c) => {
   // If paid + bank selected → auto-create budget entry (Dr Hutang / Cr Bank)
   let budgetEntryId: string | null = null;
   if (status === 'paid' && bankAccountId) {
-    // Guard: check bank exists and has sufficient balance
+    const arah = arahUang(debt.type);
+
     const bankRow = await c.env.DB.prepare(
       `SELECT balance FROM bank_accounts WHERE id = ?1 AND user_id = ?2`
     ).bind(bankAccountId, user.sub).first<{ balance: number }>();
 
     if (!bankRow) return c.json({ error: 'bank account not found' }, 404);
-    if (bankRow.balance < amount) return c.json({ error: 'insufficient balance' }, 400);
+    // Saldo hanya perlu cukup kalau uangnya keluar. Menerima pelunasan piutang
+    // ke rekening kosong bukan masalah — justru itu yang mengisinya.
+    if (!arah.masuk && bankRow.balance < amount) {
+      return c.json({ error: 'insufficient balance' }, 400);
+    }
 
     budgetEntryId = nanoid();
-    const budgetNote = `Bayar hutang: ${debt.person_name}${note ? ` — ${note}` : ''}`;
+    const budgetNote = `${arah.labelNota}: ${debt.person_name}${note ? ` — ${note}` : ''}`;
 
     await c.env.DB.batch([
       c.env.DB.prepare(
         `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
-         VALUES (?1, ?2, 'expense', ?3, 'Cicilan & Utang', ?4, ?5, ?6, ?7)`
-      ).bind(budgetEntryId, user.sub, amount, budgetNote, body.payment_date, bankAccountId, now),
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+      ).bind(budgetEntryId, user.sub, arah.entryType, amount, arah.category, budgetNote, body.payment_date, bankAccountId, now),
       c.env.DB.prepare(
-        `UPDATE bank_accounts SET balance = balance - ?1 WHERE id = ?2 AND user_id = ?3`
-      ).bind(amount, bankAccountId, user.sub),
+        `UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`
+      ).bind(arah.masuk ? amount : -amount, bankAccountId, user.sub),
       c.env.DB.prepare(
         `INSERT INTO debt_payments (id, debt_id, user_id, amount_idr, payment_date, status, note, bank_account_id, budget_entry_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
@@ -262,6 +306,7 @@ debts.put('/:id/payments/:paymentId', async (c) => {
   const note = body.note || null;
   const bankAccountId = body.bank_account_id || existing.bank_account_id || null;
   const now = Math.floor(Date.now() / 1000);
+  const arah = arahUang(debt.type);
   let budgetEntryId = existing.budget_entry_id;
 
   const stmts: D1PreparedStatement[] = [];
@@ -274,7 +319,7 @@ debts.put('/:id/payments/:paymentId', async (c) => {
     );
     stmts.push(
       c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
-        .bind(existing.amount_idr, existing.bank_account_id, user.sub)
+        .bind(arah.masuk ? -existing.amount_idr : existing.amount_idr, existing.bank_account_id, user.sub)
     );
     budgetEntryId = null;
   }
@@ -282,16 +327,16 @@ debts.put('/:id/payments/:paymentId', async (c) => {
   // Create new budget entry if now paid + bank selected
   if (newStatus === 'paid' && bankAccountId) {
     budgetEntryId = nanoid();
-    const budgetNote = `Bayar hutang: ${debt.person_name}${note ? ` — ${note}` : ''}`;
+    const budgetNote = `${arah.labelNota}: ${debt.person_name}${note ? ` — ${note}` : ''}`;
     stmts.push(
       c.env.DB.prepare(
         `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
-         VALUES (?1, ?2, 'expense', ?3, 'Cicilan & Utang', ?4, ?5, ?6, ?7)`
-      ).bind(budgetEntryId, user.sub, amount, budgetNote, body.payment_date, bankAccountId, now)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`
+      ).bind(budgetEntryId, user.sub, arah.entryType, amount, arah.category, budgetNote, body.payment_date, bankAccountId, now)
     );
     stmts.push(
-      c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance - ?1 WHERE id = ?2 AND user_id = ?3`)
-        .bind(amount, bankAccountId, user.sub)
+      c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
+        .bind(arah.masuk ? amount : -amount, bankAccountId, user.sub)
     );
   }
 
@@ -321,6 +366,11 @@ debts.delete('/:id/payments/:paymentId', async (c) => {
 
   if (!existing) return c.json({ error: 'payment schedule not found' }, 404);
 
+  const induk = await c.env.DB.prepare(
+    'SELECT type FROM debts WHERE id = ?1 AND user_id = ?2'
+  ).bind(debtId, user.sub).first<{ type: string }>();
+
+  const arah = arahUang(induk?.type ?? 'debt');
   const stmts: D1PreparedStatement[] = [];
 
   // Reverse budget entry if it was auto-created
@@ -331,7 +381,7 @@ debts.delete('/:id/payments/:paymentId', async (c) => {
     );
     stmts.push(
       c.env.DB.prepare(`UPDATE bank_accounts SET balance = balance + ?1 WHERE id = ?2 AND user_id = ?3`)
-        .bind(existing.amount_idr, existing.bank_account_id, user.sub)
+        .bind(arah.masuk ? -existing.amount_idr : existing.amount_idr, existing.bank_account_id, user.sub)
     );
   }
 

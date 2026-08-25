@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { BankAccountRow, BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
-import { jakartaToday } from '../lib/validate';
+import { jakartaToday, jakartaMonth } from '../lib/validate';
 import { daysInMonth } from '../lib/safe_to_spend';
 
 const financeReport = new Hono<AuthContext>();
@@ -13,7 +13,7 @@ financeReport.get('/', async (c) => {
   const user = c.get('user');
   const from = c.req.query('from');
   const to = c.req.query('to');
-  const month = c.req.query('month') ?? new Date().toISOString().slice(0, 7);
+  const month = c.req.query('month') ?? jakartaMonth();
   const dateFrom = from ?? `${month}-01`;
   const dateTo = to ?? `${month}-31`;
 

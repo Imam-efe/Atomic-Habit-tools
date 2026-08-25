@@ -36,6 +36,20 @@ jobs:
         working-directory: backend
         run: npm test -- --run
 
+      # Backend-nya ikut diuji di luar UTC, dengan alasan yang sama seperti
+      # frontend di bawah — dan karena celah ini pernah kebobolan: `getMondayOf`
+      # membangun tanggal pada tengah malam waktu lokal lalu mengembalikannya
+      # lewat `toISOString()`, yang membacanya sebagai UTC. Di runner dan di
+      # Cloudflare yang sama-sama UTC keduanya kebetulan cocok, jadi uji hijau
+      # sementara fungsinya mengembalikan pekan yang salah di mana pun selain
+      # UTC. Dua arah dijalankan karena kedua sisi salahnya berbeda: zona di
+      # timur menggeser tanggal mundur, zona di barat menggesernya maju.
+      - name: Test backend (zona waktu lain)
+        working-directory: backend
+        run: |
+          TZ=Pacific/Kiritimati npm test -- --run
+          TZ=America/Los_Angeles npm test -- --run
+
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci

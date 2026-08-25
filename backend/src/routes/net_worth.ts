@@ -15,18 +15,27 @@ netWorth.get('/', async (c) => {
   const currentMonth = today.slice(0, 7); // YYYY-MM
 
   // Compute current assets and liabilities
-  const [assetsRes, liabilitiesRes] = await Promise.all([
+  //
+  // `debts` menyimpan dua hal yang berlawanan: utang (kita berutang) dan
+  // piutang (orang berutang ke kita). Menjumlahkan keduanya sebagai kewajiban
+  // membuat meminjamkan uang menurunkan kekayaan bersih — dan membuat layar
+  // ini berselisih dengan Laporan Keuangan, yang menghitungnya dengan benar.
+  const [assetsRes, debtRows] = await Promise.all([
     c.env.DB.prepare(
       'SELECT COALESCE(SUM(balance), 0) as total FROM bank_accounts WHERE user_id = ?1'
     ).bind(user.sub).first<{ total: number }>(),
     c.env.DB.prepare(
-      `SELECT COALESCE(SUM(amount_idr), 0) as total FROM debts
-       WHERE user_id = ?1 AND status != 'paid'`
-    ).bind(user.sub).first<{ total: number }>(),
+      `SELECT type, COALESCE(SUM(amount_idr), 0) as total FROM debts
+       WHERE user_id = ?1 AND status != 'paid'
+       GROUP BY type`
+    ).bind(user.sub).all<{ type: string; total: number }>(),
   ]);
 
-  const assets = assetsRes?.total ?? 0;
-  const liabilities = liabilitiesRes?.total ?? 0;
+  const perJenis = debtRows.results ?? [];
+  const liabilities = perJenis.find((d) => d.type === 'debt')?.total ?? 0;
+  const receivables = perJenis.find((d) => d.type === 'receivable')?.total ?? 0;
+
+  const assets = (assetsRes?.total ?? 0) + receivables;
   const currentNetWorth = assets - liabilities;
 
   // Upsert snapshot for current month
@@ -51,6 +60,9 @@ netWorth.get('/', async (c) => {
   return c.json({
     current: {
       assets,
+      // Dipisah supaya layar bisa menunjukkan bagian mana dari harta yang
+      // masih ada di tangan orang lain.
+      receivables,
       liabilities,
       net_worth: currentNetWorth,
       month: currentMonth,

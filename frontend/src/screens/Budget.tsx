@@ -7,7 +7,7 @@ import { createWorker } from 'tesseract.js';
 import { formatRp } from '@/lib/currency';
 import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
-import { todayISO, daysAgoISO } from '@/lib/date';
+import { todayISO, daysAgoISO, thisMonthISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
 
 interface BudgetEntry {
@@ -239,7 +239,7 @@ export function Budget() {
       const [budgetRes, banksRes, limitsRes] = await Promise.all([
         apiFetch<BudgetData>(`/budget?from=${from}&to=${to}`),
         apiFetch<BankAccount[]>('/bank-accounts'),
-        apiFetch<CategoryLimit[]>(`/budget/limits?month=${new Date().toISOString().slice(0, 7)}`)
+        apiFetch<CategoryLimit[]>(`/budget/limits?month=${thisMonthISO()}`)
       ]);
 
       setData(budgetRes);
@@ -646,7 +646,7 @@ export function Budget() {
         body: JSON.stringify({
           category: selectedLimitCat,
           limit,
-          month: new Date().toISOString().slice(0, 7)
+          month: thisMonthISO()
         })
       });
       setLimitVal('');
