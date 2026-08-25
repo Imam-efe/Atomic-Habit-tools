@@ -12,7 +12,7 @@ import { useAppBadge } from '@/hooks';
 import { resolveYear } from '@/data/holidays';
 import type { RemoteHoliday, ResolvedHoliday } from '@/data/holidays';
 import { observancesOn } from '@/data/observances';
-import { todayISO } from '@/lib/date';
+import { todayISO, thisMonthISO } from '@/lib/date';
 
 interface DashboardData {
   habitsTotal: number;
@@ -178,7 +178,7 @@ export function Dashboard() {
     setShowInsights(true);
     try {
       const todayStr = todayISO();
-      const monthStr = new Date().toISOString().slice(0, 7);
+      const monthStr = thisMonthISO();
 
       const [activities, nutrition, budget] = await Promise.all([
         apiFetch<ActivityLog[]>('/activity'),

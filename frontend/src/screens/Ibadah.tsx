@@ -65,7 +65,8 @@ interface Zakat {
     kadar: number; haulStartDate: string | null; pengurangPenghasilan: number;
     hargaDiperbaruiPada: string | null;
   };
-  sumber: { kas: string; asetLain: string | null; utang: string | null; penghasilan: string };
+  sumber: { kas: string; piutang: string; utang: string; penghasilan: string };
+  rincian: { kas: number; piutang: number; utangJatuhTempo: number };
   maal: { hartaBersih: number; nisabRupiah: number; wajib: boolean; zakat: number; kurang: number };
   penghasilan: { dasar: number; nisabBulanan: number; wajib: boolean; zakat: number; rataBulanan: number };
   haul: { mulai: string; jatuhTempo: string; sisaHari: number; jatuhTempoHariIni: boolean; sudahLewat: boolean } | null;
@@ -585,10 +586,28 @@ export function Ibadah() {
                 </p>
               )}
 
-              <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
-                Kas dari {zakat.sumber.kas.toLowerCase()}
-                {zakat.sumber.asetLain ? `; aset lain dari ${zakat.sumber.asetLain.toLowerCase()}` : ''}.
-              </p>
+              {/* Angka yang dipakai disebut satu per satu, bukan hanya
+                  hasil akhirnya: zakat yang tidak bisa ditelusuri tidak akan
+                  ditunaikan berdasarkan layar ini. */}
+              <div className="space-y-0.5">
+                {([
+                  ['Kas', zakat.rincian.kas, zakat.sumber.kas],
+                  ['Piutang', zakat.rincian.piutang, zakat.sumber.piutang],
+                  ['Utang jatuh tempo', -zakat.rincian.utangJatuhTempo, zakat.sumber.utang],
+                ] as const).map(([label, nilai, sumber]) => (
+                  <div key={label} className="flex items-baseline justify-between gap-2">
+                    <span className="text-[10px]" style={{ color: 'var(--text3)' }} title={sumber}>
+                      {label}
+                    </span>
+                    <span
+                      className="text-[10px] font-semibold tabular-nums"
+                      style={{ color: nilai < 0 ? 'var(--neg)' : 'var(--text2)' }}
+                    >
+                      {nilai < 0 ? `−${formatRp(-nilai)}` : formatRp(nilai)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

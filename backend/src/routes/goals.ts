@@ -211,11 +211,12 @@ goals.get('/score', async (c) => {
   const today = jakartaToday();
 
   // Build list of last 7 days (oldest first)
+  // Semuanya di UTC: mencampur tengah malam lokal dengan `toISOString()`
+  // menggeser seluruh deretan sehari di zona mana pun selain UTC.
   const days: string[] = [];
   for (let i = 6; i >= 0; i--) {
-    const parts = today.split('-');
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    d.setDate(d.getDate() - i);
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - i);
     days.push(d.toISOString().slice(0, 10));
   }
   const startDate = days[0];

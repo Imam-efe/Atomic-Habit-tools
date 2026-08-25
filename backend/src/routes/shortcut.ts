@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate } from '../lib/validate';
+import { validate, parseTersimpan } from '../lib/validate';
 import { updateHabitStreak } from './habits';
 
 type ShortcutContext = {
@@ -241,7 +241,7 @@ shortcut.get('/notifications', requireShortcutToken, async (c) => {
       type: r.type,
       title: r.title,
       body: r.body,
-      payload: r.payload ? JSON.parse(r.payload) : null,
+      payload: parseTersimpan<unknown>(r.payload, null),
       createdAt: r.created_at,
     })),
   });

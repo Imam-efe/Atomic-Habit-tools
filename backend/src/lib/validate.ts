@@ -96,6 +96,37 @@ export function jakartaToday(): string {
   return jakarta.toISOString().slice(0, 10);
 }
 
+/**
+ * Baca JSON yang tersimpan di kolom teks, tanpa ikut menjatuhkan rutenya.
+ *
+ * Kolom seperti `habits.goal_ids` ditulis oleh aplikasi sendiri, jadi isinya
+ * "pasti" JSON — sampai sebuah berkas backup hasil suntingan tangan diimpor.
+ * Satu baris rusak membuat `JSON.parse` melempar di tengah `map()`, dan yang
+ * gagal bukan baris itu melainkan SELURUH daftar kebiasaan: layar utama
+ * menjawab 500 dan tidak ada jalan memperbaikinya dari dalam aplikasi.
+ */
+export function parseTersimpan<T>(raw: string | null | undefined, fallback: T): T {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed === null ? fallback : (parsed as T);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Bulan berjalan menurut WIB, YYYY-MM.
+ *
+ * Sama alasannya dengan `jakartaToday()`, tapi salahnya lebih jarang dan lebih
+ * membingungkan: hanya pada tanggal 1 antara tengah malam dan pukul tujuh pagi
+ * WIB, dan yang terjadi bukan selisih satu hari melainkan seluruh layar
+ * menampilkan bulan yang sudah lewat.
+ */
+export function jakartaMonth(): string {
+  return jakartaToday().slice(0, 7);
+}
+
 /** Advance a YYYY-MM-DD date by the given recurrence interval */
 export function advanceDate(dateStr: string, recurrence: 'daily' | 'weekly' | 'monthly'): string {
   const [y, m, d] = dateStr.split('-').map(Number);

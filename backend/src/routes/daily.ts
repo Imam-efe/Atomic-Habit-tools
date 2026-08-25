@@ -265,7 +265,11 @@ daily.get('/patterns', async (c) => {
   const user = c.get('user');
   const settings = await loadSettings(c.env.DB, user.sub);
   const today = jakartaToday();
-  const since = shiftDate(today, -Number(c.req.query('days') ?? 60));
+  const daysParam = Number(c.req.query('days'));
+  const days = Number.isFinite(daysParam) && daysParam > 0
+    ? Math.min(365, Math.round(daysParam))
+    : 60;
+  const since = shiftDate(today, -days);
 
   const [habitDays, health, spend] = await Promise.all([
     // Tingkat penyelesaian per hari: berapa kebiasaan selesai dibagi jumlah

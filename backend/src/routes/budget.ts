@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate, advanceDate, jakartaToday } from '../lib/validate';
+import { validate, advanceDate, jakartaToday, jakartaMonth } from '../lib/validate';
 
 const budget = new Hono<AuthContext>();
 
@@ -32,7 +32,7 @@ budget.get('/', async (c) => {
   const user = c.get('user');
   const from = c.req.query('from');
   const to = c.req.query('to');
-  const month = c.req.query('month') ?? new Date().toISOString().slice(0, 7);
+  const month = c.req.query('month') ?? jakartaMonth();
   const dateFrom = from ?? `${month}-01`;
   const dateTo = to ?? `${month}-31`;
 
@@ -64,7 +64,7 @@ budget.get('/', async (c) => {
 // GET /api/budget/limits?month=YYYY-MM
 budget.get('/limits', async (c) => {
   const user = c.get('user');
-  const month = c.req.query('month') ?? new Date().toISOString().slice(0, 7);
+  const month = c.req.query('month') ?? jakartaMonth();
 
   // Get limits
   const limitsRows = await c.env.DB.prepare(
@@ -110,7 +110,7 @@ budget.post('/limits', async (c) => {
   });
   if (err) return c.json({ error: err }, 400);
 
-  const month = body.month ?? new Date().toISOString().slice(0, 7);
+  const month = body.month ?? jakartaMonth();
   const id = nanoid();
 
   await c.env.DB.prepare(

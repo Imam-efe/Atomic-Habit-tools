@@ -20,6 +20,18 @@ export function todayISO(): string {
   return new Date(Date.now() + WIB_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/**
+ * YYYY-MM bulan berjalan menurut WIB.
+ *
+ * Salahnya lebih jarang daripada tanggal harian tapi lebih membingungkan:
+ * hanya pada tanggal 1 sebelum pukul tujuh pagi, dan yang terlihat bukan
+ * selisih satu hari melainkan seluruh layar menampilkan bulan yang sudah
+ * lewat — termasuk saat separuh layar memakai tanggal WIB dan separuhnya UTC.
+ */
+export function thisMonthISO(): string {
+  return todayISO().slice(0, 7);
+}
+
 /** YYYY-MM-DD `n` hari lalu menurut WIB. */
 export function daysAgoISO(n: number): string {
   return new Date(Date.now() + WIB_OFFSET_MS - n * 86400000).toISOString().slice(0, 10);

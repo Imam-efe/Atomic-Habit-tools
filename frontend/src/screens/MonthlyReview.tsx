@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { thisMonthISO } from '@/lib/date';
 
 interface HabitStat {
   name: string;
@@ -38,7 +39,7 @@ interface HistoryItem {
 }
 
 function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  return thisMonthISO();
 }
 
 function shiftMonth(month: string, delta: number): string {

@@ -7,13 +7,27 @@ import { runJson } from '../lib/ai';
 const weeklyReview = new Hono<AuthContext>();
 weeklyReview.use('/*', requireAuth);
 
-// Helper: get Monday of the week containing a given YYYY-MM-DD
+/**
+ * Senin dari pekan yang memuat sebuah tanggal YYYY-MM-DD.
+ *
+ * Seluruh perhitungannya di UTC. Bentuk sebelumnya membangun `Date` pada
+ * tengah malam WAKTU LOKAL lalu mengembalikannya lewat `toISOString()`, yang
+ * membacanya sebagai UTC — dua zona berbeda untuk satu tanggal. Di server
+ * Cloudflare yang berjalan pada UTC keduanya kebetulan sama, jadi salahnya
+ * tidak pernah terlihat di produksi; di mesin mana pun yang di timur UTC,
+ * termasuk laptop di Jakarta, fungsi ini mengembalikan pekan yang salah.
+ */
 export function getMondayOf(dateStr: string): string {
-  const parts = dateStr.split('-');
-  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-  const day = d.getDay(); // 0=Sun, 1=Mon...
-  const diff = (day === 0 ? -6 : 1 - day);
-  d.setDate(d.getDate() + diff);
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0=Minggu, 1=Senin...
+  d.setUTCDate(d.getUTCDate() + (day === 0 ? -6 : 1 - day));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Minggu penutup dari sebuah Senin. */
+function akhirPekan(weekStart: string): string {
+  const d = new Date(`${weekStart}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 6);
   return d.toISOString().slice(0, 10);
 }
 
@@ -23,12 +37,7 @@ weeklyReview.get('/', async (c) => {
   const weekParam = c.req.query('week');
   const today = jakartaToday();
   const weekStart = getMondayOf(weekParam || today);
-  const weekEnd = (() => {
-    const parts = weekStart.split('-');
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    d.setDate(d.getDate() + 6);
-    return d.toISOString().slice(0, 10);
-  })();
+  const weekEnd = akhirPekan(weekStart);
 
   const review = await c.env.DB.prepare(
     'SELECT * FROM weekly_reviews WHERE user_id = ?1 AND week_start = ?2'
@@ -108,7 +117,7 @@ weeklyReview.post('/', async (c) => {
     rating?: number;
   };
   const body = await c.req.json<Body>().catch((): Body => ({}));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = jakartaToday();
   const weekStart = getMondayOf(body.weekStart || today);
 
   const existing = await c.env.DB.prepare(
@@ -177,12 +186,7 @@ weeklyReview.post('/draft', async (c) => {
   const body = await c.req.json<{ weekStart?: string }>().catch(() => null);
   const today = jakartaToday();
   const weekStart = getMondayOf(body?.weekStart || today);
-  const weekEnd = (() => {
-    const parts = weekStart.split('-');
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    d.setDate(d.getDate() + 6);
-    return d.toISOString().slice(0, 10);
-  })();
+  const weekEnd = akhirPekan(weekStart);
 
   const [habitStats, goalRow] = await Promise.all([
     c.env.DB.prepare(`
