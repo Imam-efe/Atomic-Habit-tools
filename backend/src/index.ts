@@ -42,6 +42,7 @@ import daily from './routes/daily';
 import settingsRoute from './routes/settings';
 import agent from './routes/agent';
 import cooking from './routes/cooking';
+import ibadah from './routes/ibadah';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -144,6 +145,7 @@ app.route('/api/daily', daily);
 app.route('/api/settings', settingsRoute);
 app.route('/api/agent', agent);
 app.route('/api/cooking', cooking);
+app.route('/api/ibadah', ibadah);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 

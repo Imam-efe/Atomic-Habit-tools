@@ -37,6 +37,7 @@ const NotificationCenter = lazy(() => import('@/screens/NotificationCenter').the
 const Achievements = lazy(() => import('@/screens/Achievements').then(m => ({ default: m.Achievements })));
 const Notes = lazy(() => import('@/screens/Notes').then(m => ({ default: m.Notes })));
 const Masakan = lazy(() => import('@/screens/Masakan').then(m => ({ default: m.Masakan })));
+const Ibadah = lazy(() => import('@/screens/Ibadah').then(m => ({ default: m.Ibadah })));
 const RiwayatAi = lazy(() => import('@/screens/RiwayatAi').then(m => ({ default: m.RiwayatAi })));
 const Shortcuts = lazy(() => import('@/screens/Shortcuts'));
 const Harian = lazy(() => import('@/screens/Harian'));
@@ -180,6 +181,7 @@ function AppShell() {
       'achievements': <Achievements />,
       'notes': <Notes />,
       'masakan': <Masakan />,
+      'ibadah': <Ibadah />,
       'riwayat-ai': <RiwayatAi />,
       'shortcuts': <Shortcuts />,
       'harian': <Harian />,

@@ -31,6 +31,8 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'garden_costs', label: 'Biaya kebun', group: 'Kebun', userScoped: true },
   { table: 'garden_pest_log', label: 'Catatan hama', group: 'Kebun', userScoped: true },
   { table: 'cooking_recipes', label: 'Resep tersimpan', group: 'Masakan', userScoped: true },
+  { table: 'zakat_payments', label: 'Zakat yang ditunaikan', group: 'Ibadah', userScoped: true },
+  { table: 'fasting_log', label: 'Catatan puasa sunnah', group: 'Ibadah', userScoped: true },
   { table: 'agent_actions', label: 'Riwayat aksi AI', group: 'Sistem', userScoped: true },
   { table: 'notes', label: 'Catatan', group: 'Lainnya', userScoped: true },
   { table: 'calendar_events', label: 'Agenda', group: 'Lainnya', userScoped: true },

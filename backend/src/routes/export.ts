@@ -68,6 +68,10 @@ const exportTables = [
   'garden_bed_slots',
   'garden_harvest_stock',
   'garden_photos',
+  'zakat_settings',
+  'zakat_payments',
+  'prayer_settings',
+  'fasting_log',
 ];
 
 /**
@@ -149,6 +153,10 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   garden_bed_slots: ['planting_id', 'bed_id', 'user_id', 'pos_x', 'pos_y', 'created_at'],
   garden_harvest_stock: ['care_log_id', 'user_id', 'inventory_item_id', 'created_at'],
   garden_photos: ['id', 'user_id', 'planting_id', 'image', 'taken_date', 'note', 'created_at'],
+  zakat_settings: ['user_id', 'metal_price_per_gram', 'nisab_type', 'haul_start_date', 'income_deduction', 'price_updated_at', 'updated_at'],
+  zakat_payments: ['id', 'user_id', 'kind', 'amount_idr', 'paid_date', 'recipient', 'note', 'created_at'],
+  prayer_settings: ['user_id', 'method', 'asr_method', 'adjust_json', 'updated_at'],
+  fasting_log: ['user_id', 'fast_date', 'kind', 'note', 'created_at'],
 };
 
 // GET /api/export - Export all user data as JSON
