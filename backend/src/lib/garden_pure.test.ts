@@ -25,8 +25,10 @@ describe('resolveTerm', () => {
   });
 
   it('mengembalikan null untuk tanaman di luar katalog', () => {
-    // marigold memang tidak ada di 66 tanaman katalog.
-    expect(resolveTerm('marigold', PLANTS)).toBeNull();
+    // Istilah karangan, bukan nama tanaman yang mungkin suatu saat masuk
+    // katalog — uji ini pernah memakai 'marigold' dan langsung salah begitu
+    // marigold benar-benar ditambahkan.
+    expect(resolveTerm('tanaman-khayalan', PLANTS)).toBeNull();
   });
 
   it('mengembalikan null untuk istilah kosong', () => {
@@ -55,15 +57,18 @@ describe('companionAdvice', () => {
   });
 
   it('tetap menampilkan istilah di luar katalog sebagai teks', () => {
-    const withMarigold = PLANTS.find((p) => (p.companions ?? []).includes('marigold'));
-    if (!withMarigold) return;
+    // Daftar pendamping ditulis tangan dan boleh menyebut tanaman yang belum
+    // ada di katalog; yang tidak boleh terjadi adalah istilahnya hilang diam-
+    // diam dari saran. Tanamannya dikarang di sini supaya uji ini tidak ikut
+    // gugur setiap kali katalog bertambah.
+    const plant = { ...byId('kangkung'), companions: ['tanaman-khayalan'] };
 
-    const advice = companionAdvice(withMarigold, PLANTS, new Set());
-    const ref = advice.good.find((g) => g.term === 'marigold');
+    const advice = companionAdvice(plant, PLANTS, new Set());
+    const ref = advice.good.find((g) => g.term === 'tanaman-khayalan');
 
     expect(ref).toBeDefined();
     expect(ref!.plantId).toBeNull();
-    expect(ref!.label).toBe('marigold');
+    expect(ref!.label).toBe('tanaman-khayalan');
   });
 
   it('tidak menandai apa pun saat kebun kosong', () => {

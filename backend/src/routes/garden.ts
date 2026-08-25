@@ -3,8 +3,8 @@ import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import { runJson, runText, SCHEMA_MODEL } from '../lib/ai';
-import { PLANTS, PLANT_BY_ID, CATEGORY_LABELS, type Plant } from '../data/plants';
-import { growthPhase, fertilizeGuidance } from '../lib/garden_fertilize_phase';
+import { PLANTS, PLANT_BY_ID, CATEGORY_LABELS, dipanen, type Plant } from '../data/plants';
+import { growthPhase, ornamentalPhase, fertilizeGuidance } from '../lib/garden_fertilize_phase';
 
 const garden = new Hono<AuthContext>();
 garden.use('/*', requireAuth);
@@ -134,6 +134,30 @@ export function computeCareState(
   const nextWater = addDays(lastWater ?? planting.planted_date, plant.waterIntervalDays);
   const nextFertilize = addDays(lastFertilize ?? planting.planted_date, plant.fertilizeIntervalDays);
 
+  // Tanaman hias: dirawat, tidak dipanen. Jadwal siram dan pupuknya tetap
+  // berjalan; jadwal panennya tidak ada sama sekali, dan persen pertumbuhan
+  // tidak punya garis akhir untuk diukur — nol membuat layar menyembunyikan
+  // batangnya alih-alih menampilkan angka yang tidak berarti.
+  if (!dipanen(plant)) {
+    return {
+      lastWater,
+      nextWater,
+      waterOverdueDays: Math.max(0, daysBetween(nextWater, today)),
+      lastFertilize,
+      nextFertilize,
+      fertilizeOverdueDays: Math.max(0, daysBetween(nextFertilize, today)),
+      // Catatan "panen" yang pernah ditulis pengguna tetap ditampilkan —
+      // memotong bunga mawar memang dicatat begitu, dan menyembunyikannya
+      // berarti menghapus sesuatu yang benar-benar terjadi. Yang tidak ada
+      // hanyalah panen BERIKUTNYA, karena tidak ada jadwalnya.
+      lastHarvest,
+      nextHarvest: null,
+      harvestReady: false,
+      ageDays,
+      growthPercent: 0,
+    };
+  }
+
   const firstHarvest = planting.expected_harvest_date
     ?? addDays(planting.planted_date, plant.daysToHarvest[0]);
 
@@ -221,7 +245,19 @@ async function buildPlantingContext(
     `Tanaman: ${name}${plant?.latinName ? ` (${plant.latinName})` : ''}.`,
     `Ditanam ${row.planted_date}, umur ${care.ageDays} hari, status ${row.status}.`,
     row.location ? `Lokasi: ${row.location}.` : '',
-    plant ? `Anjuran katalog: siram tiap ${plant.waterIntervalDays} hari, pupuk tiap ${plant.fertilizeIntervalDays} hari, panen sekitar ${plant.daysToHarvest[0]}–${plant.daysToHarvest[1]} hari.` : '',
+    plant
+      ? `Anjuran katalog: siram tiap ${plant.waterIntervalDays} hari, pupuk tiap ${plant.fertilizeIntervalDays} hari` +
+        (dipanen(plant)
+          ? `, panen sekitar ${plant.daysToHarvest[0]}–${plant.daysToHarvest[1]} hari.`
+          : '. Tanaman hias — dirawat untuk tampilannya, tidak dipanen.')
+      : '',
+    // Yang membuat jawaban AI berguna untuk tanaman hias adalah hal yang tidak
+    // ada pada sayuran: boleh di dalam ruangan atau tidak, beracun atau tidak.
+    plant?.ornamental
+      ? `Hias: ${plant.ornamental.indoor ? 'bisa di dalam ruangan' : 'butuh di luar ruangan'}` +
+        `${plant.ornamental.bloom ? `, berbunga ${plant.ornamental.bloom.toLowerCase()}` : ', ditanam untuk daunnya'}` +
+        `${plant.ornamental.toxic ? `. Beracun: ${plant.ornamental.toxicNote}` : '. Tidak beracun.'}`
+      : '',
     `Riwayat: disiram ${byAction.get('siram')?.n ?? 0} kali (terakhir ${care.lastWater ?? 'belum pernah'}), dipupuk ${byAction.get('pupuk')?.n ?? 0} kali (terakhir ${care.lastFertilize ?? 'belum pernah'}), dipanen ${byAction.get('panen')?.n ?? 0} kali.`,
     care.waterOverdueDays > 0 ? `Penyiraman telat ${care.waterOverdueDays} hari.` : '',
     care.fertilizeOverdueDays > 0 ? `Pemupukan telat ${care.fertilizeOverdueDays} hari.` : '',
@@ -412,7 +448,12 @@ garden.get('/fertilize-plan', async (c) => {
   const plan = plantings.map(p => {
     const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
     const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
-    const phase = growthPhase(care.ageDays, plant?.daysToHarvest[0] ?? 0, care.lastHarvest !== null);
+    // Tanaman hias tidak punya umur panen, jadi fasenya tidak bisa dihitung
+    // dari rasio umur; yang menentukan kebutuhan pupuknya adalah untuk apa ia
+    // ditanam.
+    const phase = plant && !dipanen(plant)
+      ? ornamentalPhase(plant.category)
+      : growthPhase(care.ageDays, plant && dipanen(plant) ? plant.daysToHarvest[0] : 0, care.lastHarvest !== null);
     return {
       plantingId: p.id,
       name: plant?.name ?? p.custom_name ?? 'Tanaman',
@@ -452,7 +493,11 @@ garden.post('/', async (c) => {
   }
 
   const id = nanoid();
-  const expectedHarvest = plant ? addDays(plantedDate, plant.daysToHarvest[0]) : null;
+  // Null untuk tanaman hias: kolom ini yang menyalakan penanda siap panen dan
+  // pengingat panen, jadi mengisinya untuk mawar berarti menyalakan keduanya.
+  const expectedHarvest = plant && dipanen(plant)
+    ? addDays(plantedDate, plant.daysToHarvest[0])
+    : null;
   const method = PLANTING_METHODS.includes(body.plantingMethod as (typeof PLANTING_METHODS)[number])
     ? body.plantingMethod!
     : null;
@@ -752,6 +797,12 @@ interface RawPlantInfo {
   latin_name?: string;
   category?: string;
   emoji?: string;
+  ornamental?: boolean;
+  indoor?: boolean;
+  bloom?: string;
+  toxic?: boolean;
+  toxic_note?: string;
+  grooming?: string;
   days_to_harvest_min?: number;
   days_to_harvest_max?: number;
   repeat_harvest?: boolean;
@@ -777,9 +828,18 @@ const PLANT_INFO_SCHEMA = {
   properties: {
     name: { type: 'string', description: 'Nama tanaman dalam Bahasa Indonesia' },
     latin_name: { type: 'string' },
-    category: { type: 'string', enum: ['sayuran-daun', 'sayuran-buah', 'umbi', 'rempah', 'buah'] },
+    category: {
+      type: 'string',
+      enum: ['sayuran-daun', 'sayuran-buah', 'umbi', 'rempah', 'buah', 'hias-daun', 'hias-bunga', 'sukulen'],
+    },
     emoji: { type: 'string', description: 'Satu emoji yang mewakili tanaman ini' },
-    days_to_harvest_min: { type: 'number', description: 'Umur panen tercepat dalam hari sejak tanam' },
+    ornamental: { type: 'boolean', description: 'true kalau tanaman hias yang tidak dipanen' },
+    indoor: { type: 'boolean', description: 'Untuk tanaman hias: bisa hidup di dalam ruangan' },
+    bloom: { type: 'string', description: 'Untuk tanaman hias: kapan dan bagaimana berbunga; kosongkan kalau ditanam untuk daunnya' },
+    toxic: { type: 'boolean', description: 'Beracun bila termakan atau getahnya kena kulit' },
+    toxic_note: { type: 'string', description: 'Bagian mana yang beracun dan bagi siapa' },
+    grooming: { type: 'string', description: 'Untuk tanaman hias: perawatan rutin supaya tetap bagus' },
+    days_to_harvest_min: { type: 'number', description: 'Umur panen tercepat dalam hari sejak tanam; abaikan untuk tanaman hias' },
     days_to_harvest_max: { type: 'number' },
     repeat_harvest: { type: 'boolean', description: 'true kalau dipanen berulang seperti cabai, false kalau sekali cabut seperti bayam' },
     harvest_every_days: { type: 'number', description: 'Jarak antar panen dalam hari, 0 kalau sekali panen' },
@@ -801,7 +861,13 @@ const PLANT_INFO_SCHEMA = {
   required: ['name', 'days_to_harvest_min', 'water_interval_days', 'fertilize_interval_days', 'sunlight'],
 } as const;
 
-const CATEGORIES = ['sayuran-daun', 'sayuran-buah', 'umbi', 'rempah', 'buah'];
+const CATEGORIES = [
+  'sayuran-daun', 'sayuran-buah', 'umbi', 'rempah', 'buah',
+  'hias-daun', 'hias-bunga', 'sukulen',
+];
+
+/** Kategori yang selalu berarti tanaman hias, apa pun yang dijawab AI. */
+const KATEGORI_HIAS = ['hias-daun', 'hias-bunga', 'sukulen'];
 const SUNLIGHTS = ['penuh', 'sebagian', 'teduh'];
 const DIFFICULTIES = ['mudah', 'sedang', 'sulit'];
 
@@ -818,15 +884,23 @@ function normalizeAiPlant(id: string, raw: RawPlantInfo): Plant {
   const repeat = raw.repeat_harvest === true;
   const every = clampInt(raw.harvest_every_days, 1, 365, 14);
 
+  const kategori = (CATEGORIES.includes(raw.category ?? '') ? raw.category : 'sayuran-buah') as Plant['category'];
+
+  // Kategori menang atas jawaban `ornamental`. Model kadang menjawab
+  // 'hias-bunga' lalu tetap mengisi umur panen, dan yang lebih berbahaya:
+  // menjawab ornamental=false untuk aglaonema. Kalau kategorinya hias, tidak
+  // ada umur panen — apa pun isian yang menyertainya.
+  const hias = KATEGORI_HIAS.includes(kategori) || raw.ornamental === true;
+
   return {
     id,
     name: (raw.name ?? id).slice(0, 60),
     latinName: (raw.latin_name ?? '').slice(0, 80),
-    category: (CATEGORIES.includes(raw.category ?? '') ? raw.category : 'sayuran-buah') as Plant['category'],
+    category: kategori,
     emoji: (raw.emoji ?? '🌱').slice(0, 4),
-    daysToHarvest: [minDays, maxDays],
-    repeatHarvest: repeat,
-    harvestEveryDays: repeat ? every : null,
+    daysToHarvest: hias ? null : [minDays, maxDays],
+    repeatHarvest: hias ? false : repeat,
+    harvestEveryDays: hias || !repeat ? null : every,
     waterIntervalDays: clampInt(raw.water_interval_days, 1, 30, 2),
     waterNote: (raw.water_note ?? '').slice(0, 300),
     fertilizeIntervalDays: clampInt(raw.fertilize_interval_days, 7, 180, 30),
@@ -842,8 +916,23 @@ function normalizeAiPlant(id: string, raw: RawPlantInfo): Plant {
     companions: [],
     avoid: [],
     propagation: (raw.propagation ?? '').slice(0, 200),
-    harvestNote: (raw.harvest_note ?? '').slice(0, 300),
+    harvestNote: hias ? '' : (raw.harvest_note ?? '').slice(0, 300),
     tips: (raw.tips ?? '').slice(0, 400),
+    // Racun default-nya true saat AI tidak menjawab: menebak "aman" untuk
+    // tanaman yang belum tentu aman adalah tebakan yang salahnya berakhir di
+    // ruang gawat darurat, sedangkan tebakan sebaliknya cuma bikin waspada
+    // berlebih.
+    ...(hias
+      ? {
+          ornamental: {
+            indoor: raw.indoor === true,
+            bloom: raw.bloom?.trim() ? raw.bloom.slice(0, 200) : null,
+            toxic: raw.toxic !== false,
+            toxicNote: (raw.toxic_note ?? 'Belum dipastikan — jauhkan dari anak dan hewan peliharaan.').slice(0, 200),
+            grooming: (raw.grooming ?? '').slice(0, 300),
+          },
+        }
+      : {}),
   };
 }
 
@@ -881,7 +970,7 @@ garden.post('/identify', async (c) => {
       [
         {
           role: 'system',
-          content: 'Kamu ahli hortikultura Indonesia. Berikan data budidaya praktis untuk pekarangan/polybag di iklim tropis Indonesia. Semua teks dalam Bahasa Indonesia. Angka harus realistis untuk penanaman rumahan, bukan pertanian komersial. Kalau yang diminta jelas bukan tanaman, tetap isi sebisanya tapi beri nama apa adanya.',
+          content: 'Kamu ahli hortikultura Indonesia. Berikan data budidaya praktis untuk pekarangan/polybag di iklim tropis Indonesia. Semua teks dalam Bahasa Indonesia. Angka harus realistis untuk penanaman rumahan, bukan pertanian komersial. Kalau tanamannya tanaman hias yang tidak dipanen (hias daun, hias bunga, sukulen, kaktus), pilih kategori hias yang sesuai, isi ornamental=true, dan isi indoor, bloom, toxic, toxic_note, serta grooming — abaikan umur panen. Untuk toxic, jawab true bila ada bagian yang beracun bagi anak atau hewan peliharaan. Kalau yang diminta jelas bukan tanaman, tetap isi sebisanya tapi beri nama apa adanya.',
         },
         { role: 'user', content: `Data budidaya untuk tanaman: "${name}"` },
       ],

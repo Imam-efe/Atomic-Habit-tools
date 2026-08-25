@@ -32,7 +32,7 @@ import { forecastHarvest, expectedCareCount } from './lib/garden_harvest_forecas
 import { classifyWeather } from './lib/garden_weather_events';
 import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
 import { loadSettings, num, bool } from './lib/settings';
-import { PLANT_BY_ID } from './data/plants';
+import { PLANT_BY_ID, dipanen } from './data/plants';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
 import quickadd from './routes/quickadd';
@@ -887,7 +887,10 @@ async function triggerHarvestDue(env: Env) {
     const due: string[] = [];
     for (const row of rows) {
       const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
-      if (!plant) continue;
+      // Tanaman hias tidak dipanen, jadi tidak ada perkiraan panen yang bisa
+      // dikirim — pengingat "monsteramu siap panen" adalah pengingat yang
+      // membuat semua pengingat lain ikut diragukan.
+      if (!plant || !dipanen(plant)) continue;
 
       const actual = counts.get(row.id) ?? { siram: 0, pupuk: 0 };
       const forecast = forecastHarvest(

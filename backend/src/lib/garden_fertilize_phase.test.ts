@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { growthPhase, fertilizeGuidance } from './garden_fertilize_phase';
+import { growthPhase, ornamentalPhase, fertilizeGuidance } from './garden_fertilize_phase';
 
 describe('growthPhase', () => {
   it('menganggap tanaman muda sebagai fase semai', () => {
@@ -44,5 +44,38 @@ describe('fertilizeGuidance', () => {
   it('menyarankan fosfor dan kalium untuk fase generatif', () => {
     expect(fertilizeGuidance('generatif')).toContain('fosfor');
     expect(fertilizeGuidance('generatif')).toContain('kalium');
+  });
+});
+
+describe('ornamentalPhase', () => {
+  it('memisahkan hias bunga dari hias daun', () => {
+    // Pupuk yang sama untuk keduanya berarti salah satu pasti keliru: nitrogen
+    // yang membuat daun bagus justru menahan bunga.
+    expect(ornamentalPhase('hias-bunga')).toBe('hias-bunga');
+    expect(ornamentalPhase('hias-daun')).toBe('hias-daun');
+  });
+
+  it('mengenali sukulen', () => {
+    expect(ornamentalPhase('sukulen')).toBe('sukulen');
+  });
+
+  it('jatuh ke hias daun untuk kategori yang tidak dikenal', () => {
+    expect(ornamentalPhase('entah-apa')).toBe('hias-daun');
+  });
+});
+
+describe('fertilizeGuidance untuk tanaman hias', () => {
+  it('menyarankan nitrogen untuk hias daun', () => {
+    expect(fertilizeGuidance('hias-daun')).toContain('nitrogen');
+  });
+
+  it('memperingatkan nitrogen berlebih pada hias bunga', () => {
+    const teks = fertilizeGuidance('hias-bunga');
+    expect(teks).toContain('nitrogen');
+    expect(teks).toContain('fosfor');
+  });
+
+  it('memperingatkan kelebihan air dan pupuk pada sukulen', () => {
+    expect(fertilizeGuidance('sukulen')).toContain('kelebihan');
   });
 });

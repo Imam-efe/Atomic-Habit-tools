@@ -322,7 +322,7 @@ describe('POST /api/agent', () => {
     ).bind('user-1').first<{ expected_harvest_date: string }>();
 
     const plant = PLANT_BY_ID.get('kangkung')!;
-    const harap = new Date(Date.parse('2026-01-01T00:00:00Z') + plant.daysToHarvest[0] * 86400000)
+    const harap = new Date(Date.parse('2026-01-01T00:00:00Z') + plant.daysToHarvest![0] * 86400000)
       .toISOString().slice(0, 10);
     expect(row?.expected_harvest_date).toBe(harap);
   });

@@ -10,7 +10,7 @@
  * tidak pernah kosong sampai tanamannya benar-benar habis.
  */
 
-import type { Plant } from '../data/plants';
+import { dipanen, type Plant } from '../data/plants';
 import { shiftDate, daysBetween } from './daily';
 
 export interface SuccessionCandidate {
@@ -64,8 +64,9 @@ export function findSuccessionDue(
     if (!planting.plantId || !planting.nextHarvest) continue;
 
     const plant = plantsById.get(planting.plantId);
-    // Hanya sekali cabut. Panen berulang tidak mengosongkan bedengan.
-    if (!plant || plant.repeatHarvest) continue;
+    // Hanya sekali cabut. Panen berulang tidak mengosongkan bedengan, dan
+    // tanaman hias tidak pernah mengosongkannya sama sekali.
+    if (!plant || plant.repeatHarvest || !dipanen(plant)) continue;
 
     const sowDate = shiftDate(planting.nextHarvest, -sowLeadDays(plant.daysToHarvest[0]));
     const daysUntilSow = daysBetween(today, sowDate);

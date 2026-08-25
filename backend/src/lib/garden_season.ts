@@ -7,7 +7,7 @@
  * yang sudah tertulis jelas.
  */
 
-import type { Plant } from '../data/plants';
+import { dipanen, type Plant } from '../data/plants';
 
 export type Season = 'hujan' | 'kemarau' | 'sepanjang-tahun';
 
@@ -62,6 +62,10 @@ export function plantingCalendar(plants: Plant[], month: number): PlantingWindow
 
   const windows: PlantingWindow[] = [];
   for (const plant of plants) {
+    // Tanaman hias tidak masuk kalender tanam: yang dijawab layar ini adalah
+    // "tanam apa bulan ini supaya panen", dan mawar tidak menjawab itu.
+    if (!dipanen(plant)) continue;
+
     const seasons = parseSeason(plant.season);
     const exact = seasons.includes(current);
     const anytime = seasons.includes('sepanjang-tahun');
