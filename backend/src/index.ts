@@ -32,7 +32,7 @@ import { forecastHarvest, expectedCareCount } from './lib/garden_harvest_forecas
 import { classifyWeather } from './lib/garden_weather_events';
 import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
 import { loadSettings, num, bool } from './lib/settings';
-import { PLANT_BY_ID } from './data/plants';
+import { PLANT_BY_ID, dipanen } from './data/plants';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
 import quickadd from './routes/quickadd';
@@ -42,6 +42,7 @@ import daily from './routes/daily';
 import settingsRoute from './routes/settings';
 import agent from './routes/agent';
 import cooking from './routes/cooking';
+import ibadah from './routes/ibadah';
 import exportRoute from './routes/export';
 import habitBundles from './routes/habit_bundles';
 import habitStacks from './routes/habit_stacks';
@@ -144,6 +145,7 @@ app.route('/api/daily', daily);
 app.route('/api/settings', settingsRoute);
 app.route('/api/agent', agent);
 app.route('/api/cooking', cooking);
+app.route('/api/ibadah', ibadah);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 
@@ -885,7 +887,10 @@ async function triggerHarvestDue(env: Env) {
     const due: string[] = [];
     for (const row of rows) {
       const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
-      if (!plant) continue;
+      // Tanaman hias tidak dipanen, jadi tidak ada perkiraan panen yang bisa
+      // dikirim — pengingat "monsteramu siap panen" adalah pengingat yang
+      // membuat semua pengingat lain ikut diragukan.
+      if (!plant || !dipanen(plant)) continue;
 
       const actual = counts.get(row.id) ?? { siram: 0, pupuk: 0 };
       const forecast = forecastHarvest(

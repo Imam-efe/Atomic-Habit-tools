@@ -15,7 +15,8 @@ interface Plant {
   latinName: string;
   category: string;
   emoji: string;
-  daysToHarvest: [number, number];
+  /** null untuk tanaman hias — tidak dipanen. */
+  daysToHarvest: [number, number] | null;
   repeatHarvest: boolean;
   harvestEveryDays: number | null;
   waterIntervalDays: number;
@@ -33,6 +34,14 @@ interface Plant {
   propagation: string;
   harvestNote: string;
   tips: string;
+  /** Terisi hanya untuk tanaman hias. */
+  ornamental?: {
+    indoor: boolean;
+    bloom: string | null;
+    toxic: boolean;
+    toxicNote: string;
+    grooming: string;
+  };
 }
 
 interface CareState {
@@ -1159,7 +1168,10 @@ export function Garden() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold" style={{ color: 'var(--text)' }}>{plant.name}</p>
                     <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
-                      Panen {plant.daysToHarvest[0]}–{plant.daysToHarvest[1]} hari · siram tiap {plant.waterIntervalDays} hari
+                      {plant.daysToHarvest
+                        ? `Panen ${plant.daysToHarvest[0]}–${plant.daysToHarvest[1]} hari`
+                        : plant.ornamental?.indoor ? 'Hias, bisa dalam ruangan' : 'Hias, di luar ruangan'}
+                      {' · siram tiap '}{plant.waterIntervalDays} hari
                     </p>
                   </div>
                   <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0"
@@ -1204,7 +1216,9 @@ export function Garden() {
 
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {[
-                  ['Umur panen', `${openPlant.daysToHarvest[0]}–${openPlant.daysToHarvest[1]} hari`],
+                  openPlant.daysToHarvest
+                    ? ['Umur panen', `${openPlant.daysToHarvest[0]}–${openPlant.daysToHarvest[1]} hari`]
+                    : ['Jenis', openPlant.ornamental?.indoor ? 'Hias, dalam ruangan' : 'Hias, luar ruangan'],
                   ['Siram', `tiap ${openPlant.waterIntervalDays} hari`],
                   ['Pupuk', `tiap ${openPlant.fertilizeIntervalDays} hari`],
                   ['Matahari', openPlant.sunlight],
@@ -1226,6 +1240,8 @@ export function Garden() {
                   ['Penyiraman', openPlant.waterNote],
                   ['Pemupukan', openPlant.fertilizer],
                   ['Panen', openPlant.harvestNote],
+                  ['Berbunga', openPlant.ornamental?.bloom ?? ''],
+                  ['Perawatan rutin', openPlant.ornamental?.grooming ?? ''],
                   ['Tips', openPlant.tips],
                 ] as const).map(([label, value]) => value ? (
                   <div key={label}>
@@ -1233,6 +1249,31 @@ export function Garden() {
                     <p className="text-[12px] leading-relaxed" style={{ color: 'var(--text)' }}>{value}</p>
                   </div>
                 ) : null)}
+
+                {openPlant.ornamental?.toxic && (
+                  <div
+                    className="rounded-xl px-3 py-2.5"
+                    style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+                  >
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider mb-0.5" style={{ color: 'var(--neg)' }}>
+                      Beracun
+                    </p>
+                    <p className="text-[12px] leading-relaxed" style={{ color: 'var(--neg)' }}>
+                      {openPlant.ornamental.toxicNote}
+                    </p>
+                  </div>
+                )}
+
+                {openPlant.ornamental && !openPlant.ornamental.toxic && (
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-wider mb-0.5" style={{ color: 'var(--text3)' }}>
+                      Keamanan
+                    </p>
+                    <p className="text-[12px] leading-relaxed" style={{ color: 'var(--text)' }}>
+                      {openPlant.ornamental.toxicNote}
+                    </p>
+                  </div>
+                )}
 
                 {openPlant.pests.length > 0 && (
                   <div>
@@ -1298,7 +1339,9 @@ export function Garden() {
                   {plantingFor.emoji} Tanam {plantingFor.name}
                 </p>
                 <p className="text-[11px]" style={{ color: 'var(--text2)' }}>
-                  Perkiraan panen {plantingFor.daysToHarvest[0]} hari dari tanggal tanam
+                  {plantingFor.daysToHarvest
+                    ? `Perkiraan panen ${plantingFor.daysToHarvest[0]} hari dari tanggal tanam`
+                    : 'Tanaman hias — dijadwalkan siram dan pupuk, tanpa jadwal panen'}
                 </p>
               </div>
 

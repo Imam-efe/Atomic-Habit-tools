@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PLANTS } from '../data/plants';
+import { PLANTS, dipanen } from '../data/plants';
 import {
   shouldSkipWatering,
   wateringNote,
@@ -204,7 +204,7 @@ describe('sowLeadDays', () => {
 
 describe('findSuccessionDue', () => {
   const plantsById = new Map(PLANTS.map((p) => [p.id, p]));
-  const singleHarvest = PLANTS.find((p) => !p.repeatHarvest)!;
+  const singleHarvest = PLANTS.filter(dipanen).find((p) => !p.repeatHarvest)!;
   const repeatHarvest = PLANTS.find((p) => p.repeatHarvest)!;
 
   it('mengusulkan semai ulang menjelang panen tanaman sekali cabut', () => {

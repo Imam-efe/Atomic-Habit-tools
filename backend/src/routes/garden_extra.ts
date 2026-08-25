@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
-import { PLANTS, PLANT_BY_ID } from '../data/plants';
+import { PLANTS, PLANT_BY_ID, dipanen } from '../data/plants';
 import { companionAdvice, findGardenConflicts } from '../lib/garden_companion';
 import { plantingCalendar, seasonOfMonth } from '../lib/garden_season';
 import { fitInArea, fitInBed, potFit } from '../lib/garden_space';
@@ -1074,8 +1074,9 @@ extra.get('/harvest-forecast', async (c) => {
   for (const row of rows) {
     const plant = row.plant_id ? plants.get(row.plant_id) : undefined;
     // Tanpa katalog tidak ada interval maupun umur panen — tidak ada yang bisa
-    // dikoreksi, jadi tanaman itu dilewati daripada ditebak.
-    if (!plant) continue;
+    // dikoreksi, jadi tanaman itu dilewati daripada ditebak. Tanaman hias
+    // dilewati karena alasan yang berbeda: memang tidak dipanen.
+    if (!plant || !dipanen(plant)) continue;
 
     const { days, calibrated } = effectiveDaysToHarvest(
       row.plant_id ?? '', plant.daysToHarvest[0], calibrations
@@ -1517,7 +1518,7 @@ async function loadCalibrations(db: D1Database, userId: string) {
   const catalogDays = new Map<string, number>();
   for (const cyc of cycles) {
     const plant = PLANT_BY_ID.get(cyc.plantId);
-    if (plant) catalogDays.set(cyc.plantId, plant.daysToHarvest[0]);
+    if (plant && dipanen(plant)) catalogDays.set(cyc.plantId, plant.daysToHarvest[0]);
   }
 
   return calibrateFromHistory(cycles, catalogDays);

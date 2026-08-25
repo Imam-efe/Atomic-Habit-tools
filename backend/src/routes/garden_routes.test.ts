@@ -14,11 +14,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import garden from './garden';
+import garden, { computeCareState } from './garden';
 import gardenExtra from './garden_extra';
 import exportRoute from './export';
 import { Hono } from 'hono';
 import { signJWT } from '../lib/jwt';
+import { PLANT_BY_ID } from '../data/plants';
 import { createTestDb, seedUser, type FakeD1 } from '../test/d1';
 
 const JWT_SECRET = 'rahasia-untuk-test';
@@ -493,5 +494,40 @@ describe('alur tulis', () => {
       body: JSON.stringify({ name: 'Aneh', widthCm: 0, lengthCm: 200 }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('tanaman hias di jadwal perawatan', () => {
+  const kembang = { id: 'p-hias', plant_id: 'mawar', custom_name: null, nickname: null,
+    location: null, quantity: 1, planting_method: null, planted_date: '2026-01-01',
+    expected_harvest_date: null, status: 'tumbuh', note: null };
+
+  it('tetap dijadwalkan siram dan pupuk', () => {
+    const care = computeCareState(kembang, PLANT_BY_ID.get('mawar'), {}, '2026-03-01');
+    expect(care.nextWater).not.toBeNull();
+    expect(care.nextFertilize).not.toBeNull();
+  });
+
+  it('tidak pernah dijadwalkan panen', () => {
+    const care = computeCareState(kembang, PLANT_BY_ID.get('mawar'), {}, '2026-03-01');
+    expect(care.nextHarvest).toBeNull();
+    expect(care.harvestReady).toBe(false);
+  });
+
+  it('tidak menampilkan progres menuju panen', () => {
+    // Nol membuat layar menyembunyikan batang progresnya; angka lain akan
+    // tampil sebagai perjalanan menuju panen yang tidak pernah ada.
+    const care = computeCareState(kembang, PLANT_BY_ID.get('mawar'), {}, '2026-03-01');
+    expect(care.growthPercent).toBe(0);
+  });
+
+  it('mengabaikan tanggal panen yang telanjur tersimpan di baris lama', () => {
+    // Baris yang dibuat sebelum tanaman hias masuk katalog bisa saja membawa
+    // expected_harvest_date; kolom itu tidak boleh menghidupkan lagi penanda
+    // siap panen untuk tanaman yang tidak dipanen.
+    const warisan = { ...kembang, expected_harvest_date: '2026-02-01' };
+    const care = computeCareState(warisan, PLANT_BY_ID.get('mawar'), {}, '2026-03-01');
+    expect(care.nextHarvest).toBeNull();
+    expect(care.harvestReady).toBe(false);
   });
 });

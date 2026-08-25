@@ -26,7 +26,7 @@
 
 import type { D1Database } from '@cloudflare/workers-types';
 import { nanoid } from './nanoid';
-import { PLANTS, PLANT_BY_ID } from '../data/plants';
+import { PLANTS, PLANT_BY_ID, dipanen } from '../data/plants';
 import { addHarvestToInventory } from '../routes/garden';
 import { pilahBahan, type StockItem } from './cooking';
 import type { ModuleKey } from './ai_context';
@@ -201,7 +201,7 @@ const tools: AgentTool[] = [
         // batas atas membuat penanda siap-panen dan push-nya telat sampai dua
         // bulan untuk tanaman yang dibuat AI, dan tidak ada layar yang
         // menjelaskan kenapa dua tanaman yang sama berbeda jadwalnya.
-        const panen = plant
+        const panen = plant && dipanen(plant)
           ? new Date(Date.parse(`${ditanam}T00:00:00Z`) + plant.daysToHarvest[0] * 86400000)
               .toISOString().slice(0, 10)
           : null;
