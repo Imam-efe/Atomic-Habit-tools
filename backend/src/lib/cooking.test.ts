@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalkan, cocok, pilahBahan, hitungKesiapan, bacaResep, urutkanStok, ringkasStok,
-  type StockItem,
+  bacaRencana, type StockItem,
 } from './cooking';
 
 const stok = (name: string, quantity = 1, unit: string | null = 'pcs', daysLeft: number | null = null): StockItem =>
@@ -156,6 +156,58 @@ describe('bacaResep', () => {
 
     expect(out[0].minutes).toBeNull();
     expect(out[0].servings).toBeNull();
+  });
+});
+
+describe('bacaRencana', () => {
+  const inventory = [stok('Telur'), stok('Nasi'), stok('Bawang merah')];
+
+  const rencana = {
+    rencana: [
+      { nama: 'Nasi goreng', bahan: ['nasi', 'telur', 'kecap'] },
+      { nama: 'Telur balado', bahan: ['telur', 'bawang merah', 'cabai'] },
+      { nama: 'Tumis kangkung', bahan: ['kangkung', 'bawang merah'] },
+    ],
+  };
+
+  it('memberi tanggal berurutan mulai dari hari pertama', () => {
+    const { days } = bacaRencana(rencana, inventory, '2026-09-01');
+    expect(days.map((d) => d.date)).toEqual(['2026-09-01', '2026-09-02', '2026-09-03']);
+  });
+
+  it('menyatukan bahan kurang jadi satu daftar tanpa pengulangan', () => {
+    // Inilah gunanya merencanakan seminggu sekaligus: bawang yang kurang di
+    // tiga resep adalah satu baris di daftar belanja, bukan tiga.
+    const { shoppingList } = bacaRencana(rencana, inventory, '2026-09-01');
+    expect(shoppingList).toEqual(['kecap', 'cabai', 'kangkung']);
+  });
+
+  it('memilah tiap hari terhadap stok yang sama', () => {
+    const { days } = bacaRencana(rencana, inventory, '2026-09-01');
+    expect(days[0].recipe.have.sort()).toEqual(['Nasi', 'Telur']);
+    expect(days[0].recipe.missing).toEqual(['kecap']);
+  });
+
+  it('membatasi rencana pada tujuh hari', () => {
+    const banyak = { rencana: Array.from({ length: 12 }, (_, i) => ({ nama: `Hari ${i}`, bahan: ['telur'] })) };
+    expect(bacaRencana(banyak, inventory, '2026-09-01').days).toHaveLength(7);
+  });
+
+  it('melewati entri yang tidak bisa dibaca tanpa membuang sisanya', () => {
+    const campur = { rencana: [null, { nama: '', bahan: ['telur'] }, { nama: 'Sah', bahan: ['telur'] }] };
+    const { days } = bacaRencana(campur, inventory, '2026-09-01');
+    expect(days.map((d) => d.recipe.name)).toEqual(['Sah']);
+  });
+
+  it('mengembalikan kosong untuk jawaban tak berbentuk', () => {
+    for (const raw of [null, {}, { rencana: 'bukan array' }]) {
+      expect(bacaRencana(raw, inventory, '2026-09-01')).toEqual({ days: [], shoppingList: [] });
+    }
+  });
+
+  it('menyeberangi pergantian bulan', () => {
+    const { days } = bacaRencana(rencana, inventory, '2026-08-30');
+    expect(days.map((d) => d.date)).toEqual(['2026-08-30', '2026-08-31', '2026-09-01']);
   });
 });
 

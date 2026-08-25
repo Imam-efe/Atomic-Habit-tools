@@ -39,6 +39,7 @@ export const SETTING_GROUPS: Array<{ id: string; label: string; icon: string }> 
   { id: 'kebun', label: 'Kebun', icon: '🌱' },
   { id: 'pola', label: 'Pola', icon: '📊' },
   { id: 'kalender', label: 'Kalender', icon: '📅' },
+  { id: 'ai', label: 'AI', icon: '✨' },
 ];
 
 /** Jam kirim dipakai berkali-kali; bentuknya selalu sama. */
@@ -254,6 +255,34 @@ export const SETTINGS: SettingDef[] = [
     min: 15,
     max: 480,
     unit: 'menit',
+  },
+
+  {
+    key: 'ai.daily_limit',
+    group: 'ai',
+    label: 'Batas permintaan AI per hari',
+    hint: 'Workers AI punya kuota harian untuk seluruh akun. Batas ini menjaga satu hari yang sibuk tidak menghabiskannya sampai semua fitur AI berhenti menjawab.',
+    type: 'number',
+    default: 60,
+    min: 5,
+    max: 500,
+    unit: 'permintaan',
+  },
+  {
+    key: 'ai.morning_sentence',
+    group: 'ai',
+    label: 'Kalimat pembuka AI di Pagi Ini',
+    hint: 'Satu kalimat yang menyebut angka dan nama dari datamu sendiri, di atas ringkasan biasa. Kalau AI tidak bisa dihubungi atau jatah habis, pushnya tetap terkirim tanpa kalimat itu.',
+    type: 'boolean',
+    default: true,
+  },
+  {
+    key: 'ai.cache_enabled',
+    group: 'ai',
+    label: 'Pakai ulang jawaban yang sama',
+    hint: 'Pertanyaan yang sama persis dengan data yang sama persis dijawab dari simpanan selama 15 menit. Aksi yang menulis tidak pernah dipakai ulang.',
+    type: 'boolean',
+    default: true,
   },
 ];
 

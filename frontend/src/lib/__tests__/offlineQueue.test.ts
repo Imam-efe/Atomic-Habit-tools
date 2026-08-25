@@ -224,6 +224,45 @@ describe('flush', () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it('tidak mengirim dobel saat dua instance antrean akun yang sama flush bersamaan', async () => {
+    // Panel AI ada di sepuluh layar dan layar Kebun punya flush-nya sendiri,
+    // jadi satu peristiwa `online` membangunkan belasan pemanggil sekaligus.
+    // Tiap pemanggil memegang instance queueFor-nya sendiri; penjaga yang
+    // hidup di dalam instance tidak akan melihat yang lain.
+    queue.enqueue(entry('a1a1a1a1'));
+    const kembar = queueFor('u1');
+
+    const send = vi.fn().mockImplementation(() => new Promise((r) => setTimeout(r, 5)));
+    const [a, b] = await Promise.all([queue.flush(send), kembar.flush(send)]);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(a.sent + b.sent).toBe(1);
+  });
+
+  it('tetap boleh flush bersamaan untuk akun berbeda', async () => {
+    // Penjaganya dikunci per akun, bukan global: antrean akun lain tidak
+    // boleh ikut tertahan.
+    const a = queueFor('u1');
+    const b = queueFor('u2');
+    a.enqueue(entry('a1a1a1a1'));
+    b.enqueue(entry('b2b2b2b2', 'pupuk'));
+
+    const send = vi.fn().mockResolvedValue({});
+    const [ra, rb] = await Promise.all([a.flush(send), b.flush(send)]);
+    expect(ra.sent).toBe(1);
+    expect(rb.sent).toBe(1);
+  });
+
+  it('melepas penjaga setelah flush selesai', async () => {
+    queue.enqueue(entry('a1a1a1a1'));
+    const send = vi.fn().mockResolvedValue({});
+    await queue.flush(send);
+
+    // Flush berikutnya harus jalan, bukan tertahan penjaga yang tidak dilepas.
+    queue.enqueue(entry('c3c3c3c3', 'panen'));
+    expect((await queue.flush(send)).sent).toBe(1);
+  });
+
   it('tidak mengirim dobel saat dua flush berjalan bersamaan', async () => {
     // Layar memanggil flush saat dibuka DAN saat peristiwa `online`.
     queue.enqueue(entry('a1a1a1a1'));

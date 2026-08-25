@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import agent from './agent';
 import cooking from './cooking';
+import search from './search';
 import { signJWT } from '../lib/jwt';
 import { createTestDb, seedUser, type FakeD1 } from '../test/d1';
 import { parsePlan, MAX_ACTIONS } from '../lib/agent_plan';
@@ -71,6 +72,7 @@ beforeEach(async () => {
   app = new Hono() as Hono<never>;
   app.route('/api/agent', agent as never);
   app.route('/api/cooking', cooking as never);
+  app.route('/api/search', search as never);
 });
 
 afterEach(() => db.__close());
@@ -100,6 +102,20 @@ describe('registry alat', () => {
       for (const key of t.required) expect(Object.keys(t.args)).toContain(key);
     }
   });
+
+  it.each(TOOLS.map((t) => [t.name, t.table] as const))(
+    '%s menulis ke tabel yang benar-benar ada: %s',
+    async (_name, table) => {
+      // Nama tabel disisipkan langsung ke SQL pembatalan. Ia berasal dari
+      // daftar tertutup di registry, bukan dari masukan siapa pun — tapi
+      // salah ketik di sini membuat pembatalan gagal, diam-diam, hanya untuk
+      // alat itu saja.
+      const rows = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+      const cols = (rows.results ?? []).map((r) => r.name);
+      expect(cols).toContain('id');
+      expect(cols).toContain('user_id');
+    }
+  );
 
   it('hanya alat uang yang berisiko', () => {
     const berisiko = TOOLS.filter((t) => t.risk === 'konfirmasi').map((t) => t.name);
@@ -550,6 +566,33 @@ describe('alat lintas modul', () => {
   });
 });
 
+describe('pencarian global', () => {
+  it('menemukan resep lewat nama dan lewat bahannya', async () => {
+    // "Ada resep pakai tempe?" adalah cara paling wajar orang mencari masakan.
+    await req('/api/cooking/recipes', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Orek tempe', have: ['Tempe'], missing: ['kecap'], minutes: 20 }),
+    });
+
+    for (const q of ['orek', 'tempe']) {
+      const body = await (await req(`/api/search?q=${q}`)).json() as {
+        hits: Array<{ type: string; title: string; subScreen?: string }>;
+      };
+      const hit = body.hits.find((h) => h.type === 'recipe');
+      expect(hit, `pencarian "${q}"`).toMatchObject({ title: 'Orek tempe', subScreen: 'masakan' });
+    }
+  });
+
+  it('tidak menemukan resep pengguna lain', async () => {
+    await db.prepare(
+      "INSERT INTO cooking_recipes (id, user_id, name) VALUES ('r2', 'user-2', 'Rahasia')"
+    ).run();
+
+    const body = await (await req('/api/search?q=rahasia')).json() as { hits: unknown[] };
+    expect(body.hits).toEqual([]);
+  });
+});
+
 describe('masakan.simpan_resep', () => {
   it('menghitung ulang bahan ada/kurang terhadap inventaris, bukan klaim model', async () => {
     // Model boleh mengarang resep, tapi tidak boleh mengarang isi kulkas.
@@ -574,6 +617,299 @@ describe('masakan.simpan_resep', () => {
 
     expect(JSON.parse(row!.have_json)).toEqual(['Telur']);
     expect(JSON.parse(row!.missing_json)).toEqual(['wagyu']);
+  });
+});
+
+describe('batas pemakaian dan cache AI', () => {
+  /** Setel jatah harian pengguna uji. */
+  async function setLimit(n: number) {
+    await db.prepare(
+      "INSERT OR REPLACE INTO user_settings (user_id, key, value) VALUES ('user-1', 'ai.daily_limit', ?1)"
+    ).bind(String(n)).run();
+  }
+
+  async function matikanCache() {
+    await db.prepare(
+      "INSERT OR REPLACE INTO user_settings (user_id, key, value) VALUES ('user-1', 'ai.cache_enabled', 'false')"
+    ).run();
+  }
+
+  it('menghitung tiap panggilan AI', async () => {
+    await matikanCache();
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'satu' }) });
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'dua' }) });
+
+    const row = await db.prepare('SELECT calls FROM ai_usage WHERE user_id = ?1').bind('user-1')
+      .first<{ calls: number }>();
+    expect(row?.calls).toBe(2);
+  });
+
+  it('menolak dengan 429 setelah jatah habis', async () => {
+    await setLimit(5);
+    await matikanCache();
+    await db.prepare(
+      "INSERT INTO ai_usage (user_id, day, calls) VALUES ('user-1', ?1, 5)"
+    ).bind(new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)).run();
+
+    const res = await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'halo' }) });
+    expect(res.status).toBe(429);
+    // AI tidak dipanggil sama sekali — itu seluruh gunanya batas ini.
+    expect(aiCalls).toHaveLength(0);
+  });
+
+  it('memperingatkan sebelum habis, bukan sesudah', async () => {
+    await setLimit(5);
+    await matikanCache();
+    await db.prepare(
+      "INSERT INTO ai_usage (user_id, day, calls) VALUES ('user-1', ?1, 3)"
+    ).bind(new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)).run();
+
+    const body = await (await req('/api/agent', {
+      method: 'POST', body: JSON.stringify({ message: 'halo' }),
+    })).json() as { catatanKuota: string | null; sisa: number };
+
+    expect(body.catatanKuota).toContain('Sisa 2');
+    expect(body.sisa).toBe(1);
+  });
+
+  it('tidak menghitung panggilan yang gagal', async () => {
+    // Permintaan yang gagal karena binding mati bukan pemakaian; menghitungnya
+    // membuat pengguna kehilangan jatah untuk sesuatu yang tidak ia terima.
+    await matikanCache();
+    aiReply = new Error('binding mati');
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'halo' }) });
+
+    const row = await db.prepare('SELECT calls FROM ai_usage WHERE user_id = ?1').bind('user-1')
+      .first<{ calls: number }>();
+    expect(row?.calls ?? 0).toBe(0);
+  });
+
+  it('memakai ulang jawaban untuk pertanyaan yang sama', async () => {
+    aiReply = { jawaban: 'Kebunmu baik.' };
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'kebunku?', module: 'kebun' }) });
+
+    const kedua = await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'kebunku?', module: 'kebun' }) });
+    const body = await kedua.json() as { jawaban: string; dariSimpanan: boolean };
+
+    expect(body).toMatchObject({ jawaban: 'Kebunmu baik.', dariSimpanan: true });
+    // Model hanya dipanggil sekali.
+    expect(aiCalls).toHaveLength(1);
+  });
+
+  it('menghitung ulang begitu datanya berubah', async () => {
+    // Cache yang menjawab pertanyaan hari ini dengan data kemarin jauh lebih
+    // membingungkan daripada menunggu.
+    aiReply = { jawaban: 'Belum ada tanaman.' };
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'kebunku?', module: 'kebun' }) });
+
+    await db.prepare(
+      `INSERT INTO garden_plantings (id, user_id, plant_id, quantity, planted_date, status)
+       VALUES ('p1', 'user-1', 'kangkung', 1, '2026-01-01', 'tumbuh')`
+    ).run();
+
+    aiReply = { jawaban: 'Ada satu kangkung.' };
+    const kedua = await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'kebunku?', module: 'kebun' }) });
+    expect(await kedua.json()).toMatchObject({ jawaban: 'Ada satu kangkung.' });
+    expect(aiCalls).toHaveLength(2);
+  });
+
+  it('tidak pernah memakai ulang jawaban yang membawa aksi', async () => {
+    // Mengulang aksi yang sama berarti menulis dua kali.
+    aiReply = { jawaban: 'ok', aksi: [{ alat: 'catatan.buat', argumen: { isi: 'halo' } }] };
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'catat halo', module: 'catatan' }) });
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'catat halo', module: 'catatan' }) });
+
+    expect(aiCalls).toHaveLength(2);
+    expect(await count('notes')).toBe(2);
+  });
+
+  it('tidak mencampur cache antar pengguna', async () => {
+    aiReply = { jawaban: 'punya user-1' };
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'halo', module: 'kebun' }) });
+
+    aiReply = { jawaban: 'punya user-2' };
+    const lain = await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'halo', module: 'kebun' }) }, otherToken);
+    expect(await lain.json()).toMatchObject({ jawaban: 'punya user-2' });
+  });
+
+  it('jatah dihitung terpisah per pengguna', async () => {
+    await setLimit(5);
+    await matikanCache();
+    await db.prepare(
+      "INSERT INTO ai_usage (user_id, day, calls) VALUES ('user-1', ?1, 5)"
+    ).bind(new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10)).run();
+
+    expect((await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'x' }) })).status).toBe(429);
+    expect((await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'x' }) }, otherToken)).status).toBe(200);
+  });
+});
+
+describe('pembatalan aksi', () => {
+  /** Jalankan satu aksi lewat agen, kembalikan id catatannya. */
+  async function jalankan(alat: string, argumen: unknown, modul: string): Promise<string> {
+    aiReply = { jawaban: 'ok', aksi: [{ alat, argumen }] };
+    const res = await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'x', module: modul }) });
+    const body = await res.json() as { aksi: Array<{ actionId?: string; status: string }> };
+    expect(body.aksi[0].status).toBe('dijalankan');
+    return body.aksi[0].actionId!;
+  }
+
+  it('mengembalikan id catatan supaya UI bisa menawarkan pembatalan', async () => {
+    const actionId = await jalankan('kebun.tanam', { tanaman: ['Kangkung'] }, 'kebun');
+    expect(actionId).toBeTruthy();
+  });
+
+  it('menghapus baris yang dibuat aksi itu', async () => {
+    const actionId = await jalankan('kebun.tanam', { tanaman: ['Kangkung', 'Bayam'] }, 'kebun');
+    expect(await count('garden_plantings')).toBe(2);
+
+    const res = await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) });
+    expect(res.status).toBe(200);
+    expect(await count('garden_plantings')).toBe(0);
+  });
+
+  it('tidak menyentuh baris yang bukan dibuat aksi itu', async () => {
+    // Tanaman yang ditanam sendiri lewat form tidak boleh ikut hilang.
+    await db.prepare(
+      `INSERT INTO garden_plantings (id, user_id, plant_id, quantity, planted_date, status)
+       VALUES ('punya-sendiri', 'user-1', 'bayam', 1, '2026-01-01', 'tumbuh')`
+    ).run();
+    const actionId = await jalankan('kebun.tanam', { tanaman: ['Kangkung'] }, 'kebun');
+
+    await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) });
+    expect(await count('garden_plantings')).toBe(1);
+  });
+
+  it('tidak bisa membatalkan aksi pengguna lain', async () => {
+    const actionId = await jalankan('kebun.tanam', { tanaman: ['Kangkung'] }, 'kebun');
+
+    const res = await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) }, otherToken);
+    expect(res.status).toBe(404);
+    expect(await count('garden_plantings')).toBe(1);
+  });
+
+  it('menolak pembatalan kedua', async () => {
+    const actionId = await jalankan('catatan.buat', { isi: 'halo' }, 'catatan');
+    expect((await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) })).status).toBe(200);
+
+    const kedua = await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) });
+    expect(kedua.status).toBe(400);
+    expect(await kedua.json()).toMatchObject({ error: 'aksi ini sudah dibatalkan' });
+  });
+
+  it('membatalkan panen mengembalikan status dan menghapus stoknya', async () => {
+    // Panen menyentuh tiga hal; membatalkan hanya log-nya menghasilkan
+    // tanaman berstatus panen tanpa catatan panen, dan stok dapur yang
+    // asalnya sudah tidak ada.
+    await db.prepare(
+      `INSERT INTO garden_plantings (id, user_id, plant_id, quantity, planted_date, status)
+       VALUES ('p1', 'user-1', 'kangkung', 5, '2026-01-01', 'tumbuh')`
+    ).run();
+
+    const actionId = await jalankan(
+      'kebun.rawat', { tanaman: 'kangkung', aksi: 'panen', jumlah: 2, satuan: 'kg' }, 'kebun'
+    );
+    expect(await count('inventory_items')).toBe(1);
+
+    await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) });
+
+    const planting = await db.prepare('SELECT status FROM garden_plantings WHERE id = ?1')
+      .bind('p1').first<{ status: string }>();
+    expect(planting?.status).toBe('tumbuh');
+    expect(await count('inventory_items')).toBe(0);
+    expect(await count('garden_care_log')).toBe(0);
+  });
+
+  it('tidak menurunkan status tanaman yang memang sudah panen sebelumnya', async () => {
+    await db.prepare(
+      `INSERT INTO garden_plantings (id, user_id, plant_id, quantity, planted_date, status)
+       VALUES ('p1', 'user-1', 'kangkung', 5, '2026-01-01', 'panen')`
+    ).run();
+
+    const actionId = await jalankan('kebun.rawat', { tanaman: 'kangkung', aksi: 'panen', jumlah: 1 }, 'kebun');
+    await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) });
+
+    const planting = await db.prepare('SELECT status FROM garden_plantings WHERE id = ?1')
+      .bind('p1').first<{ status: string }>();
+    expect(planting?.status).toBe('panen');
+  });
+
+  it('menolak id aksi yang tidak ada', async () => {
+    const res = await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId: 'ngawur' }) });
+    expect(res.status).toBe(404);
+  });
+
+  it('menolak tanpa id aksi', async () => {
+    const res = await req('/api/agent/undo', { method: 'POST', body: '{}' });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/agent/history', () => {
+  it('menolak tanpa token', async () => {
+    const res = await app.request('http://test/api/agent/history', {}, makeEnv());
+    expect(res.status).toBe(401);
+  });
+
+  it('mencatat permintaan aslinya, bukan cuma hasilnya', async () => {
+    // Riwayat harus bisa menjelaskan KENAPA sebuah baris muncul.
+    aiReply = { jawaban: 'ok', aksi: [{ alat: 'kebun.tanam', argumen: { tanaman: ['Kangkung'] } }] };
+    await req('/api/agent', {
+      method: 'POST',
+      body: JSON.stringify({ message: 'buatkan daftar tanaman pemula', module: 'kebun' }),
+    });
+
+    const body = await (await req('/api/agent/history')).json() as {
+      actions: Array<{ tool: string; message: string; summary: string; undoable: boolean }>;
+    };
+    expect(body.actions[0]).toMatchObject({
+      tool: 'kebun.tanam',
+      message: 'buatkan daftar tanaman pemula',
+      undoable: true,
+    });
+    expect(body.actions[0].summary).toContain('Kangkung');
+  });
+
+  it('tidak menampilkan aksi pengguna lain', async () => {
+    aiReply = { jawaban: 'ok', aksi: [{ alat: 'catatan.buat', argumen: { isi: 'rahasia' } }] };
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'x', module: 'catatan' }) });
+
+    const body = await (await req('/api/agent/history', {}, otherToken)).json() as { actions: unknown[] };
+    expect(body.actions).toEqual([]);
+  });
+
+  it('menandai aksi yang sudah dibatalkan sebagai tidak bisa dibatalkan lagi', async () => {
+    aiReply = { jawaban: 'ok', aksi: [{ alat: 'catatan.buat', argumen: { isi: 'halo' } }] };
+    const res = await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'x', module: 'catatan' }) });
+    const { aksi } = await res.json() as { aksi: Array<{ actionId: string }> };
+
+    await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId: aksi[0].actionId }) });
+
+    const body = await (await req('/api/agent/history')).json() as {
+      actions: Array<{ status: string; undoable: boolean; undoneAt: number | null }>;
+    };
+    expect(body.actions[0]).toMatchObject({ status: 'dibatalkan', undoable: false });
+    expect(body.actions[0].undoneAt).toBeTruthy();
+  });
+
+  it('tidak mencatat aksi yang hanya menjawab tanpa menulis', async () => {
+    aiReply = { jawaban: 'Kebunmu baik-baik saja.' };
+    await req('/api/agent', { method: 'POST', body: JSON.stringify({ message: 'kebunku?', module: 'kebun' }) });
+
+    const body = await (await req('/api/agent/history')).json() as { actions: unknown[] };
+    expect(body.actions).toEqual([]);
+  });
+
+  it('mencatat aksi uang yang dikonfirmasi, beserta id pembatalannya', async () => {
+    const res = await req('/api/agent/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ tool: 'uang.catat', args: { jenis: 'expense', jumlah: 50000 } }),
+    });
+    const { actionId } = await res.json() as { actionId: string };
+    expect(actionId).toBeTruthy();
+
+    await req('/api/agent/undo', { method: 'POST', body: JSON.stringify({ actionId }) });
+    expect(await count('budget_entries')).toBe(0);
   });
 });
 
@@ -612,6 +948,48 @@ describe('POST /api/agent/confirm', () => {
       makeEnv()
     );
     expect(res.status).toBe(401);
+  });
+
+  it('mengabaikan kiriman ulang dengan clientId sama', async () => {
+    // Inti antrean offline: permintaan yang sudah sampai tapi jawabannya tak
+    // pernah diterima klien akan dikirim ulang. Yang lewat sini adalah aksi
+    // uang, dan pengeluaran ganda merusak rekap berbulan-bulan.
+    const payload = JSON.stringify({
+      tool: 'uang.catat',
+      args: { jenis: 'expense', jumlah: 50000 },
+      clientId: 'aaaabbbbccccdddd',
+    });
+
+    const pertama = await req('/api/agent/confirm', { method: 'POST', body: payload });
+    expect(pertama.status).toBe(200);
+
+    const kedua = await req('/api/agent/confirm', { method: 'POST', body: payload });
+    expect(await kedua.json()).toMatchObject({ duplicate: true });
+
+    expect(await count('budget_entries')).toBe(1);
+  });
+
+  it('clientId milik pengguna lain tidak menghalangi aksinya sendiri', async () => {
+    const payload = JSON.stringify({
+      tool: 'uang.catat',
+      args: { jenis: 'expense', jumlah: 50000 },
+      clientId: 'aaaabbbbccccdddd',
+    });
+
+    await req('/api/agent/confirm', { method: 'POST', body: payload });
+    await req('/api/agent/confirm', { method: 'POST', body: payload }, otherToken);
+
+    expect(await count('budget_entries', 'user-1')).toBe(1);
+    expect(await count('budget_entries', 'user-2')).toBe(1);
+  });
+
+  it('mengabaikan clientId yang bentuknya tidak sah, tanpa menolak aksinya', async () => {
+    const res = await req('/api/agent/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ tool: 'uang.catat', args: { jenis: 'expense', jumlah: 1000 }, clientId: 'x' }),
+    });
+    expect(res.status).toBe(200);
+    expect(await count('budget_entries')).toBe(1);
   });
 });
 
@@ -835,6 +1213,38 @@ describe('modul Masakan', () => {
     const prompt = JSON.stringify(aiCalls[0].input);
     expect(prompt).toContain('Tempe');
     expect(prompt).not.toContain('Nasi');
+  });
+
+  it('mencatat porsinya ke log makan saat gizinya diisi', async () => {
+    // Masak lalu makan adalah satu peristiwa; mencatatnya dua kali membuat
+    // yang kedua hampir selalu terlewat.
+    const { id } = await (await req('/api/cooking/recipes', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Nasi goreng', servings: 2 }),
+    })).json() as { id: string };
+
+    const res = await req(`/api/cooking/recipes/${id}/cook`, {
+      method: 'POST',
+      body: JSON.stringify({ meal: { portion: '1 porsi', calories: 420, protein: 12 } }),
+    });
+    expect(await res.json()).toMatchObject({ mealLogged: true });
+
+    const log = await db.prepare(
+      'SELECT food_name, portion, calories, protein_g, log_date FROM food_logs WHERE user_id = ?1'
+    ).bind('user-1').first<{ food_name: string; portion: string; calories: number; protein_g: number }>();
+
+    expect(log).toMatchObject({ food_name: 'Nasi goreng', portion: '1 porsi', calories: 420, protein_g: 12 });
+  });
+
+  it('tidak mencatat log makan kalau gizinya tidak diisi', async () => {
+    // Mengarang kalori lebih buruk daripada tidak mencatat.
+    const { id } = await (await req('/api/cooking/recipes', {
+      method: 'POST', body: JSON.stringify({ name: 'Nasi goreng' }),
+    })).json() as { id: string };
+
+    const res = await req(`/api/cooking/recipes/${id}/cook`, { method: 'POST', body: '{}' });
+    expect(await res.json()).toMatchObject({ mealLogged: false });
+    expect(await count('food_logs')).toBe(0);
   });
 
   it('menolak memasak resep pengguna lain', async () => {

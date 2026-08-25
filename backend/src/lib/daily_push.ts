@@ -14,6 +14,9 @@ import { computeSafeToSpend } from './safe_to_spend';
 import { getBillRadar, getKidsFor, getMissedYesterday, getExpiringItems, shiftDate } from './daily';
 import { jakartaToday } from './validate';
 import { loadSettingsFor, bool, num, type ResolvedSettings } from './settings';
+import { runText } from './ai';
+import { buildContext } from './ai_context';
+import { readBudget, recordCall } from './ai_budget';
 
 /** Jam Jakarta saat ini (0..23). */
 export function jakartaHour(): number {
@@ -214,6 +217,48 @@ export async function triggerMissTwice(env: Env): Promise<void> {
 }
 
 /** Pagi Ini — satu ringkasan lintas modul, menggantikan buka enam layar. */
+/**
+ * Satu kalimat pembuka, atau null kalau apa pun tidak beres.
+ *
+ * Semua kegagalan dikembalikan sebagai null, bukan dilempar: pemanggilnya
+ * sedang menyusun push yang harus tetap terkirim.
+ */
+async function kalimatPembuka(
+  env: Env,
+  userId: string,
+  today: string,
+  limit: number
+): Promise<string | null> {
+  try {
+    const budget = await readBudget(env.DB, userId, today, limit);
+    if (budget.exhausted) return null;
+
+    const context = await buildContext(env.DB, userId, ['kebiasaan', 'kebun', 'uang', 'inventaris'], today);
+    if (!context) return null;
+
+    const teks = await runText(env, [
+      {
+        role: 'system',
+        content: `Tulis SATU kalimat pembuka untuk notifikasi pagi, bahasa Indonesia, maksimal 15 kata.
+
+Aturan:
+- Sebut satu hal paling penting dari data, dengan angka atau nama yang benar-benar ada di sana.
+- Jangan menyapa ("Selamat pagi"), jangan memberi nasihat umum, jangan mengarang angka.
+- Kalau tidak ada yang menonjol, sebut satu hal yang berjalan baik.`,
+      },
+      { role: 'user', content: `Hari ini ${today}.\n\n${context}` },
+    ], { maxTokens: 80 });
+
+    await recordCall(env.DB, userId, today);
+
+    const bersih = teks.split('\n')[0].trim().slice(0, 160);
+    return bersih.length >= 10 ? bersih : null;
+  } catch (err) {
+    console.error('[daily_push] kalimat pembuka gagal', err);
+    return null;
+  }
+}
+
 export async function triggerMorningBrief(env: Env): Promise<void> {
   const today = jakartaToday();
 
@@ -259,9 +304,24 @@ export async function triggerMorningBrief(env: Env): Promise<void> {
     if (expiring.length > 0) lines.push(`🥬 ${expiring.length} stok perlu segera dipakai`);
     if (kids.length > 0) lines.push(`🎒 ${kids.length} jadwal anak`);
 
+    // Satu kalimat pembuka dari data pengguna sendiri.
+    //
+    // Baris-baris di atas berbasis aturan dan selalu benar; kalimat ini yang
+    // membuatnya terasa ditujukan pada orang tertentu — "kangkungmu tiga hari
+    // belum disiram" alih-alih "1 dari 4 kebiasaan menunggu".
+    //
+    // Sengaja hanya menambah, tidak pernah menggantikan: kalau AI tidak bisa
+    // dihubungi, jatahnya habis, atau jawabannya kosong, push-nya tetap
+    // terkirim persis seperti sebelumnya. Fitur yang membuat pengingat pagi
+    // BERHENTI datang jauh lebih merugikan daripada pengingat tanpa kalimat
+    // pembuka.
+    const pembuka = bool(settings, 'ai.morning_sentence')
+      ? await kalimatPembuka(env, userId, today, num(settings, 'ai.daily_limit'))
+      : null;
+
     await sendDaily(env, userId, 'morning_brief', today, {
       title: '☀️ Pagi Ini',
-      body: lines.join('\n'),
+      body: pembuka ? `${pembuka}\n\n${lines.join('\n')}` : lines.join('\n'),
       url: '/',
       data: { pending, eventCount },
     });

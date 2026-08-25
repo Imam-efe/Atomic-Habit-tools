@@ -1,157 +1,63 @@
-import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { springs, press } from '@/tokens/motion';
-import { apiFetch } from '@/lib/api';
-import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
-import { useCommandStore, notifyDataChanged } from '@/stores/commandStore';
-import { useUIStore } from '@/stores/uiStore';
-
 /**
- * Quick-add: one sentence in, one record out.
+ * Catat cepat: satu kalimat masuk, satu catatan keluar.
  *
- * The parse runs on the server and comes back as a *proposal*, never a saved
- * row — an extraction model gets things wrong often enough that writing
- * straight into a finance ledger would be reckless. The proposal lands in
- * editable fields, and the save goes through the same endpoints the manual
- * forms use, so every existing validation still applies.
+ * Dulu layar ini punya jalur AI-nya sendiri — endpoint parse terpisah, skema
+ * niat terpisah, dan satu kartu konfirmasi yang ditulis tangan untuk tiap
+ * jenis catatan. Agen melakukan pekerjaan yang persis sama: menebak maksud
+ * dari sebuah kalimat lalu menulisnya ke modul yang benar.
+ *
+ * Dua jalur untuk satu pekerjaan berarti dua tempat yang harus diperbaiki
+ * setiap kali ada yang salah, dan dua perilaku berbeda untuk kalimat yang
+ * sama. Layar ini sekarang membungkus panel AI yang sama dengan yang ada di
+ * setiap layar — tanpa modul, jadi seluruh alat tersedia — dan yang tersisa
+ * di sini hanyalah yang memang milik overlay ini: cara membukanya, dikte yang
+ * langsung menyala dari tombol mikrofon, dan cara menutupnya.
  */
 
-const EXPENSE_CATEGORIES = [
-  'Makanan & Minuman',
-  'Transportasi & Bensin',
-  'Kebutuhan Rumah Tangga',
-  'Belanja Bulanan',
-  'Tagihan & Utilitas',
-  'Pendidikan & Anak',
-  'Kesehatan & Obat',
-  'Hiburan & Rekreasi',
-  'Cicilan & Utang',
-  'Investasi & Tabungan',
-  'Lainnya',
-];
-const INCOME_CATEGORIES = ['Gaji', 'Freelance', 'Investasi', 'Bisnis', 'Lainnya'];
-
-interface EntryProposal {
-  type: 'income' | 'expense';
-  amount: number;
-  category: string;
-  note: string;
-  date: string;
-  bank_account_id: string | null;
-  bank_name: string | null;
-}
-
-interface ItemProposal {
-  name: string;
-  quantity: number;
-  unit: string;
-}
-
-interface EventProposal {
-  title: string;
-  note: string | null;
-  kind: 'task' | 'event' | 'reminder';
-  event_date: string;
-  event_time: string | null;
-}
-
-interface CareProposal {
-  plantingId: string;
-  plantName: string;
-  action: string;
-  amount: number | null;
-  unit: string | null;
-}
-
-type ParseResponse =
-  | { intent: 'expense' | 'income'; text: string; entry: EntryProposal }
-  | { intent: 'habit'; text: string; habit: { id: string; name: string } }
-  | { intent: 'inventory'; text: string; item: ItemProposal }
-  | { intent: 'calendar'; text: string; event: EventProposal }
-  | { intent: 'garden'; text: string; care: CareProposal }
-  | { intent: 'unknown'; text: string };
-
-const GARDEN_ACTION_LABELS: Record<string, string> = {
-  siram: '💧 Siram',
-  pupuk: '🌿 Pupuk',
-  panen: '🧺 Panen',
-  pangkas: '✂️ Pangkas',
-  semprot: '🧴 Semprot',
-};
-
-const CALENDAR_KIND_LABELS: Record<EventProposal['kind'], string> = {
-  task: 'Tugas',
-  event: 'Acara',
-  reminder: 'Pengingat',
-};
-
-const EXAMPLES = ['beli kopi 25rb', 'gaji masuk 5jt', 'olahraga selesai', 'meeting jam 3 sore besok'];
+import { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { springs } from '@/tokens/motion';
+import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
+import { useCommandStore, notifyDataChanged } from '@/stores/commandStore';
+import { AiPanel } from '@/components/AiPanel';
 
 export function QuickAdd() {
   const { overlay, startListening, close } = useCommandStore();
-  const setTab = useUIStore(s => s.setTab);
   const open = overlay === 'quickadd';
 
-  const [text, setText] = useState('');
-  const [parsing, setParsing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ParseResponse | null>(null);
+  const [dictated, setDictated] = useState('');
   const [listening, setListening] = useState(false);
-
-  // Editable proposal fields
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('');
-  const [note, setNote] = useState('');
-  const [eventTitle, setEventTitle] = useState('');
-  const [eventDate, setEventDate] = useState('');
-  const [eventTime, setEventTime] = useState('');
-  const [eventKind, setEventKind] = useState<EventProposal['kind']>('task');
-
-  const inputRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<VoiceSession | null>(null);
-  const voiceAvailable = useRef(isVoiceSupported());
 
-  const reset = () => {
-    setText('');
-    setResult(null);
-    setError(null);
-    setParsing(false);
-    setSaving(false);
-    setAmount('');
-    setCategory('');
-    setNote('');
-    setEventTitle('');
-    setEventDate('');
-    setEventTime('');
-    setEventKind('task');
-  };
-
-  const handleClose = () => {
+  const stopVoice = () => {
     voiceRef.current?.cancel();
     voiceRef.current = null;
     setListening(false);
-    reset();
+  };
+
+  const handleClose = () => {
+    stopVoice();
+    setDictated('');
     close();
   };
 
+  /**
+   * Dikte mengisi kotak panel, tidak langsung mengirim.
+   *
+   * Pengenalan suara Indonesia sering meleset satu-dua kata, dan agen
+   * sekarang bisa menulis langsung — mengirim tanpa dilihat dulu berarti
+   * kesalahan dengar berubah jadi baris di database.
+   */
   const beginListening = () => {
     if (listening) {
       voiceRef.current?.stop();
       return;
     }
-    setError(null);
     const session = startVoiceInput({
-      onPartial: setText,
-      onResult: (final) => {
-        setText(final);
-        void parse(final);
-      },
-      onError: setError,
-      onEnd: () => {
-        setListening(false);
-        voiceRef.current = null;
-      },
+      onPartial: setDictated,
+      onResult: setDictated,
+      onEnd: () => { setListening(false); voiceRef.current = null; },
+      onError: () => { setListening(false); voiceRef.current = null; },
     });
     if (session) {
       voiceRef.current = session;
@@ -159,12 +65,10 @@ export function QuickAdd() {
     }
   };
 
-  // Opening from the mic button starts dictation immediately; opening from the
-  // text button focuses the field instead.
+  // Dibuka dari tombol mikrofon: langsung mendengarkan.
   useEffect(() => {
-    if (!open) return;
-    if (startListening && voiceAvailable.current) beginListening();
-    else inputRef.current?.focus();
+    if (open && startListening && isVoiceSupported()) beginListening();
+    if (!open) stopVoice();
   }, [open, startListening]);
 
   useEffect(() => {
@@ -176,123 +80,6 @@ export function QuickAdd() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  const parse = async (raw: string) => {
-    const value = raw.trim();
-    if (!value) return;
-    setParsing(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await apiFetch<ParseResponse>('/quickadd/parse', {
-        method: 'POST',
-        body: JSON.stringify({ text: value }),
-      });
-      setResult(res);
-      if (res.intent === 'expense' || res.intent === 'income') {
-        setAmount(String(res.entry.amount));
-        setCategory(res.entry.category);
-        setNote(res.entry.note);
-      } else if (res.intent === 'inventory') {
-        setNote(res.item.name);
-        setAmount(String(res.item.quantity));
-      } else if (res.intent === 'calendar') {
-        setEventTitle(res.event.title);
-        setEventDate(res.event.event_date);
-        setEventTime(res.event.event_time ?? '');
-        setEventKind(res.event.kind);
-      }
-    } catch {
-      setError('Gagal memproses. Coba kalimat yang lebih sederhana atau catat manual.');
-    } finally {
-      setParsing(false);
-    }
-  };
-
-  const save = async () => {
-    if (!result || saving) return;
-    setSaving(true);
-    setError(null);
-
-    try {
-      if (result.intent === 'expense' || result.intent === 'income') {
-        const amt = parseInt(amount.replace(/\D/g, ''), 10);
-        if (!amt || amt <= 0) {
-          setError('Nominal tidak valid.');
-          setSaving(false);
-          return;
-        }
-        await apiFetch('/budget', {
-          method: 'POST',
-          body: JSON.stringify({
-            type: result.entry.type,
-            amount: amt,
-            category,
-            note,
-            date: result.entry.date,
-            bank_account_id: result.entry.bank_account_id ?? undefined,
-          }),
-        });
-        notifyDataChanged('uang');
-        setTab('uang');
-      } else if (result.intent === 'habit') {
-        await apiFetch(`/habits/${result.habit.id}/toggle`, {
-          method: 'POST',
-          body: JSON.stringify({}),
-        });
-        notifyDataChanged('kebiasaan');
-        setTab('kebiasaan');
-      } else if (result.intent === 'garden') {
-        await apiFetch(`/garden/${result.care.plantingId}/care`, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: result.care.action,
-            // Jumlah hanya dikirim untuk panen — itu yang menyalakan
-            // sinkronisasi panen ke stok Inventaris di backend.
-            ...(result.care.amount !== null
-              ? { amount: result.care.amount, unit: result.care.unit ?? 'kg' }
-              : {}),
-          }),
-        });
-        notifyDataChanged('kebun');
-        setTab('kebun');
-      } else if (result.intent === 'inventory') {
-        const qty = parseInt(amount.replace(/\D/g, ''), 10);
-        await apiFetch('/inventory', {
-          method: 'POST',
-          body: JSON.stringify({
-            name: note,
-            quantity: qty > 0 ? qty : 1,
-            unit: result.item.unit,
-          }),
-        });
-      } else if (result.intent === 'calendar') {
-        if (!eventTitle.trim() || !eventDate) {
-          setError('Judul dan tanggal wajib diisi.');
-          setSaving(false);
-          return;
-        }
-        await apiFetch('/calendar', {
-          method: 'POST',
-          body: JSON.stringify({
-            title: eventTitle.trim(),
-            kind: eventKind,
-            event_date: eventDate,
-            event_time: eventTime || undefined,
-          }),
-        });
-        notifyDataChanged('kalender');
-        setTab('kalender');
-      }
-      handleClose();
-    } catch {
-      setError('Gagal menyimpan. Periksa koneksi dan coba lagi.');
-      setSaving(false);
-    }
-  };
-
-  const categories =
-    result?.intent === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
-
   return (
     <AnimatePresence>
       {open && (
@@ -300,318 +87,48 @@ export function QuickAdd() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-command flex items-start justify-center px-4 pt-20"
-          style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)' }}
+          transition={springs.gentle}
+          className="fixed inset-0 z-50 flex items-start justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.4)', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 56px)' }}
           onClick={handleClose}
         >
           <motion.div
             initial={{ opacity: 0, y: -18, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.98 }}
-            transition={springs.smooth}
-            className="w-full rounded-3xl p-4"
-            style={{ maxWidth: 400, background: 'var(--bg)', boxShadow: 'var(--neu-raised-lg)' }}
+            exit={{ opacity: 0, y: -18, scale: 0.97 }}
+            transition={springs.gentle}
+            className="w-full space-y-3"
+            style={{ maxWidth: 460 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[15px] font-bold" style={{ color: 'var(--text)' }}>
-                Catat Cepat
-              </span>
-              <span
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                style={{ background: 'var(--accentFill)', color: '#fff' }}
-              >
-                AI
-              </span>
+            <div className="flex items-center justify-between">
+              <h2 className="text-[15px] font-extrabold text-white">Catat cepat</h2>
               <button
+                className="text-[12px] font-semibold text-white"
+                style={{ opacity: 0.8 }}
                 onClick={handleClose}
-                aria-label="Tutup"
-                className="ml-auto w-8 h-8 rounded-full neu-press flex items-center justify-center text-[15px]"
-                style={{ color: 'var(--text2)' }}
               >
-                ✕
+                Tutup
               </button>
             </div>
 
-            {/* Input row */}
-            <div
-              className="flex items-center gap-2 rounded-2xl px-3 py-2 neu-inset"
-              style={{ background: 'var(--surface)' }}
-            >
-              <input
-                ref={inputRef}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void parse(text);
-                }}
-                placeholder="beli kopi 25rb pakai BCA"
-                className="flex-1 min-w-0 bg-transparent outline-none text-[15px]"
-                style={{ color: 'var(--text)' }}
-                enterKeyHint="go"
-              />
-              {voiceAvailable.current && (
-                <motion.button
-                  whileTap={press.control}
-                  onClick={beginListening}
-                  aria-label={listening ? 'Berhenti merekam' : 'Mulai bicara'}
-                  aria-pressed={listening}
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-[16px] flex-shrink-0"
-                  style={{
-                    background: listening ? 'var(--accentFill)' : 'transparent',
-                    color: listening ? '#fff' : 'var(--text2)',
-                  }}
-                >
-                  {listening ? '⏹' : '🎤'}
-                </motion.button>
-              )}
-              <motion.button
-                whileTap={press.control}
-                onClick={() => void parse(text)}
-                disabled={!text.trim() || parsing}
-                className="px-3 py-1.5 rounded-xl text-[13px] font-bold flex-shrink-0 disabled:opacity-40"
-                style={{ background: 'var(--accentFill)', color: '#fff' }}
-              >
-                {parsing ? '…' : 'Baca'}
-              </motion.button>
-            </div>
-
             {listening && (
-              <p className="text-[12px] mt-2 text-center" style={{ color: 'var(--accentFill2)' }}>
-                Mendengarkan… ucapkan transaksi atau kebiasaan Anda
+              <p className="text-[11px] text-white" style={{ opacity: 0.85 }}>
+                🎙 Mendengarkan… kalimatnya masuk ke kotak di bawah.
               </p>
             )}
 
-            {!result && !parsing && !listening && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {EXAMPLES.map((ex) => (
-                  <button
-                    key={ex}
-                    onClick={() => {
-                      setText(ex);
-                      void parse(ex);
-                    }}
-                    className="text-[11px] px-2.5 py-1 rounded-full neu-sm"
-                    style={{ color: 'var(--text2)' }}
-                  >
-                    {ex}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {error && (
-              <p className="text-[12px] mt-3" style={{ color: 'var(--neg)' }}>
-                {error}
-              </p>
-            )}
-
-            {/* Proposal — always editable before it is saved */}
-            <AnimatePresence>
-              {result && result.intent !== 'unknown' && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={springs.gentle}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-4 rounded-2xl p-3 neu-sm">
-                    {(result.intent === 'expense' || result.intent === 'income') && (
-                      <>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span
-                            className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                            style={{
-                              background: result.intent === 'income' ? 'var(--posFill)' : 'var(--negFill)',
-                              color: '#fff',
-                            }}
-                          >
-                            {result.intent === 'income' ? 'Pemasukan' : 'Pengeluaran'}
-                          </span>
-                          {result.entry.bank_name && (
-                            <span className="text-[11px]" style={{ color: 'var(--text3)' }}>
-                              via {result.entry.bank_name}
-                            </span>
-                          )}
-                        </div>
-
-                        <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
-                          Nominal
-                        </label>
-                        <input
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                          inputMode="numeric"
-                          className="w-full bg-transparent outline-none text-[20px] font-bold mb-2"
-                          style={{ color: 'var(--text)' }}
-                        />
-
-                        <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
-                          Kategori
-                        </label>
-                        <select
-                          value={category}
-                          onChange={(e) => setCategory(e.target.value)}
-                          className="w-full bg-transparent outline-none text-[14px] mb-2"
-                          style={{ color: 'var(--text)' }}
-                        >
-                          {categories.map((cat) => (
-                            <option key={cat} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-
-                        <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
-                          Catatan
-                        </label>
-                        <input
-                          value={note}
-                          onChange={(e) => setNote(e.target.value)}
-                          className="w-full bg-transparent outline-none text-[14px]"
-                          style={{ color: 'var(--text)' }}
-                        />
-                      </>
-                    )}
-
-                    {result.intent === 'habit' && (
-                      <p className="text-[14px]" style={{ color: 'var(--text)' }}>
-                        Tandai <span className="font-bold">{result.habit.name}</span> selesai hari ini?
-                      </p>
-                    )}
-
-                    {result.intent === 'garden' && (
-                      <>
-                        <span
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mb-2"
-                          style={{ background: 'var(--accentFill)', color: '#fff' }}
-                        >
-                          Kebun
-                        </span>
-                        <p className="text-[14px]" style={{ color: 'var(--text)' }}>
-                          Catat{' '}
-                          <span className="font-bold">
-                            {GARDEN_ACTION_LABELS[result.care.action] ?? result.care.action}
-                          </span>{' '}
-                          untuk <span className="font-bold">{result.care.plantName}</span>
-                          {result.care.amount !== null && (
-                            <> sebanyak <span className="font-bold">{result.care.amount} {result.care.unit}</span></>
-                          )}
-                          ?
-                        </p>
-                      </>
-                    )}
-
-                    {result.intent === 'inventory' && (
-                      <>
-                        <span
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mb-2"
-                          style={{ background: 'var(--accentFill)', color: '#fff' }}
-                        >
-                          Stok
-                        </span>
-                        <label className="text-[11px] font-semibold block" style={{ color: 'var(--text3)' }}>
-                          Nama barang
-                        </label>
-                        <input
-                          value={note}
-                          onChange={(e) => setNote(e.target.value)}
-                          className="w-full bg-transparent outline-none text-[15px] font-semibold mb-2"
-                          style={{ color: 'var(--text)' }}
-                        />
-                        <label className="text-[11px] font-semibold block" style={{ color: 'var(--text3)' }}>
-                          Jumlah ({result.item.unit})
-                        </label>
-                        <input
-                          value={amount}
-                          onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
-                          inputMode="numeric"
-                          className="w-full bg-transparent outline-none text-[15px]"
-                          style={{ color: 'var(--text)' }}
-                        />
-                      </>
-                    )}
-
-                    {result.intent === 'calendar' && (
-                      <>
-                        <div className="flex items-center gap-1.5 mb-2">
-                          {(['task', 'event', 'reminder'] as const).map((k) => (
-                            <button
-                              key={k}
-                              onClick={() => setEventKind(k)}
-                              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                              style={{
-                                background: eventKind === k ? 'var(--accentFill)' : 'var(--surface)',
-                                color: eventKind === k ? '#fff' : 'var(--text2)',
-                                boxShadow: eventKind === k ? 'none' : 'var(--neu-inset)',
-                              }}
-                            >
-                              {CALENDAR_KIND_LABELS[k]}
-                            </button>
-                          ))}
-                        </div>
-
-                        <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
-                          Judul
-                        </label>
-                        <input
-                          value={eventTitle}
-                          onChange={(e) => setEventTitle(e.target.value)}
-                          className="w-full bg-transparent outline-none text-[15px] font-semibold mb-2"
-                          style={{ color: 'var(--text)' }}
-                        />
-
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
-                              Tanggal
-                            </label>
-                            <input
-                              type="date"
-                              value={eventDate}
-                              onChange={(e) => setEventDate(e.target.value)}
-                              className="w-full bg-transparent outline-none text-[14px]"
-                              style={{ color: 'var(--text)' }}
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
-                              Jam (opsional)
-                            </label>
-                            <input
-                              type="time"
-                              value={eventTime}
-                              onChange={(e) => setEventTime(e.target.value)}
-                              className="w-full bg-transparent outline-none text-[14px]"
-                              style={{ color: 'var(--text)' }}
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  <motion.button
-                    whileTap={press.surface}
-                    onClick={() => void save()}
-                    disabled={saving}
-                    className="w-full mt-3 py-3 rounded-2xl text-[15px] font-bold neu-cta disabled:opacity-50"
-                    style={{ background: 'var(--accentFill)', color: '#fff' }}
-                  >
-                    {saving ? 'Menyimpan…' : 'Simpan'}
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {result?.intent === 'unknown' && (
-              <p className="text-[13px] mt-3" style={{ color: 'var(--text2)' }}>
-                Belum paham maksudnya. Sebutkan nominal untuk transaksi ("beli kopi 25rb"), atau
-                nama kebiasaan yang sudah terdaftar.
-              </p>
-            )}
+            <AiPanel
+              module={undefined}
+              defaultOpen
+              initialMessage={dictated}
+              suggestions={[
+                'Beli kopi 25rb pakai BCA',
+                'Sudah siram kangkung',
+                'Ingatkan kontrol dokter Jumat jam 9',
+              ]}
+              onChanged={() => notifyDataChanged('beranda')}
+            />
           </motion.div>
         </motion.div>
       )}

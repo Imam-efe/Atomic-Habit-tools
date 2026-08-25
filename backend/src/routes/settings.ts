@@ -31,6 +31,7 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'garden_costs', label: 'Biaya kebun', group: 'Kebun', userScoped: true },
   { table: 'garden_pest_log', label: 'Catatan hama', group: 'Kebun', userScoped: true },
   { table: 'cooking_recipes', label: 'Resep tersimpan', group: 'Masakan', userScoped: true },
+  { table: 'agent_actions', label: 'Riwayat aksi AI', group: 'Sistem', userScoped: true },
   { table: 'notes', label: 'Catatan', group: 'Lainnya', userScoped: true },
   { table: 'calendar_events', label: 'Agenda', group: 'Lainnya', userScoped: true },
   { table: 'kids_schedules', label: 'Jadwal anak', group: 'Lainnya', userScoped: true },
@@ -50,6 +51,7 @@ export const PURGEABLE: Array<{ table: string; label: string; userScoped: boolea
   { table: 'garden_care_alert_sent', label: 'Penanda alert kebun', userScoped: false, ageColumn: 'sent_at' },
   { table: 'garden_weather_cache', label: 'Cache cuaca', userScoped: false, ageColumn: 'fetched_at' },
   { table: 'food_facts_cache', label: 'Cache pencarian makanan', userScoped: false, ageColumn: 'fetched_at' },
+  { table: 'ai_cache', label: 'Simpanan jawaban AI', userScoped: true, ageColumn: 'created_at' },
 ];
 
 // GET /api/settings — skema beserta nilai yang berlaku

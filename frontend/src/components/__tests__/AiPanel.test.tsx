@@ -24,7 +24,10 @@ const json = (body: unknown, status = 200) =>
 function mockAgent(reply: unknown, confirmReply: unknown = { status: 'dijalankan', ringkasan: 'Tersimpan.' }) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     void init;
-    return String(url).includes('/agent/confirm') ? json(confirmReply) : json(reply);
+    const u = String(url);
+    if (u.includes('/agent/undo')) return json({ ok: true, removed: 3 });
+    if (u.includes('/agent/confirm')) return json(confirmReply);
+    return json(reply);
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
@@ -105,10 +108,40 @@ describe('AiPanel', () => {
     render(<AiPanel module="uang" onChanged={onChanged} />);
 
     await tanya(user, 'catat jajan 50rb');
-    expect(await screen.findByText(/jumlah: 50000/)).toBeInTheDocument();
+    // Nilainya terlihat DAN bisa diperbaiki sebelum disetujui.
+    expect(await screen.findByDisplayValue('50000')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('expense')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Simpan' })).toBeInTheDocument();
     // Belum tersimpan sampai ditekan.
     expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it('menyimpan angka yang diperbaiki pengguna, bukan tebakan model', async () => {
+    // Model sering benar soal niat tapi meleset soal angka. Memaksa
+    // membatalkan lalu mengetik ulang seluruh kalimat karena nominalnya
+    // 45rb bukan 50rb adalah cara tercepat membuat fitur ini ditinggalkan.
+    const fetchMock = mockAgent({
+      jawaban: 'Mau saya catat?',
+      aksi: [{
+        alat: 'uang.catat', modul: 'uang', status: 'perlu_konfirmasi',
+        ringkasan: 'Perlu persetujuanmu.', argumen: { jenis: 'expense', jumlah: 50000 },
+      }],
+      alatTidakDikenal: [],
+    });
+    const user = userEvent.setup();
+    render(<AiPanel module="uang" />);
+
+    await tanya(user, 'catat jajan 50rb');
+    const input = await screen.findByDisplayValue('50000');
+    await user.clear(input);
+    await user.type(input, '45000');
+    await user.click(screen.getByRole('button', { name: 'Simpan' }));
+
+    const confirmCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/agent/confirm'));
+    // Dikirim sebagai angka, bukan string: backend menolak nominal yang bukan number.
+    expect(JSON.parse(String(confirmCall?.[1]?.body)).args).toEqual({
+      jenis: 'expense', jumlah: 45000,
+    });
   });
 
   it('menyimpan aksi uang hanya setelah tombol ditekan', async () => {
@@ -136,6 +169,45 @@ describe('AiPanel', () => {
       tool: 'uang.catat',
       args: { jenis: 'expense', jumlah: 50000 },
     });
+  });
+
+  it('menawarkan Batalkan untuk aksi yang benar-benar menulis', async () => {
+    // Inilah yang membuat eksekusi langsung nyaman: satu ketukan, bukan
+    // sepuluh penghapusan manual.
+    const fetchMock = mockAgent({
+      jawaban: 'Sudah saya buatkan.',
+      aksi: [{
+        alat: 'kebun.tanam', modul: 'kebun', status: 'dijalankan',
+        ringkasan: '3 tanaman dicatat.', ids: ['a', 'b', 'c'], actionId: 'act-1',
+      }],
+      alatTidakDikenal: [],
+    });
+    const onChanged = vi.fn();
+    const user = userEvent.setup();
+    render(<AiPanel module="kebun" onChanged={onChanged} />);
+
+    await tanya(user, 'buatkan daftar tanaman');
+    await user.click(await screen.findByRole('button', { name: 'Batalkan' }));
+
+    expect(await screen.findByText('Dibatalkan.')).toBeInTheDocument();
+    const undoCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/agent/undo'));
+    expect(JSON.parse(String(undoCall?.[1]?.body))).toEqual({ actionId: 'act-1' });
+    // Layar dimuat ulang dua kali: sekali setelah aksi, sekali setelah batal.
+    expect(onChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it('tidak menawarkan Batalkan untuk aksi yang tidak menulis apa pun', async () => {
+    mockAgent({
+      jawaban: 'Sebagian gagal.',
+      aksi: [{ alat: 'kebun.rawat', modul: 'kebun', status: 'gagal', ringkasan: 'tidak ketemu' }],
+      alatTidakDikenal: [],
+    });
+    const user = userEvent.setup();
+    render(<AiPanel module="kebun" />);
+
+    await tanya(user, 'siram anggur');
+    await screen.findByText(/tidak ketemu/);
+    expect(screen.queryByRole('button', { name: 'Batalkan' })).not.toBeInTheDocument();
   });
 
   it('menampilkan aksi yang gagal, tidak menyembunyikannya', async () => {
@@ -203,6 +275,41 @@ describe('AiPanel', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
     expect(body.message).toBe('Tanaman mana yang perlu disiram?');
+  });
+
+  it('membawa satu giliran sebelumnya saat melanjutkan', async () => {
+    // Tanpa ini "tambahkan cabai juga" tidak mungkin — pengguna harus
+    // mengulang seluruh kalimat.
+    const fetchMock = mockAgent({
+      jawaban: 'Sudah saya buatkan.',
+      aksi: [{ alat: 'kebun.tanam', modul: 'kebun', status: 'dijalankan', ringkasan: '2 tanaman dicatat.' }],
+      alatTidakDikenal: [],
+    });
+    const user = userEvent.setup();
+    render(<AiPanel module="kebun" />);
+
+    await tanya(user, 'tanam bayam dan kangkung');
+    await screen.findByText(/2 tanaman dicatat/);
+
+    await user.type(screen.getByPlaceholderText(/Lanjutkan…/i), 'tambahkan cabai juga');
+    await user.click(screen.getByRole('button', { name: 'Lanjut' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1));
+    const body = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(body).toMatchObject({
+      message: 'tambahkan cabai juga',
+      lanjutanDari: { pertanyaan: 'tanam bayam dan kangkung', jawaban: 'Sudah saya buatkan.' },
+    });
+  });
+
+  it('tidak membawa konteks pada permintaan pertama', async () => {
+    const fetchMock = mockAgent({ jawaban: 'ok', aksi: [], alatTidakDikenal: [] });
+    const user = userEvent.setup();
+    render(<AiPanel module="kebun" />);
+
+    await tanya(user, 'halo');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body)).lanjutanDari).toBeUndefined();
   });
 
   it('tetap tertutup sampai pengguna membukanya', () => {

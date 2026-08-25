@@ -47,7 +47,7 @@ search.get('/', async (c) => {
   const p = likePattern(q);
   const uid = user.sub;
 
-  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events, userNotes, garden] = await Promise.all([
+  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events, userNotes, garden, recipes] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id, type, amount_idr, category, note, entry_date FROM budget_entries
        WHERE user_id = ?1 AND (note LIKE ?2 ESCAPE '\\' OR category LIKE ?2 ESCAPE '\\')
@@ -134,6 +134,17 @@ search.get('/', async (c) => {
     ).bind(uid, p, PER_SOURCE).all<{
       id: string; plant_id: string | null; custom_name: string | null;
       nickname: string | null; location: string | null; planted_date: string;
+    }>(),
+
+    // Resep dicari lewat namanya dan lewat bahannya: "ada resep pakai tempe?"
+    // adalah cara paling wajar orang mencari masakan.
+    c.env.DB.prepare(
+      `SELECT id, name, have_json, missing_json, minutes FROM cooking_recipes
+       WHERE user_id = ?1 AND (name LIKE ?2 ESCAPE '\\' OR have_json LIKE ?2 ESCAPE '\\'
+         OR missing_json LIKE ?2 ESCAPE '\\')
+       ORDER BY created_at DESC LIMIT ?3`
+    ).bind(uid, p, PER_SOURCE).all<{
+      id: string; name: string; have_json: string; missing_json: string; minutes: number | null;
     }>(),
   ]);
 
@@ -237,6 +248,28 @@ search.get('/', async (c) => {
         subtitle: n.body.length > firstLine.length ? n.body.slice(firstLine.length).trim().slice(0, 80) : null,
         date: new Date(n.created_at * 1000).toISOString().slice(0, 10),
         subScreen: 'notes',
+      };
+    }),
+    ...(recipes.results ?? []).map(r => {
+      const kurang = (() => {
+        try {
+          const v = JSON.parse(r.missing_json);
+          return Array.isArray(v) ? v.length : 0;
+        } catch {
+          return 0;
+        }
+      })();
+      return {
+        type: 'recipe',
+        label: 'Resep',
+        id: r.id,
+        title: r.name,
+        subtitle: [
+          r.minutes ? `${r.minutes} menit` : null,
+          kurang > 0 ? `${kurang} bahan kurang` : 'bahan lengkap',
+        ].filter(Boolean).join(' · '),
+        date: null,
+        subScreen: 'masakan',
       };
     }),
     ...gardenRows.map(g => {

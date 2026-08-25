@@ -18,9 +18,11 @@ import { runJson } from '../lib/ai';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import {
-  bacaResep, ringkasStok, type RecipeSuggestion, type StockItem,
+  bacaRencana, bacaResep, ringkasStok, type RecipeSuggestion, type StockItem,
 } from '../lib/cooking';
 import { selisihHari } from '../lib/ai_context';
+import { cacheKey, readBudget, readCache, recordCall, writeCache } from '../lib/ai_budget';
+import { loadSettings, num, bool } from '../lib/settings';
 
 const cooking = new Hono<AuthContext>();
 cooking.use('/*', requireAuth);
@@ -121,6 +123,33 @@ cooking.post('/suggest', async (c) => {
   }
 
   const craving = typeof body.craving === 'string' ? body.craving.trim().slice(0, 200) : '';
+  const daftarBahan = ringkasStok(stok);
+
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const budget = await readBudget(c.env.DB, user.sub, today, num(settings, 'ai.daily_limit'));
+  if (budget.exhausted) {
+    return c.json({ error: 'jatah AI habis', message: budget.notice }, 429);
+  }
+
+  // Saran masakan adalah pertanyaan, bukan aksi — aman dipakai ulang. Kuncinya
+  // menyertakan daftar bahan, jadi begitu isi kulkas berubah jawabannya
+  // dihitung ulang.
+  const kunci = bool(settings, 'ai.cache_enabled')
+    ? await cacheKey([user.sub, 'masakan', craving, daftarBahan])
+    : null;
+
+  if (kunci) {
+    const cached = await readCache<{ recipes: RecipeSuggestion[] }>(c.env.DB, user.sub, kunci);
+    if (cached) {
+      return c.json({
+        recipes: cached.recipes,
+        usedIngredients: stok.map((s) => s.name),
+        sisa: budget.remaining,
+        catatanKuota: budget.notice,
+        dariSimpanan: true,
+      });
+    }
+  }
 
   let raw: unknown;
   try {
@@ -140,7 +169,7 @@ Aturan:
         },
         {
           role: 'user',
-          content: `Bahan yang saya punya:\n${ringkasStok(stok)}${craving ? `\n\nSaya sedang ingin: ${craving}` : ''}`,
+          content: `Bahan yang saya punya:\n${daftarBahan}${craving ? `\n\nSaya sedang ingin: ${craving}` : ''}`,
         },
       ],
       RESEP_SCHEMA,
@@ -151,12 +180,158 @@ Aturan:
     return c.json({ error: 'AI sedang tidak bisa dihubungi' }, 503);
   }
 
+  await recordCall(c.env.DB, user.sub, today);
+
   const recipes: RecipeSuggestion[] = bacaResep(raw, stok);
   if (recipes.length === 0) {
     return c.json({ error: 'AI tidak memberi resep yang bisa dibaca' }, 502);
   }
 
-  return c.json({ recipes, usedIngredients: stok.map((s) => s.name) });
+  if (kunci) await writeCache(c.env.DB, user.sub, kunci, { recipes });
+
+  return c.json({
+    recipes,
+    usedIngredients: stok.map((s) => s.name),
+    sisa: Math.max(0, budget.remaining - 1),
+    catatanKuota: budget.notice,
+  });
+});
+
+const RENCANA_SCHEMA = {
+  type: 'object',
+  properties: {
+    rencana: {
+      type: 'array',
+      description: 'Tujuh masakan, satu untuk tiap hari, dimulai dari hari pertama.',
+      items: {
+        type: 'object',
+        properties: {
+          nama: { type: 'string', description: 'Nama masakan Indonesia' },
+          bahan: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Semua bahan yang dibutuhkan, termasuk yang tidak dimiliki. Satu bahan per elemen, tanpa takaran.',
+          },
+          langkah: { type: 'array', items: { type: 'string' } },
+          menit: { type: 'number' },
+          porsi: { type: 'number' },
+        },
+        required: ['nama', 'bahan'],
+      },
+    },
+  },
+  required: ['rencana'],
+};
+
+// POST /api/cooking/plan — rencana tujuh hari plus satu daftar belanja
+cooking.post('/plan', async (c) => {
+  const user = c.get('user');
+  type Body = { startDate?: string; note?: string };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const today = jakartaToday();
+  const mulai = typeof body.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.startDate)
+    ? body.startDate
+    : today;
+
+  const stok = await bacaStok(c.env.DB, user.sub, today);
+  const daftarBahan = stok.length > 0 ? ringkasStok(stok) : '(inventaris kosong)';
+
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const budget = await readBudget(c.env.DB, user.sub, today, num(settings, 'ai.daily_limit'));
+  if (budget.exhausted) return c.json({ error: 'jatah AI habis', message: budget.notice }, 429);
+
+  const catatan = typeof body.note === 'string' ? body.note.trim().slice(0, 200) : '';
+
+  const kunci = bool(settings, 'ai.cache_enabled')
+    ? await cacheKey([user.sub, 'rencana', mulai, catatan, daftarBahan])
+    : null;
+
+  if (kunci) {
+    const cached = await readCache<{ days: unknown[]; shoppingList: string[] }>(c.env.DB, user.sub, kunci);
+    if (cached) return c.json({ ...cached, startDate: mulai, dariSimpanan: true });
+  }
+
+  let raw: unknown;
+  try {
+    raw = await runJson<Record<string, unknown>>(
+      c.env,
+      [
+        {
+          role: 'system',
+          content: `Kamu juru masak rumahan Indonesia. Susun rencana makan tujuh hari.
+
+Aturan:
+- Tepat tujuh masakan, satu per hari, berurutan mulai hari pertama.
+- Sebutkan SEMUA bahan tiap resep, termasuk yang tidak dimiliki pengguna. Aplikasi yang memilah mana yang ada dan mana yang harus dibeli.
+- Utamakan hari-hari awal memakai bahan yang sisa umurnya sedikit, supaya tidak terbuang.
+- Pakai bahan yang sama di beberapa hari kalau masuk akal — belanja jadi lebih sedikit dan tidak ada sisa yang menganggur.
+- Variasikan jenis masakannya; jangan tujuh hari berturut-turut yang mirip.
+- Langkah singkat, tiga sampai lima langkah.`,
+        },
+        {
+          role: 'user',
+          content: `Bahan yang saya punya:\n${daftarBahan}${catatan ? `\n\nCatatan: ${catatan}` : ''}`,
+        },
+      ],
+      RENCANA_SCHEMA,
+      { maxTokens: 2000 }
+    );
+  } catch (err) {
+    console.error('[cooking] AI rencana gagal', err);
+    return c.json({ error: 'AI sedang tidak bisa dihubungi' }, 503);
+  }
+
+  await recordCall(c.env.DB, user.sub, today);
+
+  const { days, shoppingList } = bacaRencana(raw, stok, mulai);
+  if (days.length === 0) return c.json({ error: 'AI tidak memberi rencana yang bisa dibaca' }, 502);
+
+  if (kunci) await writeCache(c.env.DB, user.sub, kunci, { days, shoppingList });
+
+  return c.json({
+    days, shoppingList, startDate: mulai,
+    sisa: Math.max(0, budget.remaining - 1),
+    catatanKuota: budget.notice,
+  });
+});
+
+// POST /api/cooking/plan/shop — satu tugas belanja untuk seluruh rencana
+cooking.post('/plan/shop', async (c) => {
+  const user = c.get('user');
+  type Body = { items?: string[]; date?: string };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const items = Array.isArray(body.items)
+    ? body.items
+        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        .map((x) => x.trim().slice(0, 80))
+        .slice(0, 60)
+    : [];
+
+  if (items.length === 0) return c.json({ error: 'tidak ada bahan yang perlu dibeli' }, 400);
+
+  const today = jakartaToday();
+  const tanggal = typeof body.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+    ? body.date
+    : today;
+
+  // Satu tugas untuk seluruh minggu, bukan tujuh: itulah gunanya
+  // merencanakan sekaligus.
+  const eventId = nanoid();
+  const now = Math.floor(Date.now() / 1000);
+  await c.env.DB.prepare(
+    `INSERT INTO calendar_events
+       (id, user_id, title, note, kind, event_date, is_done, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, 'task', ?5, 0, ?6, ?6)`
+  ).bind(
+    eventId, user.sub,
+    `Belanja mingguan (${items.length} bahan)`,
+    items.join(', ').slice(0, 2000),
+    tanggal, now
+  ).run();
+
+  return c.json({ ok: true, eventId, items });
 });
 
 // GET /api/cooking/recipes — resep yang disimpan
@@ -248,12 +423,16 @@ cooking.delete('/recipes/:id', async (c) => {
 cooking.post('/recipes/:id/cook', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  type Body = { used?: Array<{ name?: string; quantity?: number }> };
+  type Body = {
+    used?: Array<{ name?: string; quantity?: number }>;
+    /** Kalau diisi, porsinya ikut dicatat ke log makan. */
+    meal?: { portion?: string; calories?: number; protein?: number; label?: string };
+  };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
   const recipe = await c.env.DB.prepare(
-    'SELECT id FROM cooking_recipes WHERE id = ?1 AND user_id = ?2'
-  ).bind(id, user.sub).first<{ id: string }>();
+    'SELECT id, name FROM cooking_recipes WHERE id = ?1 AND user_id = ?2'
+  ).bind(id, user.sub).first<{ id: string; name: string }>();
   if (!recipe) return c.json({ error: 'resep tidak ditemukan' }, 404);
 
   const today = jakartaToday();
@@ -303,8 +482,41 @@ cooking.post('/recipes/:id/cook', async (c) => {
     );
   }
 
+  /**
+   * Masak lalu makan adalah satu peristiwa, bukan dua.
+   *
+   * Selama ini pengguna harus mencatatnya dua kali: sekali di Masakan supaya
+   * stoknya berkurang, sekali lagi di Nutrisi supaya kalorinya terhitung. Yang
+   * kedua hampir selalu terlewat, dan log makan jadi bolong justru di hari
+   * pengguna benar-benar memasak.
+   *
+   * Angka gizinya datang dari pengguna atau dari AI di layar, tidak ditebak di
+   * sini — resep tidak menyimpan gizi, dan mengarang kalori lebih buruk
+   * daripada tidak mencatat.
+   */
+  let mealLogged = false;
+  const meal = body.meal;
+  if (meal && (typeof meal.calories === 'number' || typeof meal.portion === 'string')) {
+    const angka = (v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO food_logs (id, user_id, food_name, portion, calories, protein_g, label, log_date)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+      ).bind(
+        nanoid(), user.sub, recipe.name.slice(0, 120),
+        typeof meal.portion === 'string' && meal.portion.trim() ? meal.portion.trim().slice(0, 60) : null,
+        angka(meal.calories), angka(meal.protein),
+        typeof meal.label === 'string' && meal.label.trim() ? meal.label.trim().slice(0, 30) : null,
+        today
+      )
+    );
+    mealLogged = true;
+  }
+
   await c.env.DB.batch(statements);
-  return c.json({ ok: true, date: today, adjusted: dikurangi });
+  return c.json({ ok: true, date: today, adjusted: dikurangi, mealLogged });
 });
 
 // POST /api/cooking/recipes/:id/shop — bahan kurang jadi tugas belanja
