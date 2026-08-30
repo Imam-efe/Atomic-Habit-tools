@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { GardenPlanner, GardenRecords, type PlantingOption } from './GardenExtras';
@@ -8,6 +8,7 @@ import { isNetworkError, newClientId, queueFor } from '@/lib/offlineQueue';
 import { useAuthStore } from '@/stores/authStore';
 import { todayISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
+import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
 import {
   LABEL_SIZES, LABEL_SIZE_TITLE, labelLayout, categoryColorRgb,
   A4_MARGIN_MM, LABEL_GAP_MM,
@@ -272,6 +273,15 @@ export function Garden() {
   const [askAnswer, setAskAnswer] = useState('');
   const [asking, setAsking] = useState(false);
 
+  // Catatan suara: dikte catatan perawatan (catatan/pangkas/semprot) alih-alih
+  // mengetik — kebun adalah tempat tangan biasanya kotor atau sibuk memegang alat.
+  const [voiceNoteFor, setVoiceNoteFor] = useState<string | null>(null);
+  const [voiceNoteText, setVoiceNoteText] = useState('');
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceSaving, setVoiceSaving] = useState(false);
+  const voiceRef = useRef<VoiceSession | null>(null);
+  const voiceAvailable = useRef(isVoiceSupported());
+
   // Diagnosis. `diagnoseOpen` terpisah dari `diagnoseFor` karena panel ini
   // juga bisa dibuka tanpa tanaman tertentu (tombol 🔬 di header).
   const [diagnoseOpen, setDiagnoseOpen] = useState(false);
@@ -359,7 +369,7 @@ export function Garden() {
     };
   }, [queue]);
 
-  const handleCare = async (plantingId: string, action: string) => {
+  const handleCare = async (plantingId: string, action: string, note?: string) => {
     // Panen boleh dicatat tanpa jumlah, tapi kalau diisi, dikirim ke backend
     // supaya hasil panen otomatis masuk ke Inventaris.
     let amount: number | undefined;
@@ -388,7 +398,7 @@ export function Garden() {
     // yang sama dan mengabaikan kiriman kedua alih-alih mencatat siram dobel.
     const clientId = newClientId();
     const path = `/garden/${plantingId}/care`;
-    const body = { action, date: todayISO(), ...(amount ? { amount, unit: 'kg' } : {}) };
+    const body = { action, date: todayISO(), ...(amount ? { amount, unit: 'kg' } : {}), ...(note ? { note } : {}) };
 
     try {
       await apiFetch(path, { method: 'POST', body: JSON.stringify({ ...body, clientId }) });
@@ -409,6 +419,49 @@ export function Garden() {
       } else {
         load();
       }
+    }
+  };
+
+  const openVoiceNote = (plantingId: string) => {
+    setVoiceNoteFor(plantingId);
+    setVoiceNoteText('');
+  };
+
+  const closeVoiceNote = () => {
+    voiceRef.current?.cancel();
+    voiceRef.current = null;
+    setVoiceListening(false);
+    setVoiceNoteFor(null);
+    setVoiceNoteText('');
+  };
+
+  const toggleVoiceListening = () => {
+    if (voiceListening) {
+      voiceRef.current?.stop();
+      return;
+    }
+    const session = startVoiceInput({
+      onPartial: setVoiceNoteText,
+      onResult: setVoiceNoteText,
+      onEnd: () => {
+        setVoiceListening(false);
+        voiceRef.current = null;
+      },
+    });
+    if (session) {
+      voiceRef.current = session;
+      setVoiceListening(true);
+    }
+  };
+
+  const saveVoiceNote = async () => {
+    if (!voiceNoteFor || !voiceNoteText.trim()) return;
+    setVoiceSaving(true);
+    try {
+      await handleCare(voiceNoteFor, 'catatan', voiceNoteText.trim());
+    } finally {
+      setVoiceSaving(false);
+      closeVoiceNote();
     }
   };
 
@@ -822,7 +875,74 @@ export function Garden() {
                         {ACTION_META[action].emoji} {ACTION_META[action].label}
                       </motion.button>
                     ))}
+                    <motion.button
+                      className="flex-1 py-2 rounded-xl text-[11px] font-bold"
+                      style={{ background: 'var(--bg)', color: ACTION_META.catatan.color, boxShadow: 'var(--neu-raised-sm)' }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={springs.snappy}
+                      onClick={() => openVoiceNote(p.id)}
+                    >
+                      {ACTION_META.catatan.emoji} {ACTION_META.catatan.label}
+                    </motion.button>
                   </div>
+
+                  {/* Catatan suara — dikte catatan perawatan (pangkas, semprot, dst)
+                      tanpa mengetik, tangan sering kotor atau sibuk di kebun. */}
+                  <AnimatePresence>
+                    {voiceNoteFor === p.id && (
+                      <motion.div
+                        className="mt-2 rounded-xl p-3 flex flex-col gap-2"
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={collapse}
+                      >
+                        <div className="flex gap-2">
+                          <input
+                            className="flex-1 px-2.5 py-2 rounded-lg text-[11px] outline-none"
+                            style={{ background: 'var(--surface)', color: 'var(--text)' }}
+                            placeholder="Catatan pangkas, semprot, atau lainnya…"
+                            value={voiceNoteText}
+                            onChange={(e) => setVoiceNoteText(e.target.value)}
+                            autoFocus
+                          />
+                          {voiceAvailable.current && (
+                            <motion.button
+                              whileTap={{ scale: 0.9 }}
+                              onClick={toggleVoiceListening}
+                              aria-label={voiceListening ? 'Berhenti merekam' : 'Dikte suara'}
+                              aria-pressed={voiceListening}
+                              className="w-9 h-9 rounded-full flex items-center justify-center text-[16px] flex-shrink-0"
+                              style={{
+                                background: voiceListening ? 'var(--accentFill)' : 'var(--surface)',
+                                color: voiceListening ? '#fff' : 'var(--text2)',
+                              }}
+                            >
+                              {voiceListening ? '⏹' : '🎤'}
+                            </motion.button>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="flex-1 py-2 rounded-lg text-[11px] font-semibold"
+                            style={{ background: 'var(--surface)', color: 'var(--text2)' }}
+                            onClick={closeVoiceNote}
+                          >
+                            Batal
+                          </button>
+                          <button
+                            className="flex-1 py-2 rounded-lg text-[11px] font-bold text-white"
+                            style={{ background: voiceNoteText.trim() ? 'var(--accentFill)' : 'var(--track)', opacity: voiceSaving ? 0.6 : 1 }}
+                            disabled={!voiceNoteText.trim() || voiceSaving}
+                            onClick={saveVoiceNote}
+                          >
+                            {voiceSaving ? 'Menyimpan…' : 'Simpan'}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* Detail */}
                   <AnimatePresence>

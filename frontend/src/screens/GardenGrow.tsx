@@ -8,7 +8,7 @@
  * pengguna tidak perlu belajar navigasi baru.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -70,9 +70,20 @@ interface BedSlotView {
   spacingCm: number;
 }
 
+/** Penanda bukan-tanaman: jalan setapak, pot kompos, rak. */
+interface MarkerView {
+  id: string;
+  kind: string;
+  label: string;
+  posX: number;
+  posY: number;
+  radiusCm: number;
+}
+
 interface BedIssue {
   kind: string;
   plantingIds: string[];
+  markerIds: string[];
   message: string;
 }
 
@@ -83,8 +94,48 @@ interface BedView {
   lengthCm: number;
   note: string | null;
   slots: BedSlotView[];
+  markers: MarkerView[];
   report: { slotCount: number; usedPercent: number; issues: BedIssue[] };
 }
+
+const MARKER_ICON: Record<string, string> = {
+  jalan: '🚶', kompos: '🪣', rak: '🗄️', lainnya: '📍',
+};
+
+const MARKER_KINDS: Array<{ id: string; label: string }> = [
+  { id: 'jalan', label: 'Jalan setapak' },
+  { id: 'kompos', label: 'Pot kompos' },
+  { id: 'rak', label: 'Rak' },
+];
+
+/**
+ * Satu drag yang sedang berjalan di denah, dalam koordinat sentimeter.
+ *
+ * `moved` membedakan ketuk dari geser: sentuhan yang tidak pernah melewati
+ * ambang gerak dianggap ketuk (angkat/hapus), yang melewatinya dianggap
+ * geser (pindah posisi). Tanpa ini, menggeser tanaman sedikit saja akan
+ * ikut mengangkatnya dari denah.
+ */
+interface DragState {
+  bedId: string;
+  kind: 'slot' | 'marker';
+  id: string;
+  startClientX: number;
+  startClientY: number;
+  startPosX: number;
+  startPosY: number;
+  rectLeft: number;
+  rectTop: number;
+  rectWidth: number;
+  rectHeight: number;
+  widthCm: number;
+  lengthCm: number;
+  posX: number;
+  posY: number;
+  moved: boolean;
+}
+
+const DRAG_THRESHOLD_PX = 6;
 
 interface Sowing {
   id: string;
@@ -321,6 +372,124 @@ export function GrowPlannerSections({ plantings }: { plantings: PlantingOption[]
     }
   };
 
+  // ─────────────────── Denah bedengan: geser dan penanda ───────────────────
+  //
+  // Sebelumnya menaruh tanaman hanya lewat dropdown + tombol "Taruh" (backend
+  // mencarikan titik kosong), dan satu-satunya interaksi di denah adalah
+  // ketuk untuk mengangkat. Sekarang titik itu bisa digeser langsung dengan
+  // jari/mouse — draf posisi ditampilkan seketika di layar (state lokal),
+  // baru dikirim ke server saat jari diangkat.
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const [placingMarker, setPlacingMarker] = useState<string | null>(null);
+
+  const clampPos = (value: number, max: number) => Math.max(0, Math.min(max, Math.round(value)));
+
+  const beginDrag = (
+    e: React.PointerEvent,
+    bed: BedView,
+    kind: 'slot' | 'marker',
+    id: string,
+    posX: number,
+    posY: number
+  ) => {
+    e.stopPropagation();
+    const container = e.currentTarget.parentElement;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const state: DragState = {
+      bedId: bed.id, kind, id,
+      startClientX: e.clientX, startClientY: e.clientY,
+      startPosX: posX, startPosY: posY,
+      rectLeft: rect.left, rectTop: rect.top, rectWidth: rect.width, rectHeight: rect.height,
+      widthCm: bed.widthCm, lengthCm: bed.lengthCm,
+      posX, posY, moved: false,
+    };
+    dragRef.current = state;
+    setDrag(state);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onDragMove = (e: React.PointerEvent) => {
+    const current = dragRef.current;
+    if (!current) return;
+
+    const dxPx = e.clientX - current.startClientX;
+    const dyPx = e.clientY - current.startClientY;
+    if (!current.moved && Math.hypot(dxPx, dyPx) < DRAG_THRESHOLD_PX) return;
+
+    const dxCm = (dxPx / current.rectWidth) * current.widthCm;
+    const dyCm = (dyPx / current.rectHeight) * current.lengthCm;
+    const next: DragState = {
+      ...current, moved: true,
+      posX: clampPos(current.startPosX + dxCm, current.widthCm),
+      posY: clampPos(current.startPosY + dyCm, current.lengthCm),
+    };
+    dragRef.current = next;
+    setDrag(next);
+  };
+
+  const endDrag = async () => {
+    const final = dragRef.current;
+    dragRef.current = null;
+    setDrag(null);
+    if (!final) return;
+
+    if (!final.moved) {
+      // Ketuk tanpa gerak: perilaku lama, angkat dari denah.
+      if (final.kind === 'slot') await removeSlot(final.id);
+      else await removeMarker(final.id);
+      return;
+    }
+
+    try {
+      if (final.kind === 'slot') {
+        await apiFetch(`/garden/beds/${final.bedId}/slots`, {
+          method: 'PUT',
+          body: JSON.stringify({ plantingId: final.id, posX: final.posX, posY: final.posY }),
+        });
+      } else {
+        await apiFetch(`/garden/beds/markers/${final.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ posX: final.posX, posY: final.posY }),
+        });
+      }
+      await loadBeds();
+    } catch (err) {
+      setError(describeError(err, 'Gagal memindahkan posisi di denah.'));
+      await loadBeds();
+    }
+  };
+
+  const removeMarker = async (id: string) => {
+    try {
+      await apiFetch(`/garden/beds/markers/${id}`, { method: 'DELETE' });
+      await loadBeds();
+    } catch (err) {
+      setError(describeError(err, 'Gagal menghapus penanda.'));
+    }
+  };
+
+  const addMarker = async (bed: BedView, kind: string) => {
+    setPlacingMarker(null);
+    try {
+      const suggestion = await apiFetch<{ suggestion: { posX: number; posY: number } | null }>(
+        `/garden/beds/${bed.id}/suggest?spacing=30`
+      );
+      const pos = suggestion.suggestion ?? { posX: Math.round(bed.widthCm / 2), posY: Math.round(bed.lengthCm / 2) };
+      await apiFetch(`/garden/beds/${bed.id}/markers`, {
+        method: 'POST',
+        body: JSON.stringify({
+          kind, label: MARKER_KINDS.find((m) => m.id === kind)?.label ?? 'Penanda',
+          posX: pos.posX, posY: pos.posY,
+        }),
+      });
+      await loadBeds();
+    } catch (err) {
+      setError(describeError(err, 'Gagal menambah penanda.'));
+    }
+  };
+
   return (
     <>
       {error && (
@@ -490,40 +659,109 @@ export function GrowPlannerSections({ plantings }: { plantings: PlantingOption[]
             </div>
 
             {/* Denah proporsional: kotak mengikuti rasio bedengan asli supaya
-                jarak yang terlihat di layar mencerminkan jarak sebenarnya. */}
+                jarak yang terlihat di layar mencerminkan jarak sebenarnya.
+                Tanaman dan penanda bisa digeser langsung; ketuk tanpa geser
+                mengangkatnya dari denah, sama seperti perilaku lama. */}
             <div
-              className="relative w-full rounded-lg mb-2"
+              className="relative w-full rounded-lg mb-2 touch-none"
               style={{
                 paddingBottom: `${Math.min(160, (bed.lengthCm / Math.max(1, bed.widthCm)) * 100)}%`,
                 background: 'var(--surface)',
                 boxShadow: 'var(--neu-raised-sm)',
               }}
             >
-              {bed.slots.map((s) => (
-                <button
-                  key={s.plantingId}
-                  className="absolute rounded-full flex items-center justify-center text-[8px] font-bold"
-                  style={{
-                    left: `${(s.posX / bed.widthCm) * 100}%`,
-                    top: `${(s.posY / bed.lengthCm) * 100}%`,
-                    width: `${Math.max(8, (Math.max(s.spacingCm, 10) / bed.widthCm) * 100)}%`,
-                    aspectRatio: '1',
-                    transform: 'translate(-50%, -50%)',
-                    background: 'var(--accentSoft)',
-                    color: 'var(--accent)',
-                    border: '1px solid var(--accent)',
-                  }}
-                  title={`${s.name} — ketuk untuk angkat dari denah`}
-                  onClick={() => removeSlot(s.plantingId)}
-                >
-                  {s.name.slice(0, 3)}
-                </button>
-              ))}
+              {bed.slots.map((s) => {
+                const live = drag && drag.bedId === bed.id && drag.kind === 'slot' && drag.id === s.plantingId
+                  ? drag : null;
+                const posX = live?.posX ?? s.posX;
+                const posY = live?.posY ?? s.posY;
+                return (
+                  <div
+                    key={s.plantingId}
+                    className="absolute rounded-full flex items-center justify-center text-[8px] font-bold cursor-grab select-none"
+                    style={{
+                      left: `${(posX / bed.widthCm) * 100}%`,
+                      top: `${(posY / bed.lengthCm) * 100}%`,
+                      width: `${Math.max(8, (Math.max(s.spacingCm, 10) / bed.widthCm) * 100)}%`,
+                      aspectRatio: '1',
+                      transform: 'translate(-50%, -50%)',
+                      background: 'var(--accentSoft)',
+                      color: 'var(--accent)',
+                      border: '1px solid var(--accent)',
+                      opacity: live?.moved ? 0.75 : 1,
+                      zIndex: live ? 10 : 1,
+                    }}
+                    title={`${s.name} — geser untuk pindah, ketuk untuk angkat`}
+                    onPointerDown={(e) => beginDrag(e, bed, 'slot', s.plantingId, s.posX, s.posY)}
+                    onPointerMove={onDragMove}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                  >
+                    {s.name.slice(0, 3)}
+                  </div>
+                );
+              })}
+
+              {bed.markers.map((m) => {
+                const live = drag && drag.bedId === bed.id && drag.kind === 'marker' && drag.id === m.id
+                  ? drag : null;
+                const posX = live?.posX ?? m.posX;
+                const posY = live?.posY ?? m.posY;
+                return (
+                  <div
+                    key={m.id}
+                    className="absolute flex items-center justify-center text-[10px] rounded-md cursor-grab select-none"
+                    style={{
+                      left: `${(posX / bed.widthCm) * 100}%`,
+                      top: `${(posY / bed.lengthCm) * 100}%`,
+                      width: `${Math.max(7, (Math.max(m.radiusCm * 2, 16) / bed.widthCm) * 100)}%`,
+                      aspectRatio: '1',
+                      transform: 'translate(-50%, -50%)',
+                      background: 'var(--surface)',
+                      border: '1px dashed var(--text3)',
+                      opacity: live?.moved ? 0.75 : 1,
+                      zIndex: live ? 10 : 1,
+                    }}
+                    title={`${m.label} — geser untuk pindah, ketuk untuk hapus`}
+                    onPointerDown={(e) => beginDrag(e, bed, 'marker', m.id, m.posX, m.posY)}
+                    onPointerMove={onDragMove}
+                    onPointerUp={endDrag}
+                    onPointerCancel={endDrag}
+                  >
+                    {MARKER_ICON[m.kind] ?? MARKER_ICON.lainnya}
+                  </div>
+                );
+              })}
             </div>
 
-            <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
-              {bed.report.slotCount} tanaman · ruang terpakai {bed.report.usedPercent}%
-            </p>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <p className="text-[10px]" style={{ color: 'var(--text3)' }}>
+                {bed.report.slotCount} tanaman · {bed.markers.length} penanda · ruang terpakai {bed.report.usedPercent}%
+              </p>
+              <button
+                className="text-[10px] font-semibold flex-shrink-0"
+                style={{ color: 'var(--accent)' }}
+                onClick={() => setPlacingMarker(placingMarker === bed.id ? null : bed.id)}
+              >
+                {placingMarker === bed.id ? 'Batal' : '+ Penanda'}
+              </button>
+            </div>
+
+            {placingMarker === bed.id && (
+              <div className="flex gap-1.5 mb-1">
+                {MARKER_KINDS.map((k) => (
+                  <button
+                    key={k.id}
+                    className="flex-1 text-[10px] py-1.5 rounded-lg font-semibold"
+                    style={{ background: 'var(--surface)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                    onClick={() => addMarker(bed, k.id)}
+                  >
+                    {MARKER_ICON[k.id]} {k.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {bed.report.issues.map((issue, i) => (
               <p key={i} className="text-[10px] leading-relaxed mt-0.5" style={{ color: 'var(--warn)' }}>
                 ⚠️ {issue.message}

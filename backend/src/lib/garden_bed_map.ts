@@ -27,11 +27,28 @@ export interface BedSlot {
   spacingCm: number;
 }
 
+/**
+ * Penanda bukan-tanaman di denah: jalan setapak, pot kompos, rak.
+ *
+ * Diperlakukan sebagai lingkaran radius tetap, sama seperti tanaman —
+ * satu rumus tabrakan untuk keduanya, bukan dua sistem geometri berbeda
+ * yang harus dijaga konsisten sendiri-sendiri.
+ */
+export interface BedMarker {
+  id: string;
+  label: string;
+  posX: number;
+  posY: number;
+  radiusCm: number;
+}
+
 export type IssueKind = 'keluar-batas' | 'terlalu-rapat';
 
 export interface BedIssue {
   kind: IssueKind;
   plantingIds: string[];
+  /** Terisi kalau salah satu (atau kedua) pihak yang bertabrakan adalah penanda, bukan tanaman. */
+  markerIds: string[];
   message: string;
 }
 
@@ -51,46 +68,73 @@ function radiusOf(slot: BedSlot): number {
   return spacing / 2;
 }
 
+/** Bentuk seragam untuk tanaman dan penanda, supaya rumus tabrakan satu saja. */
+interface Occupant {
+  plantingId: string | null;
+  markerId: string | null;
+  name: string;
+  posX: number;
+  posY: number;
+  radiusCm: number;
+}
+
+function occupantsOf(slots: BedSlot[], markers: BedMarker[]): Occupant[] {
+  return [
+    ...slots.map((s): Occupant => ({
+      plantingId: s.plantingId, markerId: null, name: s.name,
+      posX: s.posX, posY: s.posY, radiusCm: radiusOf(s),
+    })),
+    ...markers.map((m): Occupant => ({
+      plantingId: null, markerId: m.id, name: m.label,
+      posX: m.posX, posY: m.posY, radiusCm: m.radiusCm > 0 ? m.radiusCm : FALLBACK_SPACING_CM / 2,
+    })),
+  ];
+}
+
 /**
  * Periksa satu bedengan: ada yang keluar batas, ada yang berebut ruang.
  *
- * Dua tanaman dianggap terlalu rapat kalau jarak antar titiknya lebih kecil
- * dari jumlah radius keduanya — persis definisi dua lingkaran bersinggungan.
- * Itu memakai jarak tanam masing-masing, jadi cabai berdampingan bayam dinilai
- * dengan angkanya sendiri-sendiri, bukan satu angka rata-rata.
+ * Dua penghuni — tanaman atau penanda seperti jalan/kompos/rak — dianggap
+ * terlalu rapat kalau jarak antar titiknya lebih kecil dari jumlah radius
+ * keduanya: persis definisi dua lingkaran bersinggungan. Penanda ikut
+ * diperiksa dengan rumus yang sama karena keduanya sama-sama memakai ruang
+ * fisik di bedengan — pot kompos yang menumpuk dengan tanaman adalah
+ * masalah tata letak yang sama nyatanya dengan dua tanaman terlalu rapat.
  */
-export function inspectBed(bed: Bed, slots: BedSlot[]): BedMapReport {
+export function inspectBed(bed: Bed, slots: BedSlot[], markers: BedMarker[] = []): BedMapReport {
   const issues: BedIssue[] = [];
+  const occupants = occupantsOf(slots, markers);
 
-  for (const s of slots) {
-    const r = radiusOf(s);
-    const outLeft = s.posX - r < 0;
-    const outTop = s.posY - r < 0;
-    const outRight = s.posX + r > bed.widthCm;
-    const outBottom = s.posY + r > bed.lengthCm;
+  for (const o of occupants) {
+    const outLeft = o.posX - o.radiusCm < 0;
+    const outTop = o.posY - o.radiusCm < 0;
+    const outRight = o.posX + o.radiusCm > bed.widthCm;
+    const outBottom = o.posY + o.radiusCm > bed.lengthCm;
 
     if (outLeft || outTop || outRight || outBottom) {
       issues.push({
         kind: 'keluar-batas',
-        plantingIds: [s.plantingId],
-        message: `${s.name} melewati tepi bedengan; butuh ruang ${Math.round(r * 2)} cm.`,
+        plantingIds: o.plantingId ? [o.plantingId] : [],
+        markerIds: o.markerId ? [o.markerId] : [],
+        message: `${o.name} melewati tepi bedengan; butuh ruang ${Math.round(o.radiusCm * 2)} cm.`,
       });
     }
   }
 
-  for (let i = 0; i < slots.length; i++) {
-    for (let j = i + 1; j < slots.length; j++) {
-      const a = slots[i];
-      const b = slots[j];
+  for (let i = 0; i < occupants.length; i++) {
+    for (let j = i + 1; j < occupants.length; j++) {
+      const a = occupants[i];
+      const b = occupants[j];
       const dx = a.posX - b.posX;
       const dy = a.posY - b.posY;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      const needed = radiusOf(a) + radiusOf(b);
+      const needed = a.radiusCm + b.radiusCm;
 
       if (distance < needed) {
         issues.push({
           kind: 'terlalu-rapat',
-          plantingIds: [a.plantingId, b.plantingId],
+          plantingIds: [a.plantingId, b.plantingId].filter((id): id is string => id !== null),
+          markerIds: [a.markerId, b.markerId].filter((id): id is string => id !== null),
           message: `${a.name} dan ${b.name} berjarak ${Math.round(distance)} cm, sebaiknya minimal ${Math.round(needed)} cm.`,
         });
       }
@@ -98,7 +142,7 @@ export function inspectBed(bed: Bed, slots: BedSlot[]): BedMapReport {
   }
 
   const bedArea = Math.max(1, bed.widthCm * bed.lengthCm);
-  const usedArea = slots.reduce((sum, s) => sum + Math.PI * radiusOf(s) ** 2, 0);
+  const usedArea = occupants.reduce((sum, o) => sum + Math.PI * o.radiusCm ** 2, 0);
 
   return {
     bedId: bed.id,
@@ -121,16 +165,18 @@ export function suggestSlot(
   bed: Bed,
   slots: BedSlot[],
   spacingCm: number,
-  stepCm = 5
+  stepCm = 5,
+  markers: BedMarker[] = []
 ): { posX: number; posY: number } | null {
   const r = (spacingCm > 0 ? spacingCm : FALLBACK_SPACING_CM) / 2;
+  const occupants = occupantsOf(slots, markers);
 
   for (let y = Math.ceil(r); y <= bed.lengthCm - r; y += stepCm) {
     for (let x = Math.ceil(r); x <= bed.widthCm - r; x += stepCm) {
-      const clashes = slots.some((s) => {
-        const dx = x - s.posX;
-        const dy = y - s.posY;
-        return Math.sqrt(dx * dx + dy * dy) < r + radiusOf(s);
+      const clashes = occupants.some((o) => {
+        const dx = x - o.posX;
+        const dy = y - o.posY;
+        return Math.sqrt(dx * dx + dy * dy) < r + o.radiusCm;
       });
       if (!clashes) return { posX: x, posY: y };
     }

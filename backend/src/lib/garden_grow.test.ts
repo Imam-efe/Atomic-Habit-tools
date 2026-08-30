@@ -6,7 +6,7 @@ import {
 import { forecastHarvest, expectedCareCount } from './garden_harvest_forecast';
 import { planSupplies, type SupplyPlanting } from './garden_supplies';
 import { rankTreatments, pendingReviews, bestTreatmentFor, type TreatmentRecord } from './garden_treatment';
-import { inspectBed, suggestSlot, type Bed, type BedSlot } from './garden_bed_map';
+import { inspectBed, suggestSlot, type Bed, type BedSlot, type BedMarker } from './garden_bed_map';
 import { buildKitchenReport, priceKey, type HarvestEntry } from './garden_kitchen';
 
 // ───────────────────────── #6 PEMBIBITAN ─────────────────────────
@@ -308,6 +308,45 @@ describe('suggestSlot', () => {
 
   it('mengembalikan null saat tanaman tidak mungkin muat', () => {
     expect(suggestSlot(bed, [], 500)).toBeNull();
+  });
+
+  it('menghindari penanda seperti pot kompos, bukan hanya tanaman', () => {
+    const markers = [marker({ posX: 20, posY: 20, radiusCm: 20 })];
+    const pos = suggestSlot(bed, [], 40, 5, markers)!;
+    const dx = pos.posX - 20;
+    const dy = pos.posY - 20;
+    expect(Math.sqrt(dx * dx + dy * dy)).toBeGreaterThanOrEqual(40);
+  });
+});
+
+function marker(over: Partial<BedMarker> = {}): BedMarker {
+  return { id: 'm1', label: 'Pot kompos', posX: 50, posY: 50, radiusCm: 20, ...over };
+}
+
+describe('inspectBed dengan penanda', () => {
+  it('penanda yang melewati tepi ikut ditandai, dengan markerIds bukan plantingIds', () => {
+    const r = inspectBed(bed, [], [marker({ posX: 5 })]);
+    expect(r.issues[0].kind).toBe('keluar-batas');
+    expect(r.issues[0].markerIds).toEqual(['m1']);
+    expect(r.issues[0].plantingIds).toEqual([]);
+  });
+
+  it('tanaman yang menumpuk dengan penanda ditandai terlalu rapat', () => {
+    const r = inspectBed(bed, [slot()], [marker()]); // sama-sama di (50, 50)
+    const rapat = r.issues.find((i) => i.kind === 'terlalu-rapat')!;
+    expect(rapat.plantingIds).toEqual(['s1']);
+    expect(rapat.markerIds).toEqual(['m1']);
+  });
+
+  it('penanda ikut dihitung ke pemakaian ruang', () => {
+    const kosong = inspectBed(bed, []).usedPercent;
+    const denganPenanda = inspectBed(bed, [], [marker({ radiusCm: 30 })]).usedPercent;
+    expect(denganPenanda).toBeGreaterThan(kosong);
+  });
+
+  it('tetap menerima pemanggilan lama tanpa argumen penanda', () => {
+    // Situs panggilan yang belum diperbarui tidak boleh rusak.
+    expect(() => inspectBed(bed, [slot()])).not.toThrow();
   });
 });
 

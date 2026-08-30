@@ -11,6 +11,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch, ApiError } from '@/lib/api';
 import { GardenLocationPicker } from '@/components/GardenLocationPicker';
 import { GrowPlannerSections, GrowRecordSections } from './GardenGrow';
+import { GrowPlannerSections2, GrowRecordSections2 } from './GardenGrow2';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -137,6 +138,7 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [succession, setSuccession] = useState<SuccessionResponse | null>(null);
+  const [scheduled, setScheduled] = useState<Set<string>>(new Set());
   const [conflicts, setConflicts] = useState<ConflictResponse | null>(null);
   const [pestRisk, setPestRisk] = useState<PestRiskResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -202,6 +204,15 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
     setShowLocationPicker(false);
     setError(null);
     reloadWeather();
+  };
+
+  const scheduleSuccession = async (plantingId: string, label: string, sowDate: string) => {
+    try {
+      await apiFetch('/garden/succession/schedule', { method: 'POST', body: JSON.stringify({ label, sowDate }) });
+      setScheduled((prev) => new Set(prev).add(plantingId));
+    } catch (err) {
+      setError(describeError(err, 'Gagal menjadwalkan ke kalender.'));
+    }
   };
 
   const checkSpace = async () => {
@@ -338,18 +349,31 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       {succession && succession.due.length > 0 && (
         <Card title="🌱 Waktunya semai batch berikutnya" accent="#ff9f0a" delay={0.04}>
           {succession.due.map((item) => (
-            <div key={item.plantingId} className="flex flex-col gap-0.5">
-              <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                {item.emoji} {item.label}
+            <div key={item.plantingId} className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-0.5">
+                <div className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                  {item.emoji} {item.label}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--text2)' }}>
+                  Panen sekitar {item.harvestDate} ·{' '}
+                  {item.daysUntilSow < 0
+                    ? `semai sudah lewat ${Math.abs(item.daysUntilSow)} hari`
+                    : item.daysUntilSow === 0
+                      ? 'semai hari ini'
+                      : `semai ${item.daysUntilSow} hari lagi`}
+                </div>
               </div>
-              <div className="text-xs" style={{ color: 'var(--text2)' }}>
-                Panen sekitar {item.harvestDate} ·{' '}
-                {item.daysUntilSow < 0
-                  ? `semai sudah lewat ${Math.abs(item.daysUntilSow)} hari`
-                  : item.daysUntilSow === 0
-                    ? 'semai hari ini'
-                    : `semai ${item.daysUntilSow} hari lagi`}
-              </div>
+              {scheduled.has(item.plantingId) ? (
+                <span className="text-[10px] font-semibold shrink-0" style={{ color: '#34c759' }}>✓ di kalender</span>
+              ) : (
+                <button
+                  className="px-2.5 py-1.5 rounded-lg text-[10px] font-semibold shrink-0"
+                  style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+                  onClick={() => scheduleSuccession(item.plantingId, item.label, item.sowDate)}
+                >
+                  + Jadwal
+                </button>
+              )}
             </div>
           ))}
           <div className="text-xs" style={{ color: 'var(--text3)' }}>
@@ -526,6 +550,7 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       )}
 
       <GrowPlannerSections plantings={plantings} />
+      <GrowPlannerSections2 plantings={plantings} />
     </div>
   );
 }
@@ -1024,6 +1049,7 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
       </Card>
 
       <GrowRecordSections />
+      <GrowRecordSections2 />
     </div>
   );
 }
