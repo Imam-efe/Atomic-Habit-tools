@@ -8,6 +8,11 @@ import { isNetworkError, newClientId, queueFor } from '@/lib/offlineQueue';
 import { useAuthStore } from '@/stores/authStore';
 import { todayISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
+import {
+  LABEL_SIZES, LABEL_SIZE_TITLE, labelLayout, categoryColorRgb,
+  A4_MARGIN_MM, LABEL_GAP_MM,
+  type LabelSize, type LabelColorMode,
+} from '@/lib/labelPrint';
 
 interface Plant {
   id: string;
@@ -1447,6 +1452,7 @@ export function Garden() {
         {labelPrintOpen && (
           <LabelPrintSheet
             plantings={(data?.plantings ?? []).filter(p => p.status === 'tumbuh' || p.status === 'panen')}
+            categories={categories}
             onClose={() => setLabelPrintOpen(false)}
           />
         )}
@@ -1613,50 +1619,81 @@ function formatLabelDate(iso: string): string {
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
-/** Ukuran layout label A4, dipakai bersama oleh render pratinjau dan PDF. */
-const LABEL_COLS = 3;
-const LABEL_GAP_MM = 2;
-const LABEL_H_MM = 30;
-const A4_MARGIN_MM = 8;
-const A4_W_MM = 210;
-const A4_H_MM = 297;
-const LABEL_W_MM = (A4_W_MM - A4_MARGIN_MM * 2 - LABEL_GAP_MM * (LABEL_COLS - 1)) / LABEL_COLS;
-const LABEL_ROWS_PER_PAGE = Math.floor((A4_H_MM - A4_MARGIN_MM * 2 + LABEL_GAP_MM) / (LABEL_H_MM + LABEL_GAP_MM));
-const LABELS_PER_PAGE = LABEL_COLS * LABEL_ROWS_PER_PAGE;
-
 /**
  * Bangun PDF A4 berisi label yang dipilih, dipak kecil-kecil untuk hemat kertas.
  *
  * `jspdf` diimpor dinamis di sini, bukan di puncak file — Garden.tsx dimuat
  * eager sebagai tab utama, jadi import statis akan menaikkan bundle awal
  * seluruh aplikasi meski fitur cetak label jarang dipakai.
+ *
+ * Ukuran dan mode warna diteruskan sebagai parameter, bukan konstanta tetap
+ * seperti sebelumnya — tata letaknya (kolom, tinggi label, ukuran font)
+ * berasal dari `labelLayout()` di `lib/labelPrint.ts` supaya angkanya sama
+ * persis dengan yang diuji di sana.
  */
-async function buildLabelsPdf(labels: Planting[]) {
+async function buildLabelsPdf(
+  labels: Planting[],
+  size: LabelSize,
+  colorMode: LabelColorMode,
+  categoryLabel: (id: string) => string
+) {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const layout = labelLayout(size);
+  const { cols, widthMm: w, labelHmm: h, perPage, fontTitle, fontBody, fontMeta } = layout;
 
   labels.forEach((p, i) => {
-    const posInPage = i % LABELS_PER_PAGE;
+    const posInPage = i % perPage;
     if (i > 0 && posInPage === 0) doc.addPage();
 
-    const col = posInPage % LABEL_COLS;
-    const row = Math.floor(posInPage / LABEL_COLS);
-    const x = A4_MARGIN_MM + col * (LABEL_W_MM + LABEL_GAP_MM);
-    const y = A4_MARGIN_MM + row * (LABEL_H_MM + LABEL_GAP_MM);
+    const col = posInPage % cols;
+    const row = Math.floor(posInPage / cols);
+    const x = A4_MARGIN_MM + col * (w + LABEL_GAP_MM);
+    const y = A4_MARGIN_MM + row * (h + LABEL_GAP_MM);
 
-    doc.setDrawColor(180);
-    doc.roundedRect(x, y, LABEL_W_MM, LABEL_H_MM, 1.5, 1.5);
+    // Border dan aksen kategori ikut berubah warna di mode Warna. Monokrom
+    // tidak pernah menyentuh peta warna kategori sama sekali — bukan warna
+    // yang kebetulan gelap, tapi jalur render yang benar-benar terpisah,
+    // supaya printer tinta hitam-putih tidak pernah diam-diam boros tinta.
+    const [ar, ag, ab] = colorMode === 'warna' ? categoryColorRgb(p.category) : [180, 180, 180];
+
+    doc.setDrawColor(ar, ag, ab);
+    doc.roundedRect(x, y, w, h, 1.5, 1.5);
+
+    // Garis aksen tebal di tepi kiri: cara tercepat memilah label yang sudah
+    // tercetak dan tergunting berdasarkan kategori, tanpa harus membaca teks.
+    if (colorMode === 'warna') {
+      doc.setFillColor(ar, ag, ab);
+      doc.rect(x, y, 1.6, h, 'F');
+    }
+
+    const textX = x + (colorMode === 'warna' ? 4.5 : 3);
+    const textWidth = w - (colorMode === 'warna' ? 7.5 : 6);
+    const titleY = y + fontTitle * 0.8;
+    const lineGap = fontBody * 1.35;
 
     doc.setTextColor(20);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text(p.nickname || p.name, x + 3, y + 8, { maxWidth: LABEL_W_MM - 6 });
+    doc.setFontSize(fontTitle);
+    doc.text(`${p.emoji ? p.emoji + ' ' : ''}${p.nickname || p.name}`, textX, titleY, { maxWidth: textWidth });
 
     doc.setTextColor(60);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.text(`Lokasi: ${p.location || '-'}`, x + 3, y + 16, { maxWidth: LABEL_W_MM - 6 });
-    doc.text(`Ditanam: ${formatLabelDate(p.plantedDate)}`, x + 3, y + 22, { maxWidth: LABEL_W_MM - 6 });
+    doc.setFontSize(fontBody);
+    let ly = titleY + lineGap;
+    doc.text(`Lokasi: ${p.location || '-'}`, textX, ly, { maxWidth: textWidth });
+    ly += lineGap;
+    doc.text(`Ditanam: ${formatLabelDate(p.plantedDate)}`, textX, ly, { maxWidth: textWidth });
+
+    // Nama kategori hanya muncul di mode Warna, sebagai penjelas warna aksen
+    // di sampingnya — di mode Monokrom baris ini tidak menambah apa pun
+    // karena tidak ada warna yang perlu dijelaskan.
+    if (colorMode === 'warna' && p.category) {
+      ly += lineGap;
+      doc.setTextColor(ar, ag, ab);
+      doc.setFontSize(fontMeta);
+      doc.text(categoryLabel(p.category), textX, ly, { maxWidth: textWidth });
+    }
   });
 
   return doc;
@@ -1667,12 +1704,35 @@ async function buildLabelsPdf(labels: Planting[]) {
  * jadi grid kecil di layout A4 dan diekspor sebagai file PDF sungguhan
  * (bukan lewat print dialog browser) supaya bisa disimpan, dibagikan, atau
  * diantre cetak nanti tanpa membuka aplikasi lagi.
+ *
+ * Dua pengaturan cetak ditambahkan di sini, bukan ditetapkan tetap:
+ *
+ *   Ukuran (Kecil/Sedang/Besar) — label kecil untuk stiker semai bibit yang
+ *   berdesakan, label besar untuk yang harus terbaca dari agak jauh di rak.
+ *   Tiga ukuran tetap, bukan slider bebas — lihat `lib/labelPrint.ts` untuk
+ *   alasannya.
+ *
+ *   Mode warna (Monokrom/Warna) — Monokrom untuk printer tinta hitam-putih
+ *   di rumah, supaya tidak ada warna yang malah tercetak abu-abu pekat dan
+ *   boros tinta. Warna menambah aksen tepi kiri per kategori tanaman, supaya
+ *   label yang sudah tergunting bisa dipilah tanpa membaca teksnya satu per
+ *   satu.
  */
-function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClose: () => void }) {
+function LabelPrintSheet({
+  plantings, categories, onClose,
+}: {
+  plantings: Planting[];
+  categories: { id: string; label: string }[];
+  onClose: () => void;
+}) {
   // qty 0 berarti tidak dipilih; > 0 berarti dipilih dengan jumlah label segitu.
   const [qty, setQty] = useState<Record<string, number>>({});
+  const [size, setSize] = useState<LabelSize>('sedang');
+  const [colorMode, setColorMode] = useState<LabelColorMode>('mono');
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
+
+  const categoryLabel = (id: string) => categories.find(c => c.id === id)?.label ?? id;
 
   const setQtyFor = (id: string, next: number) => {
     setQty(prev => ({ ...prev, [id]: Math.max(0, Math.min(99, next)) }));
@@ -1688,14 +1748,19 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
     for (let i = 0; i < n; i++) labels.push(p);
   }
   const totalLabels = labels.length;
-  const pageCount = Math.max(1, Math.ceil(totalLabels / LABELS_PER_PAGE));
+  const layout = labelLayout(size);
+  const pageCount = Math.max(1, Math.ceil(totalLabels / layout.perPage));
+
+  // Kategori yang benar-benar ikut tercetak — legenda hanya menjelaskan
+  // warna yang ada di halaman, bukan seluruh delapan kategori katalog.
+  const kategoriTerpilih = [...new Set(labels.map(p => p.category).filter((c): c is string => !!c))];
 
   const handleExport = async () => {
     if (totalLabels === 0) return;
     setExporting(true);
     setExported(false);
     try {
-      const doc = await buildLabelsPdf(labels);
+      const doc = await buildLabelsPdf(labels, size, colorMode, categoryLabel);
       doc.save(`label-tanaman-${todayISO()}.pdf`);
       setExported(true);
     } finally {
@@ -1718,8 +1783,61 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
       >
         <p className="text-base font-extrabold mb-1" style={{ color: 'var(--text)' }}>🏷️ Cetak Label Tanaman</p>
         <p className="text-[11px] mb-4" style={{ color: 'var(--text3)' }}>
-          Pilih tanaman dan jumlah label, lalu ekspor ke PDF — label dipak kecil-kecil ke layout A4 supaya hemat kertas. File PDF bisa disimpan atau dicetak nanti.
+          Pilih tanaman dan jumlah label, lalu ekspor ke PDF — label dipak ke layout A4 supaya hemat kertas. File PDF bisa disimpan atau dicetak nanti.
         </p>
+
+        <div className="flex flex-col gap-2.5 mb-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text3)' }}>
+              Ukuran label
+            </p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {LABEL_SIZES.map(s => (
+                <button
+                  key={s}
+                  className="py-2 rounded-lg text-[11px] font-bold"
+                  style={{
+                    background: size === s ? 'var(--accentFill)' : 'var(--bg)',
+                    color: size === s ? '#fff' : 'var(--text2)',
+                    boxShadow: size === s ? 'none' : 'var(--neu-raised-sm)',
+                  }}
+                  onClick={() => setSize(s)}
+                >
+                  {LABEL_SIZE_TITLE[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text3)' }}>
+              Warna font & aksen
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {([
+                { id: 'mono' as const, label: '⬛ Monokrom', desc: 'Hemat tinta printer hitam-putih' },
+                { id: 'warna' as const, label: '🎨 Warna', desc: 'Aksen per kategori tanaman' },
+              ]).map(m => (
+                <button
+                  key={m.id}
+                  className="py-2 px-2 rounded-lg text-left"
+                  style={{
+                    background: colorMode === m.id ? 'var(--accentFill)' : 'var(--bg)',
+                    boxShadow: colorMode === m.id ? 'none' : 'var(--neu-raised-sm)',
+                  }}
+                  onClick={() => setColorMode(m.id)}
+                >
+                  <p className="text-[11px] font-bold" style={{ color: colorMode === m.id ? '#fff' : 'var(--text)' }}>
+                    {m.label}
+                  </p>
+                  <p className="text-[9px]" style={{ color: colorMode === m.id ? 'rgba(255,255,255,0.8)' : 'var(--text3)' }}>
+                    {m.desc}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {plantings.length === 0 ? (
           <p className="text-[12px] py-6 text-center" style={{ color: 'var(--text3)' }}>
@@ -1783,23 +1901,53 @@ function LabelPrintSheet({ plantings, onClose }: { plantings: Planting[]; onClos
         {totalLabels > 0 && (
           <>
             <p className="text-[10px] mb-2" style={{ color: 'var(--text3)' }}>
-              Pratinjau — {totalLabels} label, {pageCount} halaman A4
+              Pratinjau — {totalLabels} label, {pageCount} halaman A4 ({layout.cols} kolom)
             </p>
             <div
-              className="grid gap-1.5 mb-4 p-2 rounded-xl overflow-y-auto"
-              style={{ gridTemplateColumns: 'repeat(3, 1fr)', maxHeight: '160px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+              className="grid gap-1.5 mb-2 p-2 rounded-xl overflow-y-auto"
+              style={{
+                gridTemplateColumns: `repeat(${Math.min(layout.cols, 4)}, 1fr)`,
+                maxHeight: '160px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
+              }}
             >
-              {labels.map((p, i) => (
-                <div
-                  key={`${p.id}-${i}`}
-                  className="rounded-md p-1.5 flex flex-col justify-center"
-                  style={{ background: 'var(--surface)', minHeight: '46px' }}
-                >
-                  <p className="text-[9px] font-bold truncate" style={{ color: 'var(--text)' }}>{p.nickname || p.name}</p>
-                  <p className="text-[7.5px] truncate" style={{ color: 'var(--text3)' }}>{p.location || '-'}</p>
-                  <p className="text-[7.5px] truncate" style={{ color: 'var(--text3)' }}>{formatLabelDate(p.plantedDate)}</p>
-                </div>
-              ))}
+              {labels.map((p, i) => {
+                const [r, g, b] = colorMode === 'warna' ? categoryColorRgb(p.category) : [180, 180, 180];
+                const rgb = `rgb(${r}, ${g}, ${b})`;
+                return (
+                  <div
+                    key={`${p.id}-${i}`}
+                    className="rounded-md pl-2 pr-1.5 py-1.5 flex flex-col justify-center border-l-4"
+                    style={{ background: 'var(--surface)', minHeight: '46px', borderColor: colorMode === 'warna' ? rgb : 'var(--sep)' }}
+                  >
+                    <p className="truncate font-bold" style={{ color: 'var(--text)', fontSize: `${Math.max(7, layout.fontTitle - 2)}px` }}>
+                      {p.emoji} {p.nickname || p.name}
+                    </p>
+                    <p className="truncate" style={{ color: 'var(--text3)', fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
+                      {p.location || '-'}
+                    </p>
+                    <p className="truncate" style={{ color: 'var(--text3)', fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
+                      {formatLabelDate(p.plantedDate)}
+                    </p>
+                    {colorMode === 'warna' && p.category && (
+                      <p className="truncate font-semibold" style={{ color: rgb, fontSize: `${layout.fontMeta}px` }}>
+                        {categoryLabel(p.category)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-4 px-0.5">
+              {colorMode === 'warna' && kategoriTerpilih.map(cat => {
+                const [r, g, b] = categoryColorRgb(cat);
+                return (
+                  <div key={cat} className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: `rgb(${r}, ${g}, ${b})` }} />
+                    <span className="text-[9.5px]" style={{ color: 'var(--text3)' }}>{categoryLabel(cat)}</span>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
