@@ -3,6 +3,7 @@ import {
   LABEL_SIZES, LABEL_SIZE_TITLE, labelSizeSpec, labelLayout,
   categoryColorRgb, categoriesWithColor, FALLBACK_CATEGORY_COLOR,
   A4_MARGIN_MM, LABEL_GAP_MM, labelContentLayout, PT_TO_MM,
+  tintTowardWhite, relativeLuminance, secondaryTextColor,
 } from '../labelPrint';
 
 const A4_W_MM = 210;
@@ -116,6 +117,64 @@ describe('categoryColorRgb', () => {
     expect(categoriesWithColor().sort()).toEqual(
       ['buah', 'hias-bunga', 'hias-daun', 'rempah', 'sayuran-buah', 'sayuran-daun', 'sukulen', 'umbi'].sort()
     );
+  });
+});
+
+describe('warna teks mode Warna', () => {
+  // Inti permintaannya: di mode Warna tidak boleh ada hitam atau abu di mana
+  // pun — bukan cuma pada judul.
+  it('tidak ada warna kategori yang hitam atau abu netral', () => {
+    for (const kategori of [...categoriesWithColor(), 'di-luar-katalog', '']) {
+      const [r, g, b] = categoryColorRgb(kategori);
+      // Abu = ketiga kanal (nyaris) sama. Warna sejati punya selisih kanal.
+      const spread = Math.max(r, g, b) - Math.min(r, g, b);
+      expect(spread, `${kategori} terlihat abu-abu`).toBeGreaterThan(20);
+      // Dan tidak ada yang mendekati hitam.
+      expect(relativeLuminance([r, g, b]), `${kategori} terlalu gelap`).toBeGreaterThan(0.1);
+    }
+  });
+
+  it('tintTowardWhite 0 mengembalikan warna asli, 1 mengembalikan putih', () => {
+    expect(tintTowardWhite([46, 139, 69], 0)).toEqual([46, 139, 69]);
+    expect(tintTowardWhite([46, 139, 69], 1)).toEqual([255, 255, 255]);
+  });
+
+  it('tintTowardWhite menjepit nilai di luar 0–1', () => {
+    expect(tintTowardWhite([46, 139, 69], -5)).toEqual([46, 139, 69]);
+    expect(tintTowardWhite([46, 139, 69], 9)).toEqual([255, 255, 255]);
+  });
+
+  it('warna sekunder selalu lebih muda dari warna dasar, tidak pernah lebih gelap', () => {
+    // Kalau lebih gelap, ia bergerak menuju hitam — persis yang dilarang.
+    for (const kategori of categoriesWithColor()) {
+      const dasar = categoryColorRgb(kategori);
+      const sekunder = secondaryTextColor(dasar);
+      expect(relativeLuminance(sekunder), kategori).toBeGreaterThanOrEqual(relativeLuminance(dasar));
+    }
+  });
+
+  it('warna sekunder tidak pernah pudar sampai sulit dibaca di kertas putih', () => {
+    for (const kategori of [...categoriesWithColor(), 'di-luar-katalog']) {
+      const sekunder = secondaryTextColor(categoryColorRgb(kategori));
+      expect(relativeLuminance(sekunder), kategori).toBeLessThanOrEqual(0.62);
+    }
+  });
+
+  it('warna sekunder tetap warna, bukan abu', () => {
+    for (const kategori of [...categoriesWithColor(), 'di-luar-katalog']) {
+      const [r, g, b] = secondaryTextColor(categoryColorRgb(kategori));
+      expect(Math.max(r, g, b) - Math.min(r, g, b), kategori).toBeGreaterThan(10);
+    }
+  });
+
+  it('setiap kanal warna sekunder tetap RGB yang sah', () => {
+    for (const kategori of categoriesWithColor()) {
+      for (const ch of secondaryTextColor(categoryColorRgb(kategori))) {
+        expect(Number.isInteger(ch)).toBe(true);
+        expect(ch).toBeGreaterThanOrEqual(0);
+        expect(ch).toBeLessThanOrEqual(255);
+      }
+    }
   });
 });
 
