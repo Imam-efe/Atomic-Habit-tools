@@ -10,7 +10,7 @@ import { todayISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
 import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
 import {
-  LABEL_SIZES, LABEL_SIZE_TITLE, labelLayout, categoryColorRgb,
+  LABEL_SIZES, LABEL_SIZE_TITLE, labelLayout, categoryColorRgb, labelContentLayout,
   A4_MARGIN_MM, LABEL_GAP_MM,
   type LabelSize, type LabelColorMode,
 } from '@/lib/labelPrint';
@@ -1761,6 +1761,22 @@ async function buildLabelsPdf(
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const layout = labelLayout(size);
   const { cols, widthMm: w, labelHmm: h, perPage, fontTitle, fontBody, fontMeta } = layout;
+  const { titleY: titleYOffset, titleLineHeight, bodyLineHeight } = labelContentLayout(layout);
+
+  // Font standar jsPDF (helvetica) cuma mengerti WinAnsi/Latin-1 — emoji
+  // dilewatkan lewat sini jadi karakter acak yang berantakan (Ø>ÝÅ dst),
+  // dan yang lebih parah, lebar hurufnya salah dihitung sehingga baris judul
+  // meluber ke label sebelah alih-alih membungkus. Kartu tercetak tidak
+  // butuh emoji untuk dikenali — nama tanaman dan aksen warna kategori sudah
+  // cukup.
+  const truncateToWidth = (text: string, maxWidth: number): string => {
+    if (doc.getTextWidth(text) <= maxWidth) return text;
+    let truncated = text;
+    while (truncated.length > 1 && doc.getTextWidth(`${truncated}…`) > maxWidth) {
+      truncated = truncated.slice(0, -1);
+    }
+    return `${truncated}…`;
+  };
 
   labels.forEach((p, i) => {
     const posInPage = i % perPage;
@@ -1789,30 +1805,37 @@ async function buildLabelsPdf(
 
     const textX = x + (colorMode === 'warna' ? 4.5 : 3);
     const textWidth = w - (colorMode === 'warna' ? 7.5 : 6);
-    const titleY = y + fontTitle * 0.8;
-    const lineGap = fontBody * 1.35;
+    const titleY = y + titleYOffset;
 
     doc.setTextColor(20);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(fontTitle);
-    doc.text(`${p.emoji ? p.emoji + ' ' : ''}${p.nickname || p.name}`, textX, titleY, { maxWidth: textWidth });
+    // Maksimal dua baris judul — nama tanaman yang sangat panjang dipotong
+    // dengan elipsis alih-alih membungkus tak terbatas dan menabrak baris
+    // Lokasi/Ditanam di bawahnya.
+    const titleRaw = doc.splitTextToSize(p.nickname || p.name, textWidth) as string[];
+    const titleLines = titleRaw.slice(0, 2);
+    if (titleRaw.length > 2) {
+      titleLines[1] = truncateToWidth(titleLines[1], textWidth);
+    }
+    titleLines.forEach((line, li) => doc.text(line, textX, titleY + li * titleLineHeight));
 
     doc.setTextColor(60);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontBody);
-    let ly = titleY + lineGap;
-    doc.text(`Lokasi: ${p.location || '-'}`, textX, ly, { maxWidth: textWidth });
-    ly += lineGap;
-    doc.text(`Ditanam: ${formatLabelDate(p.plantedDate)}`, textX, ly, { maxWidth: textWidth });
+    let ly = titleY + (titleLines.length - 1) * titleLineHeight + bodyLineHeight;
+    doc.text(truncateToWidth(`Lokasi: ${p.location || '-'}`, textWidth), textX, ly);
+    ly += bodyLineHeight;
+    doc.text(`Ditanam: ${formatLabelDate(p.plantedDate)}`, textX, ly);
 
     // Nama kategori hanya muncul di mode Warna, sebagai penjelas warna aksen
     // di sampingnya — di mode Monokrom baris ini tidak menambah apa pun
     // karena tidak ada warna yang perlu dijelaskan.
     if (colorMode === 'warna' && p.category) {
-      ly += lineGap;
+      ly += bodyLineHeight;
       doc.setTextColor(ar, ag, ab);
       doc.setFontSize(fontMeta);
-      doc.text(categoryLabel(p.category), textX, ly, { maxWidth: textWidth });
+      doc.text(truncateToWidth(categoryLabel(p.category), textWidth), textX, ly);
     }
   });
 

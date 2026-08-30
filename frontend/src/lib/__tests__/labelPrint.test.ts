@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   LABEL_SIZES, LABEL_SIZE_TITLE, labelSizeSpec, labelLayout,
   categoryColorRgb, categoriesWithColor, FALLBACK_CATEGORY_COLOR,
-  A4_MARGIN_MM, LABEL_GAP_MM,
+  A4_MARGIN_MM, LABEL_GAP_MM, labelContentLayout, PT_TO_MM,
 } from '../labelPrint';
 
 const A4_W_MM = 210;
@@ -116,5 +116,43 @@ describe('categoryColorRgb', () => {
     expect(categoriesWithColor().sort()).toEqual(
       ['buah', 'hias-bunga', 'hias-daun', 'rempah', 'sayuran-buah', 'sayuran-daun', 'sukulen', 'umbi'].sort()
     );
+  });
+});
+
+describe('labelContentLayout', () => {
+  // Regresi untuk bug: fontTitle/fontBody dalam pt sempat dipakai langsung
+  // sebagai jarak mm tanpa konversi, membuat baris "Ditanam" tercetak di
+  // tepi bawah label dan baris kategori jatuh ke kotak label berikutnya.
+  it('konversi pt ke mm masuk akal — bukan 1:1', () => {
+    expect(PT_TO_MM).toBeGreaterThan(0.3);
+    expect(PT_TO_MM).toBeLessThan(0.4);
+  });
+
+  it('seluruh isi (judul 2 baris + 3 baris isi) selalu muat di dalam tinggi label', () => {
+    for (const size of LABEL_SIZES) {
+      const spec = labelSizeSpec(size);
+      const layout = labelContentLayout(spec);
+      // Kasus terburuk yang realistis: judul membungkus ke baris kedua,
+      // lalu Lokasi, Ditanam, dan baris kategori (mode Warna).
+      const bottomMostBaseline =
+        layout.titleY + layout.titleLineHeight + 3 * layout.bodyLineHeight;
+      expect(bottomMostBaseline, size).toBeLessThan(spec.labelHmm);
+    }
+  });
+
+  it('baris judul tunggal tidak pernah menimpa tepi bawah label', () => {
+    for (const size of LABEL_SIZES) {
+      const spec = labelSizeSpec(size);
+      const layout = labelContentLayout(spec);
+      const lastBodyBaseline = layout.titleY + layout.bodyLineHeight * 3;
+      expect(lastBodyBaseline, size).toBeLessThan(spec.labelHmm - 1);
+    }
+  });
+
+  it('label lebih besar berarti jarak baris lebih lebar', () => {
+    const kecil = labelContentLayout(labelSizeSpec('kecil'));
+    const besar = labelContentLayout(labelSizeSpec('besar'));
+    expect(besar.titleLineHeight).toBeGreaterThan(kecil.titleLineHeight);
+    expect(besar.bodyLineHeight).toBeGreaterThan(kecil.bodyLineHeight);
   });
 });
