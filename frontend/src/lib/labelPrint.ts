@@ -74,6 +74,46 @@ export function labelLayout(size: LabelSize): LabelLayout {
 }
 
 /**
+ * 1 pt dalam mm. jsPDF diberi `unit: 'mm'`, tapi ukuran font tetap dalam pt —
+ * mencampur keduanya tanpa konversi ini adalah bug yang tepat membuat baris
+ * "Ditanam" tercetak menimpa tepi bawah label, dan baris kategori jatuh ke
+ * label baris berikutnya: jarak antar baris yang seharusnya ~3mm malah
+ * dihitung sebagai ~8mm karena angka pt dipakai langsung sebagai mm.
+ */
+export const PT_TO_MM = 25.4 / 72;
+
+/** Jarak dari tepi atas kotak label ke baseline baris pertama, mm. */
+export function baselineOffsetMm(fontSizePt: number): number {
+  return fontSizePt * PT_TO_MM;
+}
+
+/** Jarak baseline-ke-baseline yang nyaman dibaca untuk satu ukuran font, mm. */
+export function linePitchMm(fontSizePt: number): number {
+  return fontSizePt * PT_TO_MM * 1.5;
+}
+
+export interface LabelContentLayout {
+  /** mm dari tepi atas kotak label ke baseline baris judul pertama. */
+  titleY: number;
+  /** mm antar baris judul yang membungkus ke baris kedua. */
+  titleLineHeight: number;
+  /** mm antar baris isi (Lokasi/Ditanam/kategori), dan dari judul ke baris isi pertama. */
+  bodyLineHeight: number;
+}
+
+/**
+ * Tata letak vertikal isi satu label, dalam mm — dipisah dari `buildLabelsPdf`
+ * (yang butuh jsPDF) supaya angkanya bisa diuji tanpa merender PDF sungguhan.
+ */
+export function labelContentLayout(spec: LabelSizeSpec, padTopMm = 3): LabelContentLayout {
+  return {
+    titleY: padTopMm + baselineOffsetMm(spec.fontTitle),
+    titleLineHeight: linePitchMm(spec.fontTitle),
+    bodyLineHeight: linePitchMm(spec.fontBody),
+  };
+}
+
+/**
  * Warna cetak per kategori tanaman, dipakai hanya pada mode Warna.
  *
  * Mode Monokrom tidak pernah menyentuh peta ini — printer tinta hitam-putih
