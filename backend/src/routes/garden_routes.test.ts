@@ -531,3 +531,138 @@ describe('tanaman hias di jadwal perawatan', () => {
     expect(care.harvestReady).toBe(false);
   });
 });
+
+describe('penanda di denah bedengan', () => {
+  it('menaruh penanda dan mengembalikannya lewat GET /beds', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng A', widthCm: 100, lengthCm: 200 }),
+    });
+    const { id: bedId } = await bed.json() as { id: string };
+
+    const res = await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'kompos', label: 'Pot kompos', posX: 10, posY: 10, radiusCm: 15 }),
+    });
+    expect(res.status).toBe(201);
+
+    const beds = await (await req('/api/garden/beds')).json() as {
+      beds: Array<{ id: string; markers: Array<{ label: string; kind: string }> }>;
+    };
+    const found = beds.beds.find((b) => b.id === bedId)!;
+    expect(found.markers).toHaveLength(1);
+    expect(found.markers[0].label).toBe('Pot kompos');
+  });
+
+  it('menolak kind yang tidak dikenal dengan jatuh ke lainnya, bukan menyimpan apa adanya', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng A', widthCm: 100, lengthCm: 200 }),
+    });
+    const { id: bedId } = await bed.json() as { id: string };
+
+    await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'sql-injection-attempt', label: 'Aneh', posX: 10, posY: 10 }),
+    });
+
+    const row = await db.prepare('SELECT kind FROM garden_bed_markers WHERE bed_id = ?1')
+      .bind(bedId).first<{ kind: string }>();
+    expect(row?.kind).toBe('lainnya');
+  });
+
+  it('menolak menaruh penanda di bedengan orang lain', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng Orang Lain', widthCm: 100, lengthCm: 200 }),
+    }, otherToken);
+    const { id: bedId } = await bed.json() as { id: string };
+
+    const res = await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ label: 'Sisipan', posX: 10, posY: 10 }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('menolak posisi di luar bedengan', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng A', widthCm: 100, lengthCm: 200 }),
+    });
+    const { id: bedId } = await bed.json() as { id: string };
+
+    const res = await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ label: 'Di luar', posX: 500, posY: 10 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('memindahkan penanda lewat PUT, menolak milik orang lain', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng A', widthCm: 100, lengthCm: 200 }),
+    });
+    const { id: bedId } = await bed.json() as { id: string };
+    const marker = await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ label: 'Jalan', posX: 10, posY: 10 }),
+    });
+    const { id: markerId } = await marker.json() as { id: string };
+
+    const moved = await req(`/api/garden/beds/markers/${markerId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ posX: 50, posY: 60 }),
+    });
+    expect(moved.status).toBe(200);
+
+    const other = await req(`/api/garden/beds/markers/${markerId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ posX: 1, posY: 1 }),
+    }, otherToken);
+    expect(other.status).toBe(404);
+  });
+
+  it('menghapus penanda hanya milik sendiri', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng A', widthCm: 100, lengthCm: 200 }),
+    });
+    const { id: bedId } = await bed.json() as { id: string };
+    const marker = await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ label: 'Rak', posX: 10, posY: 10 }),
+    });
+    const { id: markerId } = await marker.json() as { id: string };
+
+    await req(`/api/garden/beds/markers/${markerId}`, { method: 'DELETE' }, otherToken);
+    const stillThere = await db.prepare('SELECT id FROM garden_bed_markers WHERE id = ?1').bind(markerId).first();
+    expect(stillThere).toBeTruthy();
+
+    await req(`/api/garden/beds/markers/${markerId}`, { method: 'DELETE' });
+    const gone = await db.prepare('SELECT id FROM garden_bed_markers WHERE id = ?1').bind(markerId).first();
+    expect(gone).toBeFalsy();
+  });
+
+  it('penanda ikut mempengaruhi saran titik kosong', async () => {
+    const bed = await req('/api/garden/beds', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Bedeng Kecil', widthCm: 60, lengthCm: 60 }),
+    });
+    const { id: bedId } = await bed.json() as { id: string };
+    // Penanda besar menutupi hampir seluruh bedengan kecil ini.
+    await req(`/api/garden/beds/${bedId}/markers`, {
+      method: 'POST',
+      body: JSON.stringify({ label: 'Rak besar', posX: 30, posY: 30, radiusCm: 25 }),
+    });
+
+    const res = await req(`/api/garden/beds/${bedId}/suggest?spacing=10`);
+    const body = await res.json() as { suggestion: { posX: number; posY: number } | null };
+    if (body.suggestion) {
+      const dx = body.suggestion.posX - 30;
+      const dy = body.suggestion.posY - 30;
+      expect(Math.sqrt(dx * dx + dy * dy)).toBeGreaterThanOrEqual(30);
+    }
+  });
+});

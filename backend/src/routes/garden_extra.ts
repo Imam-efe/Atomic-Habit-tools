@@ -30,7 +30,7 @@ import {
 import { forecastHarvest, expectedCareCount } from '../lib/garden_harvest_forecast';
 import { planSupplies, type SupplyPlanting } from '../lib/garden_supplies';
 import { rankTreatments, pendingReviews, type TreatmentRecord } from '../lib/garden_treatment';
-import { inspectBed, suggestSlot, type Bed, type BedSlot } from '../lib/garden_bed_map';
+import { inspectBed, suggestSlot, type Bed, type BedSlot, type BedMarker } from '../lib/garden_bed_map';
 import { buildKitchenReport, priceKey, type HarvestEntry } from '../lib/garden_kitchen';
 import {
   calibrateFromHistory, effectiveDaysToHarvest, type HarvestCycle,
@@ -1191,11 +1191,13 @@ extra.get('/treatments', async (c) => {
 
 // ──────────────────── #17 DENAH BEDENGAN ────────────────────
 
+const MARKER_KINDS = ['jalan', 'kompos', 'rak', 'lainnya'] as const;
+
 // GET /api/garden/beds — daftar bedengan beserta isinya dan masalah tata letak
 extra.get('/beds', async (c) => {
   const user = c.get('user');
 
-  const [bedRes, slotRes] = await Promise.all([
+  const [bedRes, slotRes, markerRes] = await Promise.all([
     c.env.DB.prepare(
       'SELECT id, name, width_cm, length_cm, note FROM garden_beds WHERE user_id = ?1 ORDER BY created_at'
     ).bind(user.sub).all<{ id: string; name: string; width_cm: number; length_cm: number; note: string | null }>(),
@@ -1208,6 +1210,11 @@ extra.get('/beds', async (c) => {
     ).bind(user.sub).all<{
       planting_id: string; bed_id: string; pos_x: number; pos_y: number;
       plant_id: string | null; nickname: string | null; custom_name: string | null;
+    }>(),
+    c.env.DB.prepare(
+      'SELECT id, bed_id, kind, label, pos_x, pos_y, radius_cm FROM garden_bed_markers WHERE user_id = ?1'
+    ).bind(user.sub).all<{
+      id: string; bed_id: string; kind: string; label: string; pos_x: number; pos_y: number; radius_cm: number;
     }>(),
   ]);
 
@@ -1230,13 +1237,86 @@ extra.get('/beds', async (c) => {
     byBed.set(s.bed_id, list);
   }
 
+  const markersByBed = new Map<string, Array<BedMarker & { kind: string }>>();
+  for (const m of markerRes.results ?? []) {
+    const list = markersByBed.get(m.bed_id) ?? [];
+    list.push({ id: m.id, label: m.label, posX: m.pos_x, posY: m.pos_y, radiusCm: m.radius_cm, kind: m.kind });
+    markersByBed.set(m.bed_id, list);
+  }
+
   const beds = (bedRes.results ?? []).map((b) => {
     const bed: Bed = { id: b.id, name: b.name, widthCm: b.width_cm, lengthCm: b.length_cm };
     const slots = byBed.get(b.id) ?? [];
-    return { ...bed, note: b.note, slots, report: inspectBed(bed, slots) };
+    const markers = markersByBed.get(b.id) ?? [];
+    return { ...bed, note: b.note, slots, markers, report: inspectBed(bed, slots, markers) };
   });
 
-  return c.json({ beds });
+  return c.json({ beds, markerKinds: MARKER_KINDS });
+});
+
+// POST /api/garden/beds/:id/markers — taruh penanda (jalan/kompos/rak) di denah
+extra.post('/beds/:id/markers', async (c) => {
+  const user = c.get('user');
+  const bedId = c.req.param('id');
+  type Body = { kind?: string; label?: string; posX?: number; posY?: number; radiusCm?: number };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const bed = await c.env.DB.prepare('SELECT id, width_cm, length_cm FROM garden_beds WHERE id = ?1 AND user_id = ?2')
+    .bind(bedId, user.sub).first<{ id: string; width_cm: number; length_cm: number }>();
+  if (!bed) return c.json({ error: 'bedengan tidak ditemukan' }, 404);
+
+  const label = body.label?.trim().slice(0, 60);
+  if (!label) return c.json({ error: 'label penanda wajib diisi' }, 400);
+
+  const kind = MARKER_KINDS.includes(body.kind as (typeof MARKER_KINDS)[number]) ? body.kind! : 'lainnya';
+  const radiusCm = Math.max(5, Math.min(200, Math.round(body.radiusCm ?? 20)));
+  const posX = Math.round(body.posX ?? bed.width_cm / 2);
+  const posY = Math.round(body.posY ?? bed.length_cm / 2);
+  if (posX < 0 || posY < 0 || posX > bed.width_cm || posY > bed.length_cm) {
+    return c.json({ error: 'posisi di luar bedengan' }, 400);
+  }
+
+  const id = nanoid();
+  await c.env.DB.prepare(
+    `INSERT INTO garden_bed_markers (id, user_id, bed_id, kind, label, pos_x, pos_y, radius_cm)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+  ).bind(id, user.sub, bedId, kind, label, posX, posY, radiusCm).run();
+
+  return c.json({ id, ok: true }, 201);
+});
+
+// PUT /api/garden/beds/markers/:id — pindahkan penanda
+extra.put('/beds/markers/:id', async (c) => {
+  const user = c.get('user');
+  const id = c.req.param('id');
+  type Body = { posX?: number; posY?: number };
+  const body = await c.req.json<Body>().catch((): Body => ({}));
+
+  const marker = await c.env.DB.prepare(
+    `SELECT m.bed_id, b.width_cm, b.length_cm FROM garden_bed_markers m
+       JOIN garden_beds b ON b.id = m.bed_id
+      WHERE m.id = ?1 AND m.user_id = ?2`
+  ).bind(id, user.sub).first<{ bed_id: string; width_cm: number; length_cm: number }>();
+  if (!marker) return c.json({ error: 'penanda tidak ditemukan' }, 404);
+
+  const posX = Math.round(body.posX ?? -1);
+  const posY = Math.round(body.posY ?? -1);
+  if (posX < 0 || posY < 0 || posX > marker.width_cm || posY > marker.length_cm) {
+    return c.json({ error: 'posisi di luar bedengan' }, 400);
+  }
+
+  await c.env.DB.prepare('UPDATE garden_bed_markers SET pos_x = ?1, pos_y = ?2 WHERE id = ?3 AND user_id = ?4')
+    .bind(posX, posY, id, user.sub).run();
+
+  return c.json({ ok: true });
+});
+
+// DELETE /api/garden/beds/markers/:id
+extra.delete('/beds/markers/:id', async (c) => {
+  const user = c.get('user');
+  await c.env.DB.prepare('DELETE FROM garden_bed_markers WHERE id = ?1 AND user_id = ?2')
+    .bind(c.req.param('id'), user.sub).run();
+  return c.json({ ok: true });
 });
 
 // POST /api/garden/beds — buat bedengan
@@ -1349,10 +1429,18 @@ extra.get('/beds/:id/suggest', async (c) => {
     };
   });
 
+  const markerRows = (await c.env.DB.prepare(
+    'SELECT id, label, pos_x, pos_y, radius_cm FROM garden_bed_markers WHERE bed_id = ?1 AND user_id = ?2'
+  ).bind(bedId, user.sub).all<{ id: string; label: string; pos_x: number; pos_y: number; radius_cm: number }>()).results ?? [];
+
+  const markers: BedMarker[] = markerRows.map((m) => ({
+    id: m.id, label: m.label, posX: m.pos_x, posY: m.pos_y, radiusCm: m.radius_cm,
+  }));
+
   const spacing = Number(c.req.query('spacing')) || 20;
   const bed: Bed = { id: bedRow.id, name: bedRow.name, widthCm: bedRow.width_cm, lengthCm: bedRow.length_cm };
 
-  return c.json({ suggestion: suggestSlot(bed, slots, spacing) });
+  return c.json({ suggestion: suggestSlot(bed, slots, spacing, 5, markers) });
 });
 
 // ─────────────────── #18 DARI KEBUN KE PIRING ───────────────────

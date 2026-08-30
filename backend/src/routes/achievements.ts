@@ -35,7 +35,10 @@ function badge(id: string, name: string, description: string, icon: string, curr
 achievements.get('/', async (c) => {
   const user = c.get('user');
 
-  const [maxStreakRow, completionsRow, debtsPaidRow, budgetCountRow] = await Promise.all([
+  const [
+    maxStreakRow, completionsRow, debtsPaidRow, budgetCountRow,
+    harvestCountRow, plantingCountRow, compostAppliedRow, bedCountRow,
+  ] = await Promise.all([
     c.env.DB.prepare('SELECT COALESCE(MAX(streak), 0) as v FROM habits WHERE user_id = ?1')
       .bind(user.sub).first<{ v: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as v FROM habit_completions WHERE user_id = ?1')
@@ -44,12 +47,24 @@ achievements.get('/', async (c) => {
       .bind(user.sub).first<{ v: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as v FROM budget_entries WHERE user_id = ?1')
       .bind(user.sub).first<{ v: number }>(),
+    c.env.DB.prepare("SELECT COUNT(*) as v FROM garden_care_log WHERE user_id = ?1 AND action = 'panen'")
+      .bind(user.sub).first<{ v: number }>(),
+    c.env.DB.prepare('SELECT COUNT(*) as v FROM garden_plantings WHERE user_id = ?1')
+      .bind(user.sub).first<{ v: number }>(),
+    c.env.DB.prepare("SELECT COUNT(*) as v FROM garden_compost_batches WHERE user_id = ?1 AND status = 'terpakai'")
+      .bind(user.sub).first<{ v: number }>(),
+    c.env.DB.prepare('SELECT COUNT(*) as v FROM garden_beds WHERE user_id = ?1')
+      .bind(user.sub).first<{ v: number }>(),
   ]);
 
   const maxStreak = maxStreakRow?.v ?? 0;
   const completions = completionsRow?.v ?? 0;
   const debtsPaid = debtsPaidRow?.v ?? 0;
   const budgetCount = budgetCountRow?.v ?? 0;
+  const harvestCount = harvestCountRow?.v ?? 0;
+  const plantingCount = plantingCountRow?.v ?? 0;
+  const compostApplied = compostAppliedRow?.v ?? 0;
+  const bedCount = bedCountRow?.v ?? 0;
 
   const badges: Badge[] = [
     badge('streak-7', 'Seminggu Penuh', 'Streak 7 hari pada satu kebiasaan', '🔥', maxStreak, 7),
@@ -62,6 +77,10 @@ achievements.get('/', async (c) => {
     badge('debt-5', 'Bebas Finansial', 'Melunasi 5 utang', '🎉', debtsPaid, 5),
     badge('budget-10', 'Mulai Mencatat', '10 transaksi tercatat', '📝', budgetCount, 10),
     badge('budget-100', 'Disiplin Finansial', '100 transaksi tercatat', '💰', budgetCount, 100),
+    badge('garden-harvest-10', 'Panen Pertama', '10 kali mencatat panen di kebun', '🌾', harvestCount, 10),
+    badge('garden-planting-25', 'Tukang Kebun', '25 tanaman pernah ditanam', '🌱', plantingCount, 25),
+    badge('garden-compost-5', 'Daur Ulang Hijau', '5 batch kompos diterapkan ke tanaman', '🪴', compostApplied, 5),
+    badge('garden-bed-1', 'Perencana Kebun', 'Membuat denah bedengan pertama', '📐', bedCount, 1),
   ];
 
   return c.json({
