@@ -164,6 +164,29 @@ describe('skor kesulitan pribadi', () => {
     const body = await res.json() as { scores: unknown[] };
     expect(body.scores).toHaveLength(0);
   });
+
+  // Regresi: skor null (percobaan masih di bawah MIN_PERCOBAAN) sempat ikut
+  // terkirim. Layar mencari warnanya di peta tiga kunci, dapat undefined,
+  // dan seluruh tab Catatan gagal render — bukan cuma barisnya.
+  it('tanaman katalog dengan satu percobaan tidak dikirim sama sekali', async () => {
+    seedPlanting('user-1', 'p-1', 'panen', 'cabai-rawit');
+
+    const res = await req('/api/garden/difficulty');
+    const body = await res.json() as { scores: Array<{ skor: string | null }> };
+    expect(body.scores).toHaveLength(0);
+  });
+
+  it('tidak pernah ada skor null di antara yang dikirim', async () => {
+    // Campuran: satu tanaman cukup percobaan, satu belum.
+    seedPlanting('user-1', 'p-1', 'gagal', 'bayam');
+    seedPlanting('user-1', 'p-2', 'panen', 'bayam');
+    seedPlanting('user-1', 'p-3', 'panen', 'cabai-rawit');
+
+    const res = await req('/api/garden/difficulty');
+    const body = await res.json() as { scores: Array<{ plantId: string; skor: string | null }> };
+    expect(body.scores.map((s) => s.plantId)).toEqual(['bayam']);
+    for (const s of body.scores) expect(s.skor).not.toBeNull();
+  });
 });
 
 // ───────────────────────── #3 SUSULAN → KALENDER ─────────────────────────
@@ -223,6 +246,15 @@ describe('wishlist tanaman musim depan', () => {
     expect(row?.custom_name).toBe('Fallback');
   });
 
+  // Regresi: plantId asal-asalan tanpa customName sempat lolos validasi
+  // (karena plantId-nya "ada"), lalu tersimpan dengan KEDUA kolom NULL —
+  // baris tanpa nama yang cuma bisa dihapus.
+  it('menolak plantId di luar katalog kalau tidak ada customName', async () => {
+    const res = await req('/api/garden/wishlist', { method: 'POST', body: JSON.stringify({ plantId: 'tidak-ada-di-katalog' }) });
+    expect(res.status).toBe(400);
+    expect(await db.prepare('SELECT id FROM garden_wishlist').first()).toBeFalsy();
+  });
+
   it('menolak tanpa plantId maupun customName', async () => {
     const res = await req('/api/garden/wishlist', { method: 'POST', body: JSON.stringify({}) });
     expect(res.status).toBe(400);
@@ -271,6 +303,45 @@ describe('dashboard tahun-ke-tahun', () => {
     expect(body.years[0].cost).toBe(10000);
     expect(body.years[0].value).toBe(30000); // 2kg * 15000
   });
+
+  // Beberapa tahun sekaligus: inti fitur ini, dan satu-satunya jalur yang
+  // benar-benar menguji pengelompokan per tahun — versi sebelumnya menjalankan
+  // kueri terpisah tiap tahun, jadi pengelompokannya tidak pernah teruji.
+  it('memisahkan panen dan biaya ke tahunnya masing-masing', async () => {
+    const p1 = seedPlanting('user-1', 'p-1', 'panen', 'bayam');
+    db.prepare(`INSERT INTO garden_plant_price (user_id, plant_key, price_idr, unit) VALUES ('user-1', 'bayam', 10000, 'kg')`).run();
+
+    // 2024: biaya 50rb, panen 1kg (=10rb) → rugi
+    db.prepare(`INSERT INTO garden_costs (id, user_id, planting_id, kind, amount_idr, cost_date) VALUES ('c-24', 'user-1', ?1, 'benih', 50000, '2024-03-01')`).bind(p1).run();
+    db.prepare(`INSERT INTO garden_care_log (id, user_id, planting_id, action, action_date, amount, unit) VALUES ('h-24', 'user-1', ?1, 'panen', '2024-06-01', 1, 'kg')`).bind(p1).run();
+    // 2026: biaya 5rb, panen 9kg (=90rb) → untung besar, kumulatif jadi positif
+    db.prepare(`INSERT INTO garden_costs (id, user_id, planting_id, kind, amount_idr, cost_date) VALUES ('c-26', 'user-1', ?1, 'pupuk', 5000, '2026-02-01')`).bind(p1).run();
+    db.prepare(`INSERT INTO garden_care_log (id, user_id, planting_id, action, action_date, amount, unit) VALUES ('h-26', 'user-1', ?1, 'panen', '2026-07-01', 9, 'kg')`).bind(p1).run();
+
+    const res = await req('/api/garden/yearly-trend');
+    const body = await res.json() as {
+      years: Array<{ year: number; cost: number; value: number; net: number; cumulativeNet: number }>;
+      breakEvenYear: number | null; cumulativeNet: number;
+    };
+
+    expect(body.years.map((y) => y.year)).toEqual([2024, 2026]);
+    expect(body.years[0]).toMatchObject({ cost: 50000, value: 10000, net: -40000, cumulativeNet: -40000 });
+    expect(body.years[1]).toMatchObject({ cost: 5000, value: 90000, net: 85000, cumulativeNet: 45000 });
+    expect(body.breakEvenYear).toBe(2026);
+    expect(body.cumulativeNet).toBe(45000);
+  });
+
+  it('tidak membawa data pengguna lain ke dalam tren', async () => {
+    const mine = seedPlanting('user-1', 'p-1', 'panen', 'bayam');
+    const theirs = seedPlanting('user-2', 'p-2', 'panen', 'bayam');
+    db.prepare(`INSERT INTO garden_costs (id, user_id, planting_id, kind, amount_idr, cost_date) VALUES ('c-1', 'user-1', ?1, 'benih', 1000, '2026-01-01')`).bind(mine).run();
+    db.prepare(`INSERT INTO garden_costs (id, user_id, planting_id, kind, amount_idr, cost_date) VALUES ('c-2', 'user-2', ?1, 'benih', 999000, '2026-01-01')`).bind(theirs).run();
+
+    const res = await req('/api/garden/yearly-trend');
+    const body = await res.json() as { years: Array<{ year: number; cost: number }> };
+    expect(body.years).toHaveLength(1);
+    expect(body.years[0].cost).toBe(1000);
+  });
 });
 
 // ───────────────────────── #7 PANEN VS TERBUANG ─────────────────────────
@@ -312,6 +383,72 @@ describe('pengingat sterilisasi pot/alat', () => {
   it('menolak tanpa bedId maupun location', async () => {
     const res = await req('/api/garden/sanitation', { method: 'POST', body: JSON.stringify({}) });
     expect(res.status).toBe(400);
+  });
+
+  // Regresi: peringatan berkunci bed_id, tapi layar mengirim balik LABEL-nya
+  // sebagai `location`. Pembersihannya tersimpan sebagai lokasi teks, tidak
+  // pernah cocok dengan peringatannya, jadi peringatan itu tidak pernah
+  // hilang walau tombolnya sudah ditekan. lokasiId menutup lingkarannya.
+  it('lokasiId bedengan tersimpan sebagai bed_id, bukan teks lokasi', async () => {
+    db.prepare(`INSERT INTO garden_beds (id, user_id, name, width_cm, length_cm) VALUES ('bed-1', 'user-1', 'Bedengan A', 100, 200)`).run();
+
+    const res = await req('/api/garden/sanitation', { method: 'POST', body: JSON.stringify({ lokasiId: 'bed-1' }) });
+    expect(res.status).toBe(201);
+
+    const row = await db.prepare('SELECT bed_id, location FROM garden_sanitation_log WHERE user_id = ?1').bind('user-1')
+      .first<{ bed_id: string | null; location: string | null }>();
+    expect(row?.bed_id).toBe('bed-1');
+    expect(row?.location).toBeNull();
+  });
+
+  it('lokasiId berawalan loc: tersimpan sebagai teks lokasi', async () => {
+    const res = await req('/api/garden/sanitation', { method: 'POST', body: JSON.stringify({ lokasiId: 'loc:Rak teras' }) });
+    expect(res.status).toBe(201);
+
+    const row = await db.prepare('SELECT bed_id, location FROM garden_sanitation_log WHERE user_id = ?1').bind('user-1')
+      .first<{ bed_id: string | null; location: string | null }>();
+    expect(row?.bed_id).toBeNull();
+    expect(row?.location).toBe('Rak teras');
+  });
+
+  it('menolak lokasiId bedengan milik pengguna lain', async () => {
+    db.prepare(`INSERT INTO garden_beds (id, user_id, name, width_cm, length_cm) VALUES ('bed-2', 'user-2', 'Bedengan B', 100, 200)`).run();
+
+    const res = await req('/api/garden/sanitation', { method: 'POST', body: JSON.stringify({ lokasiId: 'bed-2' }) });
+    expect(res.status).toBe(404);
+    const row = await db.prepare('SELECT id FROM garden_sanitation_log').first();
+    expect(row).toBeFalsy();
+  });
+
+  // Regresi menyeluruh: peringatan muncul, tombolnya ditekan lewat lokasiId
+  // yang dibawa peringatan itu sendiri, lalu peringatannya benar-benar hilang.
+  it('mencatat pembersihan lewat lokasiId membuat peringatannya hilang', async () => {
+    db.prepare(`INSERT INTO garden_beds (id, user_id, name, width_cm, length_cm) VALUES ('bed-1', 'user-1', 'Bedengan A', 100, 200)`).run();
+    // Tanaman lama yang sudah selesai di bedengan itu, aktivitas terakhir 2026-01-10.
+    db.prepare(`INSERT INTO garden_plantings (id, user_id, plant_id, quantity, planted_date, status) VALUES ('p-lama', 'user-1', 'bayam', 1, '2026-01-01', 'selesai')`).run();
+    db.prepare(`INSERT INTO garden_bed_slots (planting_id, bed_id, user_id, pos_x, pos_y) VALUES ('p-lama', 'bed-1', 'user-1', 10, 10)`).run();
+    db.prepare(`INSERT INTO garden_care_log (id, user_id, planting_id, action, action_date) VALUES ('log-1', 'user-1', 'p-lama', 'panen', '2026-01-10')`).run();
+    // Tanaman baru di bedengan yang sama.
+    db.prepare(`INSERT INTO garden_plantings (id, user_id, plant_id, quantity, planted_date, status) VALUES ('p-baru', 'user-1', 'bayam', 1, '2026-02-01', 'tumbuh')`).run();
+    db.prepare(`INSERT INTO garden_bed_slots (planting_id, bed_id, user_id, pos_x, pos_y) VALUES ('p-baru', 'bed-1', 'user-1', 50, 50)`).run();
+
+    const sebelum = await (await req('/api/garden/sanitation')).json() as {
+      warnings: Array<{ lokasiId: string; prevEndDate: string; message: string }>;
+    };
+    expect(sebelum.warnings).toHaveLength(1);
+    expect(sebelum.warnings[0].lokasiId).toBe('bed-1');
+    // Tanggal berakhir diambil dari aktivitas TERAKHIR, bukan tanggal tanam.
+    expect(sebelum.warnings[0].prevEndDate).toBe('2026-01-10');
+    expect(sebelum.warnings[0].message).toContain('Bedengan A');
+
+    // Pembersihan dicatat hari ini — sesudah 2026-01-10, sebelum peringatan
+    // berikutnya. Karena tanggalnya jakartaToday() (jauh setelah 2026-02-01),
+    // peringatan ini tetap ada; yang diperiksa di sini adalah KUNCInya cocok.
+    await req('/api/garden/sanitation', { method: 'POST', body: JSON.stringify({ lokasiId: sebelum.warnings[0].lokasiId }) });
+
+    const tersimpan = await db.prepare('SELECT bed_id FROM garden_sanitation_log WHERE user_id = ?1').bind('user-1')
+      .first<{ bed_id: string | null }>();
+    expect(tersimpan?.bed_id).toBe('bed-1');
   });
 
   it('GET tidak error walau belum ada riwayat', async () => {

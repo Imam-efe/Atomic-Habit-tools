@@ -152,10 +152,18 @@ extra2.get('/difficulty', async (c) => {
 
   const skor = hitungSkorKesulitan(rows.map((r) => ({ plantId: r.plant_id, status: r.status })));
 
+  // `skor: null` berarti riwayatnya masih terlalu tipis untuk disimpulkan
+  // (di bawah MIN_PERCOBAAN). Baris seperti itu tidak dikirim sama sekali:
+  // kontrak endpoint ini adalah "tanaman yang sudah punya vonis", dan
+  // mengirim vonis kosong memaksa setiap pemakai menangani null sendiri —
+  // yang justru terlewat dan membuat layar Catatan gagal render.
   const withCatalog = skor
     .map((s) => {
+      if (s.skor === null) return null;
       const plant = PLANT_BY_ID.get(s.plantId);
-      return plant ? { ...s, name: plant.name, emoji: plant.emoji, difficultyKatalog: plant.difficulty } : null;
+      return plant
+        ? { ...s, skor: s.skor, name: plant.name, emoji: plant.emoji, difficultyKatalog: plant.difficulty }
+        : null;
     })
     .filter((s): s is NonNullable<typeof s> => s !== null);
 
@@ -217,12 +225,26 @@ extra2.post('/wishlist', async (c) => {
 
   const plantId = body.plantId?.trim();
   const customName = body.customName?.trim().slice(0, 60);
-  if (!plantId && !customName) return c.json({ error: 'plantId atau customName wajib diisi' }, 400);
+  const dariKatalog = !!plantId && PLANT_BY_ID.has(plantId);
+
+  // Baris wishlist harus punya salah satu sumber nama. plantId yang tidak
+  // dikenal katalog dianggap tidak ada sama sekali — tanpa syarat ini,
+  // kiriman berisi plantId asal-asalan dan tanpa customName lolos validasi
+  // lalu tersimpan dengan kedua kolom NULL, jadi baris tanpa nama yang
+  // hanya bisa dihapus.
+  if (!dariKatalog && !customName) {
+    return c.json({ error: 'plantId dari katalog atau customName wajib diisi' }, 400);
+  }
 
   const id = nanoid();
   await c.env.DB.prepare(
     'INSERT INTO garden_wishlist (id, user_id, plant_id, custom_name, note) VALUES (?1, ?2, ?3, ?4, ?5)'
-  ).bind(id, user.sub, plantId && PLANT_BY_ID.has(plantId) ? plantId : null, plantId && PLANT_BY_ID.has(plantId) ? null : customName ?? null, body.note?.trim().slice(0, 200) || null).run();
+  ).bind(
+    id, user.sub,
+    dariKatalog ? plantId! : null,
+    dariKatalog ? null : customName!,
+    body.note?.trim().slice(0, 200) || null
+  ).run();
 
   return c.json({ id, ok: true }, 201);
 });
@@ -259,44 +281,55 @@ extra2.get('/yearly-trend', async (c) => {
   const prices = new Map<string, number>();
   for (const p of priceRes.results ?? []) prices.set(p.plant_key, p.price_idr);
 
-  const totals: YearlyTotal[] = [];
-  for (const year of years) {
-    const from = `${year}-01-01`;
-    const to = `${year}-12-31`;
+  // Satu kueri untuk SELURUH rentang, lalu dikelompokkan per tahun di memori.
+  // Versi sebelumnya menjalankan dua kueri per tahun di dalam perulangan —
+  // sampai dua puluh perjalanan bolak-balik ke D1 untuk satu layar, dan
+  // biayanya tumbuh tiap tahun kebun ini dipakai.
+  const from = `${years[0]}-01-01`;
+  const to = `${years[years.length - 1]}-12-31`;
 
-    const [harvestRes, costRes] = await Promise.all([
-      c.env.DB.prepare(
-        `SELECT p.plant_id, p.nickname, p.custom_name, l.amount, l.unit
-           FROM garden_care_log l
-           JOIN garden_plantings p ON p.id = l.planting_id
-          WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL
-            AND l.action_date >= ?2 AND l.action_date <= ?3`
-      ).bind(user.sub, from, to).all<{
-        plant_id: string | null; nickname: string | null; custom_name: string | null; amount: number; unit: string | null;
-      }>(),
-      c.env.DB.prepare(
-        `SELECT COALESCE(SUM(amount_idr), 0) AS total FROM garden_costs
-          WHERE user_id = ?1 AND cost_date >= ?2 AND cost_date <= ?3`
-      ).bind(user.sub, from, to).first<{ total: number }>(),
-    ]);
+  const [harvestRes, costRes] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT substr(l.action_date, 1, 4) AS tahun, p.plant_id, p.nickname, p.custom_name, l.amount, l.unit
+         FROM garden_care_log l
+         JOIN garden_plantings p ON p.id = l.planting_id
+        WHERE l.user_id = ?1 AND l.action = 'panen' AND l.amount IS NOT NULL
+          AND l.action_date >= ?2 AND l.action_date <= ?3`
+    ).bind(user.sub, from, to).all<{
+      tahun: string; plant_id: string | null; nickname: string | null;
+      custom_name: string | null; amount: number; unit: string | null;
+    }>(),
+    c.env.DB.prepare(
+      `SELECT substr(cost_date, 1, 4) AS tahun, COALESCE(SUM(amount_idr), 0) AS total
+         FROM garden_costs
+        WHERE user_id = ?1 AND cost_date >= ?2 AND cost_date <= ?3
+        GROUP BY tahun`
+    ).bind(user.sub, from, to).all<{ tahun: string; total: number }>(),
+  ]);
 
-    const harvests: HarvestEntry[] = (harvestRes.results ?? []).map((r) => {
-      const plant = r.plant_id ? PLANT_BY_ID.get(r.plant_id) : undefined;
-      return {
-        key: priceKey(r.plant_id, r.custom_name),
-        name: r.nickname || plant?.name || r.custom_name || 'Tanaman',
-        amount: r.amount,
-        unit: r.unit ?? 'kg',
-        date: from,
-      };
+  const panenPerTahun = new Map<string, HarvestEntry[]>();
+  for (const r of harvestRes.results ?? []) {
+    const plant = r.plant_id ? PLANT_BY_ID.get(r.plant_id) : undefined;
+    const list = panenPerTahun.get(r.tahun) ?? [];
+    list.push({
+      key: priceKey(r.plant_id, r.custom_name),
+      name: r.nickname || plant?.name || r.custom_name || 'Tanaman',
+      amount: r.amount,
+      unit: r.unit ?? 'kg',
+      date: `${r.tahun}-01-01`,
     });
-
-    const value = buildKitchenReport(harvests, prices, 0, from, to);
-    totals.push({ year: Number(year), cost: costRes?.total ?? 0, value: value.harvestValueIdr });
+    panenPerTahun.set(r.tahun, list);
   }
 
-  const summary = computeBreakEven(totals);
-  return c.json(summary);
+  const biayaPerTahun = new Map((costRes.results ?? []).map((r) => [r.tahun, r.total]));
+
+  const totals: YearlyTotal[] = years.map((year) => {
+    const panen = panenPerTahun.get(year) ?? [];
+    const nilai = buildKitchenReport(panen, prices, 0, `${year}-01-01`, `${year}-12-31`);
+    return { year: Number(year), cost: biayaPerTahun.get(year) ?? 0, value: nilai.harvestValueIdr };
+  });
+
+  return c.json(computeBreakEven(totals));
 });
 
 // ──────────────────── #7 PANEN VS TERBUANG ────────────────────
@@ -327,11 +360,17 @@ extra2.get('/sanitation', async (c) => {
   // tumbuh sekarang — dipasangkan lewat lokasi atau bedengan yang sama.
   const [ended, active, bedRows, cleanedRows] = await Promise.all([
     c.env.DB.prepare(
+      // Tanggal berakhir didekati dengan aktivitas perawatan TERAKHIR, apa pun
+      // jenisnya — bukan hanya 'catatan'. Menyaring satu jenis aksi saja
+      // membuat tanaman yang berakhir sesudah panen tidak punya baris yang
+      // cocok, jadi COALESCE jatuh ke tanggal TANAM: jendela sanitasi lalu
+      // dihitung dari awal siklus, bukan akhirnya, dan pembersihan yang
+      // sungguhan dilakukan tetap dianggap belum ada.
       `SELECT p.location, s.bed_id, p.planted_date,
               COALESCE(MAX(l.action_date), p.planted_date) AS end_date
          FROM garden_plantings p
          LEFT JOIN garden_bed_slots s ON s.planting_id = p.id
-         LEFT JOIN garden_care_log l ON l.planting_id = p.id AND l.action = 'catatan'
+         LEFT JOIN garden_care_log l ON l.planting_id = p.id
         WHERE p.user_id = ?1 AND p.status IN ('gagal', 'selesai')
         GROUP BY p.id`
     ).bind(user.sub).all<{ location: string | null; bed_id: string | null; planted_date: string; end_date: string }>(),
@@ -372,20 +411,39 @@ extra2.get('/sanitation', async (c) => {
     });
   }
 
-  const lastCleanedMap = new Map<string, string>();
-  for (const [key, date] of lastCleaned) lastCleanedMap.set(key, date);
-
-  return c.json({ warnings: cariPerluSanitasi(riwayat, lastCleanedMap) });
+  return c.json({ warnings: cariPerluSanitasi(riwayat, lastCleaned) });
 });
 
 // POST /api/garden/sanitation — catat pembersihan
 extra2.post('/sanitation', async (c) => {
   const user = c.get('user');
-  type Body = { bedId?: string; location?: string; note?: string };
+  type Body = { lokasiId?: string; bedId?: string; location?: string; note?: string };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
-  if (!body.bedId && !body.location?.trim()) {
-    return c.json({ error: 'bedId atau location wajib diisi' }, 400);
+  // `lokasiId` adalah kunci yang sama persis dengan yang dibawa peringatan —
+  // dikembalikan apa adanya, lalu dibongkar di sini. Sebelumnya layar
+  // mengirim balik LABEL-nya sebagai `location`, sehingga pembersihan
+  // bedengan tersimpan sebagai lokasi teks bernama sama dan tidak pernah
+  // cocok dengan peringatan yang berkunci bed_id: tombolnya bekerja tapi
+  // peringatannya tidak pernah hilang.
+  let bedId = body.bedId?.trim() || null;
+  let location = body.location?.trim() || null;
+  const lokasiId = body.lokasiId?.trim();
+  if (lokasiId) {
+    if (lokasiId.startsWith('loc:')) { location = lokasiId.slice(4); bedId = null; }
+    else { bedId = lokasiId; location = null; }
+  }
+
+  if (!bedId && !location) {
+    return c.json({ error: 'lokasiId, bedId, atau location wajib diisi' }, 400);
+  }
+
+  // Bedengan yang tidak dimiliki tidak boleh menghasilkan baris pembersihan:
+  // tanpa cek ini, id tebakan menambah baris atas nama bedengan orang lain.
+  if (bedId) {
+    const owned = await c.env.DB.prepare('SELECT id FROM garden_beds WHERE id = ?1 AND user_id = ?2')
+      .bind(bedId, user.sub).first<{ id: string }>();
+    if (!owned) return c.json({ error: 'bedengan tidak ditemukan' }, 404);
   }
 
   const id = nanoid();
@@ -393,7 +451,7 @@ extra2.post('/sanitation', async (c) => {
     `INSERT INTO garden_sanitation_log (id, user_id, bed_id, location, cleaned_date, note)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
   ).bind(
-    id, user.sub, body.bedId?.trim() || null, body.location?.trim() || null,
+    id, user.sub, bedId, location,
     jakartaToday(), body.note?.trim().slice(0, 200) || null
   ).run();
 

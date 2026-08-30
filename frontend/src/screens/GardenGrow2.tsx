@@ -137,7 +137,7 @@ interface RainwaterEntry {
 interface RainwaterResponse {
   log: RainwaterEntry[];
   tarifRpPerLiter: number;
-  ringkasan: { totalCollected: number; totalUsed: number; sisaTampungan: number; hematRupiah: number | null };
+  ringkasan: { totalTertampung: number; totalTerpakai: number; sisaTampungan: number; hematRupiah: number | null };
 }
 
 const METODE_LABEL: Record<CompostBatch['metode'], string> = { cepat: 'Cepat', sedang: 'Sedang', lambat: 'Lambat' };
@@ -146,6 +146,18 @@ const SKOR_LABEL: Record<DifficultyScore['skor'], { label: string; color: string
   sedang: { label: 'Sedang bagimu', color: '#ff9f0a' },
   sulit: { label: 'Sulit bagimu', color: '#ff3b30' },
 };
+
+/**
+ * Pencarian skor yang tidak pernah melempar.
+ *
+ * Backend hanya mengirim tanaman yang sudah punya vonis, jadi tiga kunci di
+ * atas seharusnya cukup. Tapi `SKOR_LABEL[x].color` pada nilai yang tidak
+ * terduga merusak SELURUH tab Catatan, bukan satu baris — harga sebuah
+ * bidang tak dikenal tidak sepadan dengan itu, dan tab ini akan terus
+ * kedatangan bidang baru seiring fitur bertambah.
+ */
+const skorLabel = (skor: string) =>
+  SKOR_LABEL[skor as DifficultyScore['skor']] ?? { label: skor, color: 'var(--text2)' };
 
 // ─────────────────────────── RENCANA ───────────────────────────
 
@@ -252,7 +264,11 @@ export function GrowPlannerSections2({ plantings }: { plantings: PlantingOption[
 
   const cleanNow = async (w: SanitationWarning) => {
     try {
-      await apiFetch('/garden/sanitation', { method: 'POST', body: JSON.stringify({ location: w.lokasiLabel }) });
+      // Dikirim balik dengan kunci yang sama persis seperti yang diterima.
+      // Mengirim LABEL-nya membuat pembersihan bedengan tersimpan sebagai
+      // lokasi teks, tidak pernah cocok dengan peringatannya, dan
+      // peringatannya tidak pernah hilang walau tombolnya sudah ditekan.
+      await apiFetch('/garden/sanitation', { method: 'POST', body: JSON.stringify({ lokasiId: w.lokasiId }) });
       reload();
     } catch (err) {
       setError(describeError(err, 'Gagal mencatat sanitasi.'));
@@ -489,15 +505,18 @@ export function GrowRecordSections2() {
 
       {difficulty.length > 0 && (
         <Card title="🎯 Skor kesulitan bagimu">
-          {difficulty.map((d) => (
-            <div key={d.plantId} className="flex justify-between items-center text-sm">
-              <span style={{ color: 'var(--text)' }}>{d.emoji} {d.name}</span>
-              <span className="text-xs text-right" style={{ color: SKOR_LABEL[d.skor].color }}>
-                {SKOR_LABEL[d.skor].label}
-                <span className="block" style={{ color: 'var(--text3)' }}>{d.total} percobaan, {d.gagal} gagal</span>
-              </span>
-            </div>
-          ))}
+          {difficulty.map((d) => {
+            const skor = skorLabel(d.skor);
+            return (
+              <div key={d.plantId} className="flex justify-between items-center text-sm">
+                <span style={{ color: 'var(--text)' }}>{d.emoji} {d.name}</span>
+                <span className="text-xs text-right" style={{ color: skor.color }}>
+                  {skor.label}
+                  <span className="block" style={{ color: 'var(--text3)' }}>{d.total} percobaan, {d.gagal} gagal</span>
+                </span>
+              </div>
+            );
+          })}
           <div className="text-xs" style={{ color: 'var(--text3)' }}>
             Dari riwayat menanammu sendiri, bisa berbeda dari tingkat kesulitan katalog umum.
           </div>
