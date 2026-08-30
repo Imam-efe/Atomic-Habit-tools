@@ -136,10 +136,18 @@ const CATEGORY_COLOR: Record<string, readonly [number, number, number]> = {
   sukulen: [108, 92, 231],
 };
 
-/** Abu netral untuk tanaman custom di luar katalog — bukan salah satu warna kategori. */
-export const FALLBACK_CATEGORY_COLOR: readonly [number, number, number] = [90, 90, 90];
+/**
+ * Warna untuk tanaman custom di luar katalog — bukan salah satu dari delapan
+ * warna kategori, tapi tetap sebuah WARNA.
+ *
+ * Dulu abu-abu netral. Di mode Warna itu berarti satu label bisa tercetak
+ * seluruhnya abu-abu gelap di tengah label-label berwarna — persis kesan
+ * "hitam" yang mode ini justru dihindari. Biru batu tua tetap terbaca netral
+ * di sebelah kategori mana pun tanpa jadi abu.
+ */
+export const FALLBACK_CATEGORY_COLOR: readonly [number, number, number] = [82, 103, 143];
 
-/** RGB untuk kategori, atau abu netral bila kategorinya kosong/tidak dikenal. */
+/** RGB untuk kategori, atau warna netral bila kategorinya kosong/tidak dikenal. */
 export function categoryColorRgb(category: string | null | undefined): readonly [number, number, number] {
   if (!category) return FALLBACK_CATEGORY_COLOR;
   return CATEGORY_COLOR[category] ?? FALLBACK_CATEGORY_COLOR;
@@ -148,4 +156,60 @@ export function categoryColorRgb(category: string | null | undefined): readonly 
 /** Semua kategori yang punya warna sendiri — dipakai merender legenda di layar. */
 export function categoriesWithColor(): string[] {
   return Object.keys(CATEGORY_COLOR);
+}
+
+// ───────────────────── WARNA TEKS MODE WARNA ─────────────────────
+
+/**
+ * Di mode Warna tidak ada satu pun elemen yang hitam atau abu: judul, baris
+ * isi, keterangan kategori, garis tepi, dan pita aksen semuanya mengambil
+ * warna kategori tanaman itu.
+ *
+ * Yang tetap perlu dijaga adalah HIERARKI — kalau semua baris memakai warna
+ * dan ketebalan yang sama persis, tidak ada lagi yang menuntun mata ke nama
+ * tanamannya. Jadi hierarkinya dipindah ke terang-gelap dalam satu warna yang
+ * sama: judul memakai warna penuh, baris isi memakai versi yang lebih muda
+ * dari warna yang sama. Bukan warna berbeda — rona yang sama, kepekatan
+ * berbeda.
+ */
+
+type Rgb = readonly [number, number, number];
+
+/** Campur warna menuju putih. `amount` 0 = warna asli, 1 = putih. */
+export function tintTowardWhite(rgb: Rgb, amount: number): [number, number, number] {
+  const t = Math.min(1, Math.max(0, amount));
+  return rgb.map((ch) => Math.round(ch + (255 - ch) * t)) as [number, number, number];
+}
+
+/** Luminansi relatif kasar (0 gelap – 1 terang), pembobotan mata manusia. */
+export function relativeLuminance(rgb: Rgb): number {
+  return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+}
+
+/** Seberapa muda baris isi dibanding judul, sebelum penjagaan keterbacaan. */
+const SECONDARY_TINT = 0.4;
+
+/**
+ * Batas terang untuk teks sekunder di atas kertas putih. Di atas ini tinta
+ * mulai pudar di printer inkjet murah — persis label yang dicetak lalu
+ * digantung di kebun dan harus tetap terbaca.
+ */
+const MAX_SECONDARY_LUMINANCE = 0.62;
+
+/**
+ * Warna baris isi: versi lebih muda dari warna kategori, tapi tidak pernah
+ * dimudakan sampai pudar.
+ *
+ * Beberapa warna kategori sudah terang sejak awal (zaitun, oranye). Memudakan
+ * semuanya dengan angka tetap membuat yang terang jadi nyaris tak terbaca,
+ * jadi pemudaannya mundur bertahap sampai luminansinya aman — dan kalau warna
+ * dasarnya memang sudah terang, ia dipakai apa adanya. Hasilnya tidak pernah
+ * lebih gelap dari warna dasar, jadi tidak akan pernah mendekati hitam.
+ */
+export function secondaryTextColor(base: Rgb): [number, number, number] {
+  for (let amount = SECONDARY_TINT; amount > 0; amount -= 0.05) {
+    const c = tintTowardWhite(base, amount);
+    if (relativeLuminance(c) <= MAX_SECONDARY_LUMINANCE) return c;
+  }
+  return [base[0], base[1], base[2]];
 }

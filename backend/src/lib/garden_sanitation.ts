@@ -29,6 +29,12 @@ export interface PeringatanSanitasi {
   lokasiLabel: string;
   prevEndDate: string;
   newStartDate: string;
+  /**
+   * Kalimat siap tampil. Dirakit di sini, bukan di layar, mengikuti pola
+   * peringatan rotasi tanam: satu tempat yang menentukan kata-katanya, dan
+   * layar tidak bisa lupa merender bagian yang menjelaskan kenapa.
+   */
+  message: string;
 }
 
 /**
@@ -44,17 +50,33 @@ export function perluSanitasi(
   return !(lastCleanedDate >= prevEndDate && lastCleanedDate <= newStartDate);
 }
 
-/** Saring riwayat lokasi jadi daftar yang benar-benar perlu peringatan. */
+/**
+ * Saring riwayat lokasi jadi daftar yang benar-benar perlu peringatan.
+ *
+ * Satu peringatan per lokasi, bukan per pasangan tanaman: tiga tanaman yang
+ * berakhir di bedengan yang sama menghasilkan satu pekerjaan membersihkan,
+ * bukan tiga. Yang dipertahankan adalah pasangan dengan tanggal berakhir
+ * paling baru — itu yang menentukan apakah pembersihan terakhir sudah cukup.
+ */
 export function cariPerluSanitasi(
   riwayat: ReadonlyArray<RiwayatLokasi>,
   lastCleanedByLokasi: ReadonlyMap<string, string>
 ): PeringatanSanitasi[] {
-  return riwayat
-    .filter((r) => perluSanitasi(r.prevEndDate, r.newStartDate, lastCleanedByLokasi.get(r.lokasiId) ?? null))
-    .map((r) => ({
-      lokasiId: r.lokasiId,
-      lokasiLabel: r.lokasiLabel,
-      prevEndDate: r.prevEndDate,
-      newStartDate: r.newStartDate,
-    }));
+  const perLokasi = new Map<string, RiwayatLokasi>();
+  for (const r of riwayat) {
+    if (!perluSanitasi(r.prevEndDate, r.newStartDate, lastCleanedByLokasi.get(r.lokasiId) ?? null)) continue;
+    const ada = perLokasi.get(r.lokasiId);
+    if (!ada || r.prevEndDate > ada.prevEndDate) perLokasi.set(r.lokasiId, r);
+  }
+
+  return [...perLokasi.values()].map((r) => ({
+    lokasiId: r.lokasiId,
+    lokasiLabel: r.lokasiLabel,
+    prevEndDate: r.prevEndDate,
+    newStartDate: r.newStartDate,
+    message:
+      `${r.lokasiLabel}: tanaman sebelumnya berakhir ${r.prevEndDate} dan tanaman baru mulai ` +
+      `${r.newStartDate}, tanpa catatan pembersihan di antaranya. Cuci pot atau bedengannya ` +
+      `dulu supaya penyakit tanah tidak menular ke tanaman baru.`,
+  }));
 }

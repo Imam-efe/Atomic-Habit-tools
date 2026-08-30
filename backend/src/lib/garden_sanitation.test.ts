@@ -38,4 +38,34 @@ describe('cariPerluSanitasi', () => {
 
     expect(hasil.map((h) => h.lokasiId)).toEqual(['bed-1']);
   });
+
+  // Regresi: layar merender `message`, tapi peringatan sempat tidak
+  // membawanya sama sekali — kartunya tampil dengan baris penjelasan kosong.
+  it('setiap peringatan membawa kalimat siap tampil', () => {
+    const hasil = cariPerluSanitasi(
+      [{ lokasiId: 'bed-1', lokasiLabel: 'Bedengan A', prevEndDate: '2026-01-01', newStartDate: '2026-02-01' }],
+      new Map()
+    );
+
+    expect(hasil).toHaveLength(1);
+    expect(hasil[0].message).toContain('Bedengan A');
+    expect(hasil[0].message).toContain('2026-01-01');
+    expect(hasil[0].message).toContain('2026-02-01');
+  });
+
+  // Regresi: tiga tanaman berakhir di bedengan yang sama adalah SATU
+  // pekerjaan membersihkan, bukan tiga kartu peringatan yang sama.
+  it('satu peringatan per lokasi, memakai tanggal berakhir paling baru', () => {
+    const hasil = cariPerluSanitasi(
+      [
+        { lokasiId: 'bed-1', lokasiLabel: 'Bedengan A', prevEndDate: '2026-01-01', newStartDate: '2026-03-01' },
+        { lokasiId: 'bed-1', lokasiLabel: 'Bedengan A', prevEndDate: '2026-02-10', newStartDate: '2026-03-01' },
+        { lokasiId: 'bed-1', lokasiLabel: 'Bedengan A', prevEndDate: '2026-01-20', newStartDate: '2026-03-01' },
+      ],
+      new Map()
+    );
+
+    expect(hasil).toHaveLength(1);
+    expect(hasil[0].prevEndDate).toBe('2026-02-10');
+  });
 });

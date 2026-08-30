@@ -60,7 +60,7 @@ import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
 import { advanceDate, jakartaToday } from './lib/validate';
 import { nanoid } from './lib/nanoid';
-import { daysBetween } from './lib/daily';
+import { daysBetween, shiftDate } from './lib/daily';
 import {
   triggerBillRadar,
   triggerKidsPrep,
@@ -360,11 +360,12 @@ async function triggerExpiryAlerts(env: Env) {
 
   const today = jakartaToday();
 
-  const threeDaysFromNow = (() => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 3);
-    return d.toISOString().slice(0, 10);
-  })();
+  // Digeser sepenuhnya di UTC. Versi sebelumnya membangun tanggalnya di UTC
+  // (`new Date('YYYY-MM-DD')`), menggesernya dengan setter WAKTU LOKAL, lalu
+  // membacanya lagi lewat `toISOString()` yang UTC. Campuran itu meleset
+  // sehari kalau pergeserannya melewati batas DST — benar di produksi hanya
+  // karena Workers berjalan di UTC, dan diam-diam salah di mana pun tidak.
+  const threeDaysFromNow = shiftDate(today, 3);
 
   const items = await env.DB.prepare(`
     SELECT i.id, i.user_id, i.name, i.expiry_date, i.quantity, i.unit

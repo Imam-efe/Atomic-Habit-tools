@@ -11,7 +11,7 @@ import { AiPanel } from '@/components/AiPanel';
 import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
 import {
   LABEL_SIZES, LABEL_SIZE_TITLE, labelLayout, categoryColorRgb, labelContentLayout,
-  A4_MARGIN_MM, LABEL_GAP_MM,
+  secondaryTextColor, A4_MARGIN_MM, LABEL_GAP_MM,
   type LabelSize, type LabelColorMode,
 } from '@/lib/labelPrint';
 
@@ -1787,11 +1787,22 @@ async function buildLabelsPdf(
     const x = A4_MARGIN_MM + col * (w + LABEL_GAP_MM);
     const y = A4_MARGIN_MM + row * (h + LABEL_GAP_MM);
 
-    // Border dan aksen kategori ikut berubah warna di mode Warna. Monokrom
-    // tidak pernah menyentuh peta warna kategori sama sekali — bukan warna
-    // yang kebetulan gelap, tapi jalur render yang benar-benar terpisah,
-    // supaya printer tinta hitam-putih tidak pernah diam-diam boros tinta.
-    const [ar, ag, ab] = colorMode === 'warna' ? categoryColorRgb(p.category) : [180, 180, 180];
+    // Mode Warna: TIDAK ADA satu pun elemen yang hitam atau abu. Garis tepi,
+    // pita aksen, judul, baris isi, dan keterangan kategori semuanya
+    // mengambil warna kategori tanaman itu — yang membedakan hanya
+    // kepekatannya, bukan ronanya.
+    //
+    // Monokrom tidak pernah menyentuh peta warna kategori sama sekali —
+    // bukan warna yang kebetulan gelap, tapi jalur render yang benar-benar
+    // terpisah, supaya printer tinta hitam-putih tidak diam-diam boros tinta.
+    const warna = colorMode === 'warna';
+    const aksen = warna ? categoryColorRgb(p.category) : ([180, 180, 180] as const);
+    const [ar, ag, ab] = aksen;
+    // Judul dan baris isi dipisah dari warna aksen: di Monokrom aksen adalah
+    // abu MUDA untuk garis tepi, memakainya sebagai warna teks akan membuat
+    // judulnya nyaris tak terbaca di kertas putih.
+    const [jr, jg, jb] = warna ? aksen : ([20, 20, 20] as const);
+    const [sr, sg, sb] = warna ? secondaryTextColor(aksen) : ([60, 60, 60] as const);
 
     doc.setDrawColor(ar, ag, ab);
     doc.roundedRect(x, y, w, h, 1.5, 1.5);
@@ -1807,7 +1818,8 @@ async function buildLabelsPdf(
     const textWidth = w - (colorMode === 'warna' ? 7.5 : 6);
     const titleY = y + titleYOffset;
 
-    doc.setTextColor(20);
+    // Judul memakai warna kategori penuh — elemen paling pekat di label.
+    doc.setTextColor(jr, jg, jb);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(fontTitle);
     // Maksimal dua baris judul — nama tanaman yang sangat panjang dipotong
@@ -1820,7 +1832,9 @@ async function buildLabelsPdf(
     }
     titleLines.forEach((line, li) => doc.text(line, textX, titleY + li * titleLineHeight));
 
-    doc.setTextColor(60);
+    // Baris isi: rona yang sama dengan judul, hanya lebih muda. Hierarkinya
+    // dari kepekatan, bukan dari abu-abu.
+    doc.setTextColor(sr, sg, sb);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontBody);
     let ly = titleY + (titleLines.length - 1) * titleLineHeight + bodyLineHeight;
@@ -2054,25 +2068,31 @@ function LabelPrintSheet({
               }}
             >
               {labels.map((p, i) => {
-                const [r, g, b] = colorMode === 'warna' ? categoryColorRgb(p.category) : [180, 180, 180];
-                const rgb = `rgb(${r}, ${g}, ${b})`;
+                // Pratinjau memakai rumus warna yang sama persis dengan PDF-nya
+                // — kalau tidak, yang terlihat di layar bukan yang tercetak.
+                const warna = colorMode === 'warna';
+                const aksen = warna ? categoryColorRgb(p.category) : ([180, 180, 180] as const);
+                const rgb = `rgb(${aksen[0]}, ${aksen[1]}, ${aksen[2]})`;
+                const sekunder = warna ? secondaryTextColor(aksen) : null;
+                const judulColor = warna ? rgb : 'var(--text)';
+                const isiColor = sekunder ? `rgb(${sekunder[0]}, ${sekunder[1]}, ${sekunder[2]})` : 'var(--text3)';
                 return (
                   <div
                     key={`${p.id}-${i}`}
                     className="rounded-md pl-2 pr-1.5 py-1.5 flex flex-col justify-center border-l-4"
-                    style={{ background: 'var(--surface)', minHeight: '46px', borderColor: colorMode === 'warna' ? rgb : 'var(--sep)' }}
+                    style={{ background: 'var(--surface)', minHeight: '46px', borderColor: warna ? rgb : 'var(--sep)' }}
                   >
-                    <p className="truncate font-bold" style={{ color: 'var(--text)', fontSize: `${Math.max(7, layout.fontTitle - 2)}px` }}>
-                      {p.emoji} {p.nickname || p.name}
+                    <p className="truncate font-bold" style={{ color: judulColor, fontSize: `${Math.max(7, layout.fontTitle - 2)}px` }}>
+                      {p.nickname || p.name}
                     </p>
-                    <p className="truncate" style={{ color: 'var(--text3)', fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
+                    <p className="truncate" style={{ color: isiColor, fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
                       {p.location || '-'}
                     </p>
-                    <p className="truncate" style={{ color: 'var(--text3)', fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
+                    <p className="truncate" style={{ color: isiColor, fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
                       {formatLabelDate(p.plantedDate)}
                     </p>
-                    {colorMode === 'warna' && p.category && (
-                      <p className="truncate font-semibold" style={{ color: rgb, fontSize: `${layout.fontMeta}px` }}>
+                    {warna && p.category && (
+                      <p className="truncate font-semibold" style={{ color: isiColor, fontSize: `${layout.fontMeta}px` }}>
                         {categoryLabel(p.category)}
                       </p>
                     )}
