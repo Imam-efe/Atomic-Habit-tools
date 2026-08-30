@@ -26,6 +26,7 @@ import monthlyReview from './routes/monthly_review';
 import garden, { computeCareState, lastActions, resolvePlants, type PlantingRow } from './routes/garden';
 import gardenExtra from './routes/garden_extra';
 import gardenExtra2 from './routes/garden_extra2';
+import gardenExtra3 from './routes/garden_extra3';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { pendingReviews } from './lib/garden_treatment';
@@ -131,6 +132,7 @@ app.route('/api/monthly-review', monthlyReview);
 // menelan /companions, /seeds, dan kawan-kawan kalau ia dicocokkan lebih dulu.
 app.route('/api/garden', gardenExtra);
 app.route('/api/garden', gardenExtra2);
+app.route('/api/garden', gardenExtra3);
 app.route('/api/garden', garden);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);

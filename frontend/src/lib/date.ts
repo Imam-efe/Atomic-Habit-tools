@@ -49,3 +49,25 @@ export function toISO(d: Date): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${month}-${day}`;
 }
+
+const NAMA_HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+/**
+ * Geser YYYY-MM-DD sebanyak `n` hari.
+ *
+ * Seluruhnya dihitung di UTC: dibangun di UTC, digeser dengan setter UTC,
+ * dibaca kembali sebagai UTC. Mencampur konstruksi UTC dengan `setDate()`
+ * waktu lokal meleset sehari begitu pergeserannya melewati batas DST — dan
+ * karena tanggal di sini hanya penanda hari, bukan momen, tidak ada alasan
+ * untuk melibatkan zona waktu perangkat sama sekali.
+ */
+export function shiftDate(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Nama hari Indonesia untuk YYYY-MM-DD. Sama dengan `dayName` di backend. */
+export function dayName(date: string): string {
+  return NAMA_HARI[new Date(`${date}T00:00:00Z`).getUTCDay()];
+}
