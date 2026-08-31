@@ -35,6 +35,8 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'garden_wishlist', label: 'Wishlist tanaman', group: 'Kebun', userScoped: true },
   { table: 'garden_sanitation_log', label: 'Log sanitasi pot/alat', group: 'Kebun', userScoped: true },
   { table: 'garden_rainwater_log', label: 'Log air hujan', group: 'Kebun', userScoped: true },
+  { table: 'garden_sun_profile', label: 'Peta matahari lokasi', group: 'Kebun', userScoped: true },
+  { table: 'garden_saved_seed', label: 'Benih simpanan sendiri', group: 'Kebun', userScoped: true },
   { table: 'cooking_recipes', label: 'Resep tersimpan', group: 'Masakan', userScoped: true },
   { table: 'zakat_payments', label: 'Zakat yang ditunaikan', group: 'Ibadah', userScoped: true },
   { table: 'fasting_log', label: 'Catatan puasa sunnah', group: 'Ibadah', userScoped: true },

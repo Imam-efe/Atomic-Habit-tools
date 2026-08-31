@@ -14,6 +14,7 @@ import {
   secondaryTextColor, A4_MARGIN_MM, LABEL_GAP_MM,
   type LabelSize, type LabelColorMode,
 } from '@/lib/labelPrint';
+import { susunLembarKerja, type LembarKerja, type TugasKebun } from '@/lib/gardenWorksheet';
 
 interface Plant {
   id: string;
@@ -294,6 +295,7 @@ export function Garden() {
 
   // Cetak label — pilih tanaman & jumlah, di-pack ke layout A4.
   const [labelPrintOpen, setLabelPrintOpen] = useState(false);
+  const [worksheetBusy, setWorksheetBusy] = useState(false);
 
   // Catatan yang belum terkirim karena jaringan mati. Antrean terikat akun
   // aktif: pindah akun tidak boleh membuat catatan milik akun lain ikut
@@ -462,6 +464,36 @@ export function Garden() {
     } finally {
       setVoiceSaving(false);
       closeVoiceNote();
+    }
+  };
+
+  /**
+   * Ambil jadwal tujuh hari ke depan lalu cetak jadi satu lembar A4.
+   *
+   * Memakai endpoint jadwal yang sudah ada, bukan endpoint cetak tersendiri —
+   * lembar ini harus menampilkan tugas yang sama persis dengan yang di layar,
+   * dan satu sumber data adalah cara termurah memastikannya tetap begitu.
+   */
+  const printWorksheet = async () => {
+    setWorksheetBusy(true);
+    try {
+      // Ketiga keranjang diambil semua. `todayDue` terpisah dari `upcoming`
+      // di endpoint jadwal, dan melewatkannya berarti tugas HARI INI —
+      // justru yang paling mungkin dikerjakan — hilang dari lembar cetak.
+      const jadwal = await apiFetch<{
+        today: string; overdue: TugasKebun[]; todayDue: TugasKebun[]; upcoming: TugasKebun[];
+      }>('/garden/schedule?days=7');
+      const lembar = susunLembarKerja(
+        [...jadwal.overdue, ...jadwal.todayDue, ...jadwal.upcoming],
+        jadwal.today
+      );
+      const doc = await buildWorksheetPdf(lembar);
+      doc.save(`lembar-kerja-kebun-${jadwal.today}.pdf`);
+    } catch {
+      // Sengaja senyap seperti tombol cetak label: kegagalannya sudah terlihat
+      // dari tidak adanya berkas yang tersimpan.
+    } finally {
+      setWorksheetBusy(false);
     }
   };
 
@@ -695,6 +727,16 @@ export function Garden() {
           title="Cetak label tanaman"
         >
           🏷️
+        </motion.button>
+        <motion.button
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)', opacity: worksheetBusy ? 0.6 : 1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={printWorksheet}
+          disabled={worksheetBusy}
+          title="Cetak lembar kerja minggu ini"
+        >
+          🗒️
         </motion.button>
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base"
@@ -1855,6 +1897,101 @@ async function buildLabelsPdf(
 
   return doc;
 }
+
+/**
+ * Lembar kerja kebun mingguan, satu halaman A4 untuk dibawa ke kebun.
+ *
+ * Aplikasi ini sudah tahu apa yang harus dikerjakan minggu ini; yang belum
+ * bisa dilakukannya adalah ikut keluar. Tangan yang basah dan berlumpur tidak
+ * membuka ponsel, dan justru di situlah daftarnya dibutuhkan.
+ *
+ * Seluruhnya monokrom, tanpa pilihan warna seperti cetak label: lembar ini
+ * dicoret pakai pensil lalu dibuang tiap minggu, jadi tinta warna hanya
+ * menaikkan biaya untuk sesuatu yang umurnya tujuh hari.
+ */
+async function buildWorksheetPdf(lembar: LembarKerja): Promise<import('jspdf').jsPDF> {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  const M = A4_MARGIN_MM + 4;
+  const LEBAR = 210 - M * 2;
+  let y = M + 4;
+
+  doc.setTextColor(20);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Lembar Kerja Kebun', M, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(90);
+  doc.text(`${formatLabelDate(lembar.mulai)} – ${formatLabelDate(lembar.selesai)}`, M, y);
+  doc.text(`${lembar.totalTugas} tugas`, M + LEBAR, y, { align: 'right' });
+
+  y += 3;
+  doc.setDrawColor(150);
+  doc.line(M, y, M + LEBAR, y);
+  y += 6;
+
+  /** Satu baris tugas dengan kotak centang di kiri. */
+  const barisTugas = (t: TugasKebun) => {
+    doc.setDrawColor(120);
+    doc.rect(M + 3, y - 3, 3.5, 3.5);
+    doc.setTextColor(30);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    const lokasi = t.location ? ` · ${t.location}` : '';
+    doc.text(`${AKSI_CETAK[t.action] ?? t.action}: ${t.label}${lokasi}`, M + 8.5, y);
+    y += 5.5;
+  };
+
+  if (lembar.terlewat.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text('Terlewat minggu lalu', M, y);
+    y += 5.5;
+    lembar.terlewat.forEach(barisTugas);
+    y += 3;
+  }
+
+  for (const hari of lembar.hari) {
+    // Ganti halaman sebelum judul hari, bukan di tengah daftarnya — hari yang
+    // terpotong separuh membuat lembar cetak lebih sulit dibaca daripada
+    // lembar kedua yang agak kosong.
+    if (y > 297 - M - 20) {
+      doc.addPage();
+      y = M + 4;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text(`${hari.dayName}, ${formatLabelDate(hari.date)}`, M, y);
+    y += 5.5;
+
+    if (hari.tugas.length === 0) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(9);
+      doc.setTextColor(150);
+      doc.text('— tidak ada jadwal', M + 8.5, y);
+      y += 5.5;
+    } else {
+      hari.tugas.forEach(barisTugas);
+    }
+    y += 2.5;
+  }
+
+  return doc;
+}
+
+/** Kata kerja yang dicetak di lembar; log memakai kata benda pendek. */
+const AKSI_CETAK: Record<string, string> = {
+  siram: 'Siram',
+  pupuk: 'Pupuk',
+  panen: 'Panen',
+};
 
 /**
  * Cetak label kebun (#11 — susulan): pilih tanaman & jumlah label, di-pack
