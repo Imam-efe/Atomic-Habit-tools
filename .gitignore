@@ -9,3 +9,11 @@ dist/
 # Screenshot output from frontend/sweep.js
 frontend/sweep-light/
 frontend/sweep-dark/
+
+# Cache inkremental TypeScript. Berkas turunan: tsc menulis ulang tiap kali
+# typecheck atau build dijalankan, isinya cap waktu dan hash berkas lokal.
+#
+# Dilacak git, ia berubah di tiap commit tanpa satu baris sumber pun berubah —
+# dan di repo ini tiap push ke main memicu deploy produksi, jadi cache basi
+# menghasilkan deploy yang tidak mengubah apa pun.
+*.tsbuildinfo
