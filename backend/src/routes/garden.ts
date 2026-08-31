@@ -5,6 +5,7 @@ import { jakartaToday } from '../lib/validate';
 import { runJson, runText, SCHEMA_MODEL } from '../lib/ai';
 import { PLANTS, PLANT_BY_ID, CATEGORY_LABELS, dipanen, type Plant } from '../data/plants';
 import { growthPhase, ornamentalPhase, fertilizeGuidance } from '../lib/garden_fertilize_phase';
+import { ringkasKode, type Unit } from '../lib/garden_unit';
 
 const garden = new Hono<AuthContext>();
 garden.use('/*', requireAuth);
@@ -307,14 +308,30 @@ garden.get('/', async (c) => {
   const user = c.get('user');
   const today = jakartaToday();
 
-  const [rows, lastMap] = await Promise.all([
+  const [rows, lastMap, unitRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
               planted_date, expected_harvest_date, status, note
        FROM garden_plantings WHERE user_id = ?1 ORDER BY planted_date DESC`
     ).bind(user.sub).all<PlantingRow>(),
     lastActions(c.env.DB, user.sub),
+    // Satu kueri untuk seluruh pot, bukan satu kueri per tanaman: daftar ini
+    // dimuat tiap kali tab Kebun dibuka, dan N+1 di sini akan terasa persis
+    // pada kebun yang paling banyak isinya.
+    c.env.DB.prepare(
+      `SELECT planting_id, unit_no, code, retired_at FROM garden_planting_unit
+        WHERE user_id = ?1 ORDER BY planting_id, unit_no`
+    ).bind(user.sub).all<{
+      planting_id: string; unit_no: number; code: string; retired_at: number | null;
+    }>(),
   ]);
+
+  const unitByPlanting = new Map<string, Unit[]>();
+  for (const r of unitRows.results ?? []) {
+    const daftar = unitByPlanting.get(r.planting_id) ?? [];
+    daftar.push({ unitNo: r.unit_no, code: r.code, retired: r.retired_at !== null });
+    unitByPlanting.set(r.planting_id, daftar);
+  }
 
   const plantings = rows.results ?? [];
   const plantMap = await resolvePlants(
@@ -325,8 +342,12 @@ garden.get('/', async (c) => {
   const enriched = plantings.map(p => {
     const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
     const care = computeCareState(p, plant, lastMap.get(p.id) ?? {}, today);
+    const units = unitByPlanting.get(p.id) ?? [];
     return {
       id: p.id,
+      units,
+      // Inilah yang membuat dua cabai bisa dibedakan tanpa membuka apa pun.
+      kodeRingkas: ringkasKode(units),
       plantId: p.plant_id,
       name: plant?.name ?? p.custom_name ?? 'Tanaman',
       emoji: plant?.emoji ?? '🌱',
@@ -666,6 +687,13 @@ garden.post('/:id/care', async (c) => {
     action?: string; date?: string; amount?: number; unit?: string; note?: string;
     /** Id dari klien, dipakai antrean offline supaya kiriman ulang tidak menggandakan log. */
     clientId?: string;
+    /**
+     * Pot mana saja yang dikerjakan. Dikosongkan berarti SEMUA pot.
+     *
+     * Perjanjian itu yang membuat setiap log yang tercatat sebelum fitur nomor
+     * pot ada tetap benar artinya, tanpa satu baris pun perlu ditulis ulang.
+     */
+    units?: number[];
   };
   const body = await c.req.json<Body>().catch((): Body => ({}));
 
@@ -680,6 +708,32 @@ garden.post('/:id/care', async (c) => {
   if (!owned) return c.json({ error: 'tanaman tidak ditemukan' }, 404);
 
   const date = isISODate(body.date) ? body.date : jakartaToday();
+
+  /**
+   * Pot yang disebut divalidasi SEBELUM log disimpan.
+   *
+   * Kalau divalidasi sesudahnya, permintaan yang ditolak sudah meninggalkan
+   * satu baris log — tercatat sebagai "sudah disiram" padahal server menjawab
+   * galat, dan pengguna akan menyiram dua kali.
+   */
+  const units = Array.isArray(body.units)
+    ? [...new Set(body.units.filter((n) => Number.isInteger(n) && n > 0))]
+    : [];
+
+  if (units.length > 0) {
+    const milik = (await c.env.DB.prepare(
+      'SELECT unit_no FROM garden_planting_unit WHERE planting_id = ?1 AND user_id = ?2'
+    ).bind(plantingId, user.sub).all<{ unit_no: number }>()).results ?? [];
+    const sah = new Set(milik.map((r) => r.unit_no));
+
+    // Pot asing ditolak, bukan diabaikan diam-diam: kalau klien mengirim nomor
+    // yang bukan milik tanaman ini, yang salah adalah pemanggilnya, dan
+    // menyimpan sebagiannya melahirkan riwayat yang tidak bisa dipercaya.
+    const asing = units.filter((n) => !sah.has(n));
+    if (asing.length > 0) {
+      return c.json({ error: `pot tidak dikenal: ${asing.join(', ')}` }, 400);
+    }
+  }
 
   /**
    * Kunci utama boleh datang dari klien.
@@ -729,6 +783,22 @@ garden.post('/:id/care', async (c) => {
     if (inserted.meta.changes === 0) {
       return c.json({ error: 'gagal menyimpan catatan perawatan' }, 500);
     }
+  }
+
+  // Cakupan pot ditulis di sini, sesudah `id` final — di atas ia bisa berganti
+  // saat id dari klien menabrak baris asing, dan menulis lebih awal akan
+  // menggantungkan cakupan pada log yang batal dipakai.
+  //
+  // Daftar kosong sengaja tidak menulis satu baris pun: ketiadaan baris berarti
+  // "semua pot". INSERT OR IGNORE senada dengan log-nya sendiri, karena antrean
+  // offline pasti mengirim ulang permintaan yang sebenarnya sudah sampai.
+  if (units.length > 0) {
+    await c.env.DB.batch(units.map((n) =>
+      c.env.DB.prepare(
+        `INSERT OR IGNORE INTO garden_care_log_unit (care_log_id, unit_no, user_id)
+         VALUES (?1, ?2, ?3)`
+      ).bind(id, n, user.sub)
+    ));
   }
 
   // Panen pertama menaikkan status jadi 'panen' — sinyal ke UI bahwa tanaman
