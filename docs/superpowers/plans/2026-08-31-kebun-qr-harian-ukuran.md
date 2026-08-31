@@ -1,6 +1,6 @@
 # Kebun: QR, Ringkasan Harian, Ukuran, Terlantar, Pangkas — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Tujuh fitur Tier A dan B: QR di label, kebun masuk ringkasan harian, push untuk fitur yang selama ini diam, kalibrasi interval siram/pupuk, log ukuran numerik, deteksi tanaman terlantar, dan jadwal pangkas.
 
@@ -46,7 +46,7 @@
 - Create: `backend/migrations/0039_kebun_ukuran.sql`
 - Modify: `backend/package.json`, `backend/src/routes/settings.ts`
 
-- [ ] **Step 1: Tulis migrasi**
+- [x] **Step 1: Tulis migrasi**
 
 ```sql
 -- Log ukuran tanaman yang diukur sendiri.
@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_garden_measurement_user
   ON garden_measurement(user_id, measured_date DESC);
 ```
 
-- [ ] **Step 2: Daftarkan migrasi dan tabel**
+- [x] **Step 2: Daftarkan migrasi dan tabel**
 
 `backend/package.json`, akhir rantai `db:migrate` dan `db:migrate:remote` (yang remote memakai `--remote`):
 
@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_garden_measurement_user
   { table: 'garden_measurement', label: 'Ukuran tanaman', group: 'Kebun', userScoped: true },
 ```
 
-- [ ] **Step 3: Verifikasi idempoten**
+- [x] **Step 3: Verifikasi idempoten**
 
 ```bash
 cd backend
@@ -100,7 +100,7 @@ for i in 1 2 3; do npx wrangler d1 execute fayolla-db --local --file=./migration
 grep -nE "^\s*(ALTER|DROP)" migrations/0039_kebun_ukuran.sql   # harus kosong
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/migrations/0039_kebun_ukuran.sql backend/package.json backend/src/routes/settings.ts
@@ -143,7 +143,7 @@ git commit -m "feat(kebun): tabel log ukuran tanaman"
 `plants.ts`:
 - `Plant` mendapat `pruning?: { mulaiHari: number; ulangHari: number; catatan: string }`
 
-- [ ] **Step 1: Tulis tes yang gagal**
+- [x] **Step 1: Tulis tes yang gagal**
 
 `garden_measure.test.ts`:
 
@@ -364,12 +364,12 @@ describe('calibrateInterval', () => {
 });
 ```
 
-- [ ] **Step 2: Jalankan, pastikan gagal**
+- [x] **Step 2: Jalankan, pastikan gagal**
 
 Run: `cd backend && npx vitest run src/lib/garden_measure.test.ts src/lib/garden_neglect.test.ts src/lib/garden_pruning.test.ts src/lib/garden_calibration.test.ts`
 Expected: FAIL — modul dan fungsi belum ada.
 
-- [ ] **Step 3: Tulis implementasinya**
+- [x] **Step 3: Tulis implementasinya**
 
 Semua perhitungan tanggal memakai pola yang sudah dipakai `garden_seedling_schedule.ts`:
 
@@ -392,7 +392,7 @@ Aturan yang tidak boleh dilanggar:
 - `cariTerlantar` memakai `plantedDate` sebagai pengganti saat `lastCare` null — tanaman yang tidak pernah disentuh sejak ditanam adalah kasus terparah, bukan kasus yang dilewati.
 - `calibrateInterval` membuang gap `<= 0` dan gap di atas `katalog * 5` sebelum merata-rata, lalu butuh minimal 4 sampel tersisa untuk `andal`.
 
-- [ ] **Step 4: Tambah kolom `pruning` ke katalog**
+- [x] **Step 4: Tambah kolom `pruning` ke katalog**
 
 Pada `Plant` di `backend/src/data/plants.ts`:
 
@@ -414,12 +414,12 @@ Pada `Plant` di `backend/src/data/plants.ts`:
 
 Isi HANYA untuk tanaman yang aturannya jelas dan disepakati luas: tomat (tunas air), cabai (tunas bawah cabang Y), tin, anggur, jambu, mangga, jeruk. Jangan menebak untuk yang lain.
 
-- [ ] **Step 5: Jalankan tes, pastikan lolos**
+- [x] **Step 5: Jalankan tes, pastikan lolos**
 
 Run: `cd backend && npx vitest run src/lib src/data`
 Expected: PASS, termasuk seluruh tes katalog yang sudah ada.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/lib backend/src/data/plants.ts
@@ -439,7 +439,7 @@ git commit -m "feat(kebun): ukuran, terlantar, pangkas, kalibrasi interval"
 - `export interface GardenToday { perluSiram: number; perluPupuk: number; siapPanen: number; terlantar: number; contoh: string[] }`
 - `export async function getGardenToday(db: D1Database, userId: string, today: string): Promise<GardenToday>`
 
-- [ ] **Step 1: Tulis tes yang gagal**
+- [x] **Step 1: Tulis tes yang gagal**
 
 ```ts
 describe('getGardenToday', () => {
@@ -452,13 +452,13 @@ describe('getGardenToday', () => {
 
 Setiap `/* ... */` diisi badan tes nyata memakai `createTestDb` seperti berkas tes lain.
 
-- [ ] **Step 2: Implementasi + pasang ke dua endpoint**
+- [x] **Step 2: Implementasi + pasang ke dua endpoint**
 
 `getGardenToday` memakai satu kueri gabungan — `garden_plantings` join `garden_care_log` terakhir per aksi — lalu `computeCareState` untuk menghitung jatuh tempo. Jangan satu kueri per tanaman.
 
 Di `routes/daily.ts`, tambahkan ke `Promise.all` pada `/brief` dan kembalikan sebagai kunci `kebun`. Tambahkan hal yang sama ke `/shutdown` supaya ritual malam ikut menyebut kebun.
 
-- [ ] **Step 3: Verifikasi + commit**
+- [x] **Step 3: Verifikasi + commit**
 
 Run: `cd backend && npx vitest run && npm run typecheck`
 
@@ -496,13 +496,13 @@ git commit -m "feat(kebun): kebun masuk Pagi Ini dan Tutup Hari"
 
 Keduanya memakai `claimDailyAlert` untuk dedup, persis seperti `garden_care`.
 
-- [ ] **Step 1: Tulis tes rute yang gagal**
+- [x] **Step 1: Tulis tes rute yang gagal**
 
 Pakai harness `garden_unit.test.ts`. Kasus wajib: simpan & baca pengukuran; tolak tinggi 0/negatif/di luar batas (400); tolak `plantingId` pengguna lain (404); `DELETE` milik orang lain 404; `/neglected` menandai yang lewat 21 hari; `/pruning` hanya memuat tanaman yang punya aturan; `/calibration/interval` diam saat sampel kurang.
 
-- [ ] **Step 2: Implementasi, pasang rute SEBELUM `garden`, tambah cron + setting**
+- [x] **Step 2: Implementasi, pasang rute SEBELUM `garden`, tambah cron + setting**
 
-- [ ] **Step 3: Verifikasi + commit**
+- [x] **Step 3: Verifikasi + commit**
 
 Run: `cd backend && npx vitest run && npm run typecheck`
 
@@ -524,7 +524,7 @@ git commit -m "feat(kebun): endpoint ukuran, terlantar, pangkas, dan dua push ba
 - `export function susunQr(plantingId: string, unitNo: number | null): string`
 - `export function bacaQr(raw: string): { plantingId: string; unitNo: number | null } | null`
 
-- [ ] **Step 1: Tulis tes yang gagal**
+- [x] **Step 1: Tulis tes yang gagal**
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -559,11 +559,11 @@ describe('muatan QR', () => {
 });
 ```
 
-- [ ] **Step 2: Implementasi muatan**
+- [x] **Step 2: Implementasi muatan**
 
 Bentuknya `kebun:<plantingId>:<unitNo|-`>. Ringkas — QR yang muatannya pendek menghasilkan modul lebih besar, dan modul besar jauh lebih mudah dipindai dari label 2 cm yang basah kena embun.
 
-- [ ] **Step 3: Tempel QR di label PDF**
+- [x] **Step 3: Tempel QR di label PDF**
 
 Di `buildLabelsPdf`, untuk tiap label buat data URL lewat `QRCode.toDataURL(susunQr(...), { errorCorrectionLevel: 'M', margin: 0, width: 256 })` lalu `doc.addImage(url, 'PNG', x, y, sisi, sisi)`. Taruh di kanan **bawah** — kanan atas sudah dipakai lencana kode.
 
@@ -571,15 +571,15 @@ Ukuran sisi QR: `kecil` 9 mm, `sedang` 12 mm, `besar` 16 mm. Di bawah 9 mm, QR t
 
 Lebar baris isi dikurangi selebar QR **hanya untuk baris yang sejajar dengannya** — jangan mengulang kesalahan lencana kode yang sempat mempersempit semua baris.
 
-- [ ] **Step 4: Tombol pindai di layar Kebun**
+- [x] **Step 4: Tombol pindai di layar Kebun**
 
 Salin pola `handleBarcodeFile` dari `Nutrition.tsx:209` — termasuk penjagaan `typeof BarcodeDetector === 'undefined'` dan pesan galatnya. Format: `['qr_code']`. Hasil pindai yang sah membuka sheet aksi cepat untuk pot itu; hasil yang tidak dikenal memberi pesan, **bukan diam**.
 
-- [ ] **Step 5: Verifikasi PDF berisi QR yang benar-benar terbaca**
+- [x] **Step 5: Verifikasi PDF berisi QR yang benar-benar terbaca**
 
 Render PDF contoh, lalu decode balik QR-nya dari gambar dan pastikan muatannya sama dengan yang disusun. Ini satu-satunya bukti bahwa yang tercetak bisa dipindai; ukuran dan posisi saja tidak membuktikan apa-apa.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git commit -m "feat(kebun): QR di label dan pemindai pot"
@@ -596,18 +596,18 @@ git commit -m "feat(kebun): QR di label dan pemindai pot"
 
 Ikuti bentuk `GardenGrow4.tsx`. Wajib ada: formulir catat tinggi/jumlah daun, kurva sederhana, label "mandek" bila `lajuTumbuh().mandek`, dan daftar tanaman terlantar dengan hari diamnya.
 
-- [ ] Verifikasi: `cd frontend && npx tsc --noEmit && npx vitest run && npm run build`
-- [ ] Commit.
+- [x] Verifikasi: `cd frontend && npx tsc --noEmit && npx vitest run && npm run build`
+- [x] Commit.
 
 ---
 
 ### Task 7: Verifikasi menyeluruh, merge, deploy
 
-- [ ] `cd backend && npx vitest run && npm run typecheck`
-- [ ] `cd frontend && npx tsc --noEmit && npx vitest run && npm run build`
-- [ ] Migrasi idempoten 3×
-- [ ] Cek integrasi: rute baru sebelum `garden`; tabel di `DATA_TABLES`; migrasi di kedua skrip; tidak ada `ALTER`/`DROP`; `/measurements`, `/neglected`, `/pruning` tidak bentrok dengan router kebun mana pun
-- [ ] Push, PR draft, tandai siap, merge; pantau deploy sampai `success`
+- [x] `cd backend && npx vitest run && npm run typecheck`
+- [x] `cd frontend && npx tsc --noEmit && npx vitest run && npm run build`
+- [x] Migrasi idempoten 3×
+- [x] Cek integrasi: rute baru sebelum `garden`; tabel di `DATA_TABLES`; migrasi di kedua skrip; tidak ada `ALTER`/`DROP`; `/measurements`, `/neglected`, `/pruning` tidak bentrok dengan router kebun mana pun
+- [x] Push, PR draft, tandai siap, merge; pantau deploy sampai `success`
 
 ---
 
