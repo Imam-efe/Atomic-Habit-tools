@@ -29,11 +29,14 @@ import gardenExtra2 from './routes/garden_extra2';
 import gardenExtra3 from './routes/garden_extra3';
 import gardenExtra4 from './routes/garden_extra4';
 import gardenUnit from './routes/garden_unit';
+import gardenGrowth from './routes/garden_growth';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { pendingReviews } from './lib/garden_treatment';
 import { forecastHarvest, expectedCareCount } from './lib/garden_harvest_forecast';
 import { classifyWeather } from './lib/garden_weather_events';
+import { HARI_GANTI_LARUTAN } from './lib/garden_media';
+import { mangsaPada } from './lib/garden_mangsa';
 import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
 import { loadSettings, num, bool } from './lib/settings';
 import { PLANT_BY_ID, dipanen } from './data/plants';
@@ -137,6 +140,7 @@ app.route('/api/garden', gardenExtra2);
 app.route('/api/garden', gardenExtra3);
 app.route('/api/garden', gardenExtra4);
 app.route('/api/garden', gardenUnit);
+app.route('/api/garden', gardenGrowth);
 app.route('/api/garden', garden);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
@@ -938,6 +942,114 @@ async function triggerHarvestDue(env: Env) {
   }
 }
 
+/**
+ * Ganti larutan hidroponik.
+ *
+ * Media hidroponik sudah tercatat sejak migrasi 0037 dan `tugasMedia` sudah
+ * bisa menghitung tenggangnya, tapi hasilnya hanya terlihat kalau pengguna
+ * kebetulan membuka layar tanaman itu. Padahal inilah tenggang kebun yang
+ * paling tidak memaafkan: larutan yang dibiarkan menumpuk garam sampai
+ * meracuni akar, sementara tanamannya tetap terlihat sehat sampai hari ia
+ * layu semuanya sekaligus.
+ */
+async function triggerSolutionChange(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT m.user_id
+    FROM garden_planting_media m
+    JOIN push_subscriptions s ON s.user_id = m.user_id
+    JOIN garden_plantings g ON g.id = m.planting_id
+    WHERE m.media = 'hidroponik' AND g.status IN ('tumbuh', 'panen')
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.garden_care')) continue;
+    if (!bool(settings, 'notify.garden_solution')) continue;
+    if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
+
+    const rows = await env.DB.prepare(
+      `SELECT g.id, g.plant_id, g.custom_name, g.nickname, m.last_solution_change
+         FROM garden_planting_media m
+         JOIN garden_plantings g ON g.id = m.planting_id
+        WHERE m.user_id = ?1 AND m.media = 'hidroponik' AND g.status IN ('tumbuh', 'panen')`
+    ).bind(userId).all<{
+      id: string; plant_id: string | null; custom_name: string | null;
+      nickname: string | null; last_solution_change: string | null;
+    }>();
+
+    const lines: string[] = [];
+    for (const r of rows.results ?? []) {
+      // Belum pernah dicatat bukan berarti baru diganti. Diamkan sekali saja,
+      // dan larutan yang tak pernah tercatat tidak akan pernah ditagih.
+      const umur = r.last_solution_change ? daysBetween(r.last_solution_change, today) : null;
+      if (umur !== null && umur < HARI_GANTI_LARUTAN) continue;
+
+      const label = r.nickname
+        || (r.plant_id ? PLANT_BY_ID.get(r.plant_id)?.name : null)
+        || r.custom_name
+        || 'Tanaman';
+      lines.push(umur === null
+        ? `💧 ${label} — larutan belum pernah dicatat gantinya`
+        : `💧 ${label} — larutan sudah ${umur} hari`);
+    }
+
+    if (lines.length === 0) continue;
+
+    const title = '💧 Ganti larutan hidroponik';
+    const body = `${lines.slice(0, 5).join('\n')}\nBuang larutan lama, bilas bak, isi ulang, lalu cek EC dan pH.`;
+
+    if (!(await claimDailyAlert(env.DB, userId, 'garden_solution', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'garden_solution', title, body, { url: '/kebun' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/kebun' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'garden_solution', today);
+    }
+  }
+}
+
+/**
+ * Pergantian mangsa.
+ *
+ * Dikirim hanya pada hari pertama tiap mangsa — dua belas kali setahun. Saran
+ * tanamnya memang berubah tepat di hari itu, dan tanpa pengingat pergantian
+ * mangsa hanya terlihat kalau pengguna kebetulan membuka layarnya hari itu
+ * juga.
+ */
+async function triggerMangsaChange(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  const sekarang = mangsaPada(today);
+  // Perbandingan pada MM-DD: tanggal mulai mangsa sama tiap tahun.
+  if (sekarang.mulai !== today.slice(5)) return;
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT s.user_id FROM push_subscriptions s
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.garden_care')) continue;
+    if (!bool(settings, 'notify.garden_mangsa')) continue;
+    if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
+
+    const title = `🗓️ Mangsa ${sekarang.nama} dimulai`;
+    const body = `${sekarang.pertanda}\n\n${sekarang.saran}`;
+
+    if (!(await claimDailyAlert(env.DB, userId, 'garden_mangsa', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'garden_mangsa', title, body, { url: '/kebun' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/kebun' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'garden_mangsa', today);
+    }
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -955,6 +1067,8 @@ const handler = {
       triggerSuccession(env).catch((err) => console.error('Succession push failed', err)),
       triggerGardenFollowUp(env).catch((err) => console.error('Garden follow-up push failed', err)),
       triggerHarvestDue(env).catch((err) => console.error('Harvest due push failed', err)),
+      triggerSolutionChange(env).catch((err) => console.error('Solution change push failed', err)),
+      triggerMangsaChange(env).catch((err) => console.error('Mangsa change push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       triggerMorningBrief(env).catch((err) => console.error('Morning brief push failed', err)),
       triggerBillRadar(env).catch((err) => console.error('Bill radar push failed', err)),

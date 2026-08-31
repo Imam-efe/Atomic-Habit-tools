@@ -14,7 +14,9 @@ export type AlertKind =
   | 'miss_twice'
   | 'succession'
   | 'garden_followup'
-  | 'harvest_due';
+  | 'harvest_due'
+  | 'garden_solution'
+  | 'garden_mangsa';
 
 /**
  * Klaim hak kirim untuk (user, kind, tanggal).
