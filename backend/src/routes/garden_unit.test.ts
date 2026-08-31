@@ -155,6 +155,20 @@ describe('tambah pot', () => {
     expect(await res.json()).toMatchObject({ code: '1' });
   });
 
+  it('unit dari backfill tetap terbaca meski nama tanaman punya huruf non-ASCII', async () => {
+    // LOWER() SQLite hanya menurunkan huruf ASCII, sedangkan toLowerCase() di
+    // TypeScript menurunkan Unicode juga. Backfill migrasi memakai yang
+    // pertama, rutenya memakai yang kedua — kalau kunci jenis dihitung ulang
+    // dari nama, keduanya tidak akan pernah bertemu, unit lama jadi tak
+    // terlihat, dan unit_no mengulang dari 1 lalu menabrak primary key.
+    seedPlanting('user-1', 'p1', null, 1, 'Cabai Émas');
+    seedUnit('user-1', 'p1', 1, 'nama:cabai Émas', '1');   // seperti hasil migrasi
+
+    const res = await req('/api/garden/units/p1', { method: 'POST' });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ unitNo: 2, code: '2' });
+  });
+
   it('menambah pot pada tanaman pengguna lain menjawab 404', async () => {
     seedPlanting('user-2', 'lain', 'cabai-rawit', 1);
     expect((await req('/api/garden/units/lain', { method: 'POST' })).status).toBe(404);

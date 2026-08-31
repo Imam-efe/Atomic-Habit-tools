@@ -347,6 +347,8 @@ export function Garden() {
   // Cetak label — pilih tanaman & jumlah, di-pack ke layout A4.
   const [labelPrintOpen, setLabelPrintOpen] = useState(false);
   const [worksheetBusy, setWorksheetBusy] = useState(false);
+  /** Hasil percobaan cetak lembar kerja terakhir — sukses maupun gagal. */
+  const [worksheetMsg, setWorksheetMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Catatan yang belum terkirim karena jaringan mati. Antrean terikat akun
   // aktif: pindah akun tidak boleh membuat catatan milik akun lain ikut
@@ -355,6 +357,13 @@ export function Garden() {
   const queue = useMemo(() => queueFor(userId), [userId]);
   const [pendingWrites, setPendingWrites] = useState(0);
   useEffect(() => { setPendingWrites(queue.size()); }, [queue]);
+
+  /** Muat terakhir gagal — dibedakan tegas dari kebun yang memang kosong. */
+  const [loadFailed, setLoadFailed] = useState(false);
+  /** Galat saat menyimpan tanaman baru; ditampilkan di formulirnya. */
+  const [plantError, setPlantError] = useState<string | null>(null);
+  /** Galat saat mengunggah foto jurnal. */
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -367,7 +376,17 @@ export function Garden() {
       setData(g);
       setSchedule(s);
       setFertilizePlan(f.plan);
-    } catch {}
+      setLoadFailed(false);
+    } catch {
+      // Kegagalan muat WAJIB dibedakan dari kebun yang memang kosong.
+      //
+      // Sebelumnya galat ditelan diam-diam, `data` tetap null, dan layar
+      // menampilkan "Belum ada tanaman" — aplikasi memberi tahu pengguna
+      // kebunnya kosong padahal yang terjadi cuma jaringan putus. Yang paling
+      // berbahaya bukan pesannya, tapi apa yang dilakukan pengguna sesudahnya:
+      // menanam ulang semuanya dan berakhir dengan catatan ganda.
+      setLoadFailed(true);
+    }
     setLoading(false);
   };
 
@@ -540,6 +559,7 @@ export function Garden() {
    */
   const printWorksheet = async () => {
     setWorksheetBusy(true);
+    setWorksheetMsg(null);
     try {
       // Ketiga keranjang diambil semua. `todayDue` terpisah dari `upcoming`
       // di endpoint jadwal, dan melewatkannya berarti tugas HARI INI —
@@ -553,9 +573,29 @@ export function Garden() {
       );
       const doc = await buildWorksheetPdf(lembar);
       doc.save(`lembar-kerja-kebun-${jadwal.today}.pdf`);
-    } catch {
-      // Sengaja senyap seperti tombol cetak label: kegagalannya sudah terlihat
-      // dari tidak adanya berkas yang tersimpan.
+
+      // Tombol ini SELALU harus menjawab.
+      //
+      // Sebelumnya sukses tidak mengubah apa pun di layar dan galat ditelan
+      // diam-diam, dengan alasan "kegagalannya terlihat dari tidak adanya
+      // berkas". Alasan itu keliru: berkas yang tersimpan diam-diam ke folder
+      // unduhan juga tidak terlihat — apalagi di ponsel. Berhasil dan gagal
+      // jadi sama-sama tampak seperti tombol yang rusak, dan itulah yang
+      // dilaporkan pengguna.
+      //
+      // Tombol label sudah punya baris "✓ PDF tersimpan" sejak awal; ini
+      // menyamakannya.
+      setWorksheetMsg({
+        ok: true,
+        text: `✓ Lembar kerja tersimpan (${lembar.totalTugas} tugas) — cek folder unduhan`,
+      });
+    } catch (err) {
+      setWorksheetMsg({
+        ok: false,
+        text: isNetworkError(err)
+          ? 'Gagal membuat lembar kerja: tidak ada jaringan. Coba lagi setelah tersambung.'
+          : 'Gagal membuat lembar kerja. Coba lagi sebentar lagi.',
+      });
     } finally {
       setWorksheetBusy(false);
     }
@@ -629,6 +669,7 @@ export function Garden() {
 
   const handleAddJournalPhoto = async (plantingId: string, file: File) => {
     setUploadingPhoto(true);
+    setPhotoError(null);
     try {
       const image = await compressImage(file);
       await apiFetch(`/garden/${plantingId}/photos`, {
@@ -636,9 +677,16 @@ export function Garden() {
         body: JSON.stringify({ image, date: todayISO() }),
       });
       await loadPhotos(plantingId);
-    } catch {
-      // Diam saja — jurnal foto bersifat opsional, kegagalan tidak boleh
-      // mengganggu alur perawatan utama yang lebih penting.
+    } catch (err) {
+      // Fiturnya opsional, kegagalannya tidak. Pengguna sudah memilih berkas
+      // dan menunggu unggahannya; membiarkannya senyap berarti mereka mengira
+      // fotonya masuk, lalu kehilangan satu titik di timeline pertumbuhan yang
+      // tidak bisa diulang — momen itu sudah lewat.
+      setPhotoError(
+        isNetworkError(err)
+          ? 'Foto gagal diunggah: tidak ada jaringan.'
+          : 'Foto gagal diunggah. Coba lagi, atau pakai foto yang lebih kecil.'
+      );
     }
     setUploadingPhoto(false);
   };
@@ -686,6 +734,7 @@ export function Garden() {
   const handlePlant = async () => {
     if (!plantingFor) return;
     setSaving(true);
+    setPlantError(null);
     try {
       await apiFetch('/garden', {
         method: 'POST',
@@ -702,7 +751,19 @@ export function Garden() {
       setPlantingFor(null);
       setTab('kebun');
       load();
-    } catch {}
+    } catch (err) {
+      // Formulir tetap terbuka dengan isinya utuh, dan alasannya disebut.
+      //
+      // Sebelumnya galat ditelan diam-diam: formulir diam di tempat tanpa
+      // pesan apa pun, dan pengguna yang mengira ketukannya tidak masuk akan
+      // menekan Tanam berulang kali — tiap percobaan yang ternyata berhasil
+      // melahirkan satu catatan tanaman ganda.
+      setPlantError(
+        isNetworkError(err)
+          ? 'Tidak ada jaringan. Catatan belum tersimpan — coba lagi setelah tersambung.'
+          : 'Gagal menyimpan tanaman. Coba lagi sebentar lagi.'
+      );
+    }
     setSaving(false);
   };
 
@@ -780,6 +841,14 @@ export function Garden() {
           {pendingWrites > 0 && (
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--warn)' }}>
               📴 {pendingWrites} catatan menunggu jaringan — akan terkirim otomatis
+            </p>
+          )}
+          {worksheetMsg && (
+            <p
+              className="text-[10px] mt-0.5"
+              style={{ color: worksheetMsg.ok ? 'var(--pos)' : 'var(--neg)' }}
+            >
+              {worksheetMsg.text}
             </p>
           )}
         </div>
@@ -868,7 +937,25 @@ export function Garden() {
         </div>
       ) : tab === 'kebun' ? (
         /* ─────────────────────────── TAB KEBUN ─────────────────────────── */
-        !data || data.plantings.length === 0 ? (
+        loadFailed && !data ? (
+          /* Gagal memuat BUKAN kebun kosong. Menawarkan "Buka Katalog" di sini
+             mengundang pengguna menanam ulang tanaman yang sebenarnya masih
+             ada di server. */
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+            <p className="text-4xl">📡</p>
+            <p className="font-semibold text-sm" style={{ color: 'var(--text2)' }}>Gagal memuat kebun</p>
+            <p className="text-xs mb-2" style={{ color: 'var(--text3)' }}>
+              Tanamanmu aman di server — ini cuma gagal mengambil datanya.
+            </p>
+            <button
+              className="neu-cta px-4 py-2 rounded-xl text-xs font-bold text-white"
+              style={{ background: 'var(--accentFill)' }}
+              onClick={load}
+            >
+              Coba lagi
+            </button>
+          </div>
+        ) : !data || data.plantings.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
             <p className="text-4xl">🌱</p>
             <p className="font-semibold text-sm" style={{ color: 'var(--text2)' }}>Belum ada tanaman</p>
@@ -1258,6 +1345,11 @@ export function Garden() {
                           <div className="flex items-center justify-between mb-1.5">
                             <p className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: 'var(--text3)' }}>
                               📷 Jurnal Foto
+                              {photoError && (
+                                <span className="ml-1.5 normal-case font-semibold tracking-normal" style={{ color: 'var(--neg)' }}>
+                                  · {photoError}
+                                </span>
+                              )}
                             </p>
                             <label
                               className="text-[10px] font-bold cursor-pointer"
@@ -1720,6 +1812,15 @@ export function Garden() {
                 onChange={e => setFormNote(e.target.value)}
               />
 
+              {plantError && (
+                <div
+                  className="rounded-xl p-2.5 text-xs border-l-[3px]"
+                  style={{ background: 'rgba(255, 69, 58, 0.1)', borderColor: '#ff453a', color: 'var(--text2)' }}
+                >
+                  {plantError}
+                </div>
+              )}
+
               <div className="flex gap-2 mt-1">
                 <motion.button
                   className="neu-cta flex-1 py-2.5 rounded-xl text-sm font-bold text-white"
@@ -2118,7 +2219,7 @@ async function buildLabelsPdf(
  * dicoret pakai pensil lalu dibuang tiap minggu, jadi tinta warna hanya
  * menaikkan biaya untuk sesuatu yang umurnya tujuh hari.
  */
-async function buildWorksheetPdf(lembar: LembarKerja): Promise<import('jspdf').jsPDF> {
+export async function buildWorksheetPdf(lembar: LembarKerja): Promise<import('jspdf').jsPDF> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
