@@ -219,6 +219,17 @@ export const SETTINGS: SettingDef[] = [
     max: 21,
     unit: 'hari',
   },
+  {
+    key: 'garden.altitude_mdpl',
+    group: 'kebun',
+    label: 'Ketinggian kebun',
+    hint: 'Meter di atas permukaan laut. Dipakai menandai tanaman yang tidak cocok di ketinggian ini sebelum ditanam.',
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 3000,
+    unit: 'mdpl',
+  },
 
   // ───────────────────────────── POLA ─────────────────────────────
   {

@@ -13,6 +13,7 @@ import { GardenLocationPicker } from '@/components/GardenLocationPicker';
 import { GrowPlannerSections, GrowRecordSections } from './GardenGrow';
 import { GrowPlannerSections2, GrowRecordSections2 } from './GardenGrow2';
 import { GrowPlannerSections3, GrowRecordSections3 } from './GardenGrow3';
+import { MangsaSection, SoilSections, PropagationSections, MediaSection } from './GardenGrow4';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -553,6 +554,8 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       <GrowPlannerSections plantings={plantings} />
       <GrowPlannerSections2 plantings={plantings} />
       <GrowPlannerSections3 />
+      <MangsaSection />
+      <SoilSections />
     </div>
   );
 }
@@ -1053,6 +1056,8 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
       <GrowRecordSections />
       <GrowRecordSections2 />
       <GrowRecordSections3 plantings={plantings} />
+      <PropagationSections plantings={plantings} />
+      <MediaSection />
     </div>
   );
 }
