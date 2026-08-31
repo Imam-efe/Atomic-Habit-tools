@@ -213,3 +213,28 @@ export function secondaryTextColor(base: Rgb): [number, number, number] {
   }
   return [base[0], base[1], base[2]];
 }
+
+export interface BadgeSpec {
+  fontSize: number;
+  /** Ruang kiri-kanan teks di dalam lencana, mm. */
+  padXmm: number;
+  /** Ruang atas-bawah teks di dalam lencana, mm. */
+  padYmm: number;
+}
+
+/**
+ * Lencana kode pot di pojok kanan atas label.
+ *
+ * Fontnya sengaja lebih besar daripada teks isi: kode inilah yang dibaca
+ * sambil jongkok di depan pot, sedangkan nama tanamannya sudah diketahui dari
+ * bentuk daunnya. Dua cabai di dua pot hanya bisa dibedakan dari angka ini,
+ * jadi ia yang paling pantas mendapat ruang.
+ */
+export function badgeSpec(size: LabelSize): BadgeSpec {
+  const BADGE: Record<LabelSize, BadgeSpec> = {
+    kecil: { fontSize: 9, padXmm: 1.2, padYmm: 0.8 },
+    sedang: { fontSize: 12, padXmm: 1.6, padYmm: 1.0 },
+    besar: { fontSize: 16, padXmm: 2.0, padYmm: 1.4 },
+  };
+  return BADGE[size];
+}

@@ -3,7 +3,7 @@ import {
   LABEL_SIZES, LABEL_SIZE_TITLE, labelSizeSpec, labelLayout,
   categoryColorRgb, categoriesWithColor, FALLBACK_CATEGORY_COLOR,
   A4_MARGIN_MM, LABEL_GAP_MM, labelContentLayout, PT_TO_MM,
-  tintTowardWhite, relativeLuminance, secondaryTextColor,
+  tintTowardWhite, relativeLuminance, secondaryTextColor, badgeSpec,
 } from '../labelPrint';
 
 const A4_W_MM = 210;
@@ -213,5 +213,53 @@ describe('labelContentLayout', () => {
     const besar = labelContentLayout(labelSizeSpec('besar'));
     expect(besar.titleLineHeight).toBeGreaterThan(kecil.titleLineHeight);
     expect(besar.bodyLineHeight).toBeGreaterThan(kecil.bodyLineHeight);
+  });
+});
+
+describe('badgeSpec', () => {
+  it('ada untuk tiap ukuran label', () => {
+    for (const size of LABEL_SIZES) {
+      expect(badgeSpec(size).fontSize, size).toBeGreaterThan(0);
+    }
+  });
+
+  it('kode lebih besar daripada teks isi — ia yang dibaca sambil jongkok', () => {
+    for (const size of LABEL_SIZES) {
+      expect(badgeSpec(size).fontSize, size).toBeGreaterThan(labelSizeSpec(size).fontBody);
+    }
+  });
+
+  it('makin besar labelnya makin besar kodenya', () => {
+    expect(badgeSpec('besar').fontSize).toBeGreaterThan(badgeSpec('sedang').fontSize);
+    expect(badgeSpec('sedang').fontSize).toBeGreaterThan(badgeSpec('kecil').fontSize);
+  });
+
+  it('lencana muat di label terkecil bersama kode terpanjang', () => {
+    // 8 karakter adalah MAX_CODE_LEN di backend. Perkiraan lebar helvetica
+    // bold ~0.62em per karakter, ditambah tanda pagar dan ruang dalam.
+    const badge = badgeSpec('kecil');
+    const perkiraanLebarMm = (9 * badge.fontSize * 0.62) / 2.83 + badge.padXmm * 2;
+    expect(perkiraanLebarMm).toBeLessThan(labelLayout('kecil').widthMm * 0.75);
+  });
+});
+
+describe('lencana kode tidak menghimpit judul', () => {
+  // Perkiraan lebar helvetica bold, dipakai untuk menjaga geometri tetap waras
+  // tanpa perlu merender jsPDF di dalam test.
+  const lebarMm = (teks: string, fontPt: number, tebal = false) =>
+    (teks.length * fontPt * (tebal ? 0.62 : 0.52)) / 2.83;
+
+  it.each(LABEL_SIZES)('ukuran %s menyisakan ruang judul yang cukup', (size) => {
+    const layout = labelLayout(size);
+    const badge = badgeSpec(size);
+    // 8 karakter adalah MAX_CODE_LEN di backend, plus tanda pagar.
+    const badgeW = lebarMm('#ABCDEFGH', badge.fontSize, true) + badge.padXmm * 2 + 1.5;
+    // Mode Warna memakan ruang paling banyak: pita aksen di tepi kiri.
+    const titleWidth = layout.widthMm - 7.5 - badgeW;
+
+    expect(titleWidth, `${size}: judul kehabisan ruang`).toBeGreaterThan(0);
+    // Kata terpanjang di katalog harus muat utuh, kalau tidak judulnya
+    // terpotong jadi elipsis pada setiap label mikrogreen.
+    expect(titleWidth, size).toBeGreaterThan(lebarMm('Mikrogreen', layout.fontTitle, true));
   });
 });
