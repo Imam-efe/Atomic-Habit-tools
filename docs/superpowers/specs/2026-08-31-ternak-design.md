@@ -109,6 +109,17 @@ export interface Animal {
   /** Salinitas, ppt; hanya untuk habitat laut dan payau. */
   salinitasPpt: [number, number] | null;
   ruangMinimal: string;
+  /**
+   * Kebutuhan ruang per ekor dalam liter; null bila tidak bisa dinyatakan
+   * sebagai volume — kucing, kambing, dan ayam umbaran tidak diukur begitu.
+   *
+   * Dipisah dari `ruangMinimal` yang berupa kalimat. Kalimat berguna dibaca
+   * manusia, angka berguna dihitung mesin, dan `cekKepadatan` butuh yang
+   * kedua. Menurunkan angkanya dari kalimat lewat penguraian teks adalah cara
+   * paling rapuh untuk mendapat sesuatu yang sudah kita ketahui saat
+   * menulisnya.
+   */
+  literPerEkor: number | null;
   pakan: string;
   frekuensiPakan: string;
   sosial: Sosial;
@@ -266,7 +277,7 @@ matang siklus nitrogennya.
 
 ### `lib/ternak_kepadatan.ts`
 
-Membandingkan jumlah penghuni terhadap `ruangMinimal` katalog dan volume
+Membandingkan jumlah penghuni terhadap `literPerEkor` katalog dan volume
 kandang. Akuarium 20 liter berisi sepuluh mas koki adalah kalimat kematian yang
 pelan, dan tidak ada satu pun tugas terjadwal yang akan menangkapnya.
 
