@@ -67,6 +67,37 @@ async function unitSejenis(
   }));
 }
 
+/**
+ * Kunci jenis yang BERLAKU untuk satu penanaman.
+ *
+ * Yang tersimpan di baris unit selalu menang; `speciesKey()` hanya dipakai
+ * untuk penanaman yang memang belum punya unit sama sekali.
+ *
+ * Ini bukan kehati-hatian berlebih. Backfill migrasi menurunkan huruf nama
+ * dengan `LOWER()` SQLite, yang hanya menyentuh ASCII, sedangkan
+ * `speciesKey()` memakai `toLowerCase()` yang juga menurunkan Unicode. Untuk
+ * nama seperti "Cabai Émas" keduanya menghasilkan kunci berbeda — dan kalau
+ * kunci dihitung ulang tiap kali, unit hasil backfill jadi tak terlihat,
+ * `unit_no` mengulang dari 1, lalu INSERT-nya menabrak primary key.
+ *
+ * Menjadikan yang tersimpan sebagai penentu juga menepati maksud yang sudah
+ * ditulis di migrasinya: kunci disimpan supaya deret nomor tidak ikut bergeser
+ * saat nama tanamannya berubah.
+ */
+async function kunciJenis(
+  db: D1Database,
+  userId: string,
+  plantingId: string,
+  p: { plant_id: string | null; custom_name: string | null }
+): Promise<string> {
+  const ada = await db.prepare(
+    `SELECT species_key FROM garden_planting_unit
+      WHERE planting_id = ?1 AND user_id = ?2 LIMIT 1`
+  ).bind(plantingId, userId).first<{ species_key: string }>();
+
+  return ada?.species_key ?? speciesKey(p.plant_id, p.custom_name);
+}
+
 function namaPenanaman(r: {
   plant_id: string | null; custom_name: string | null; nickname: string | null;
 }): string {
@@ -151,7 +182,7 @@ unitRoutes.post('/units/:plantingId', async (c) => {
   const p = await penanamanMilik(c.env.DB, user.sub, plantingId);
   if (!p) return c.json({ error: 'tanaman tidak ditemukan' }, 404);
 
-  const key = speciesKey(p.plant_id, p.custom_name);
+  const key = await kunciJenis(c.env.DB, user.sub, plantingId, p);
   const sejenis = await unitSejenis(c.env.DB, user.sub, key);
 
   const diCatatanIni = sejenis.filter((u) => u.plantingId === plantingId);
@@ -199,7 +230,7 @@ unitRoutes.patch('/units/:plantingId/:unitNo', async (c) => {
     );
   }
 
-  const key = speciesKey(p.plant_id, p.custom_name);
+  const key = await kunciJenis(c.env.DB, user.sub, plantingId, p);
   const sejenis = await unitSejenis(c.env.DB, user.sub, key);
   const rencana = rencanaUbahKode(kode, { plantingId, unitNo }, sejenis);
 
