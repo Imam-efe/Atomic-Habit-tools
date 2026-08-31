@@ -15,6 +15,7 @@ import {
   type LabelSize, type LabelColorMode,
 } from '@/lib/labelPrint';
 import { susunLembarKerja, type LembarKerja, type TugasKebun } from '@/lib/gardenWorksheet';
+import { susunQr, bacaQr, qrDataUrl, QR_MM } from '@/lib/gardenQr';
 import { UnitManager } from './GardenUnits';
 
 interface Plant {
@@ -66,7 +67,7 @@ interface CareState {
   growthPercent: number;
 }
 
-interface Planting {
+export interface Planting {
   id: string;
   plantId: string | null;
   name: string;
@@ -343,6 +344,17 @@ export function Garden() {
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnoseError, setDiagnoseError] = useState('');
+
+  /**
+   * Hasil pemindaian QR label.
+   *
+   * Disimpan sebagai identitas (id + nomor pot), bukan objek tanamannya:
+   * `plantings` bisa dimuat ulang di antara pemindaian dan aksi, dan panel
+   * hasil harus ikut menyegar bersamanya, bukan menampilkan salinan basi.
+   */
+  const [hasilScan, setHasilScan] = useState<{ plantingId: string; unitNo: number | null } | null>(null);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanError, setScanError] = useState('');
 
   // Cetak label — pilih tanaman & jumlah, di-pack ke layout A4.
   const [labelPrintOpen, setLabelPrintOpen] = useState(false);
@@ -824,6 +836,62 @@ export function Garden() {
   const summary = data?.summary;
   const today = data?.today ?? todayISO();
 
+  /**
+   * Pindai QR label lewat kamera.
+   *
+   * Memakai `capture="environment"` pada input berkas, bukan aliran video
+   * langsung: pola yang sama sudah dipakai pemindai barcode di Nutrisi, ia
+   * bekerja di iOS Safari yang membatasi `getUserMedia` di PWA, dan ia tidak
+   * meminta izin kamera permanen untuk sesuatu yang dipakai beberapa detik.
+   */
+  const handleScanFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Input dikosongkan lebih dulu supaya memindai ulang berkas yang sama
+    // tetap memicu onChange — tanpa ini, pemindaian kedua yang gagal terasa
+    // seperti tombol yang rusak.
+    e.target.value = '';
+    if (!file) return;
+
+    setScanError('');
+    setScanBusy(true);
+    try {
+      if (typeof BarcodeDetector === 'undefined') {
+        setScanError('Perangkat ini tidak mendukung pemindaian QR. Cari tanamannya di daftar.');
+        return;
+      }
+      const bitmap = await createImageBitmap(file);
+      const codes = await new BarcodeDetector({ formats: ['qr_code'] }).detect(bitmap);
+      const cocok = codes.map(c => bacaQr(c.rawValue)).find((v): v is NonNullable<typeof v> => v !== null);
+
+      if (!cocok) {
+        setScanError(
+          codes.length > 0
+            ? 'QR terbaca tapi bukan label kebun ini.'
+            : 'QR tidak terdeteksi. Coba lebih dekat dan pastikan cukup terang.'
+        );
+        return;
+      }
+      // Label bisa saja milik tanaman yang sudah dihapus — dikatakan apa
+      // adanya, bukan membuka panel kosong.
+      if (!(data?.plantings ?? []).some(p => p.id === cocok.plantingId)) {
+        setScanError('Tanaman label ini tidak ada lagi di daftar aktif.');
+        return;
+      }
+      setHasilScan(cocok);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Gagal memindai QR.');
+    } finally {
+      setScanBusy(false);
+    }
+  };
+
+  const tanamanScan = hasilScan
+    ? (data?.plantings ?? []).find(p => p.id === hasilScan.plantingId) ?? null
+    : null;
+  const potScan = tanamanScan && hasilScan?.unitNo != null
+    ? (tanamanScan.units ?? []).find(u => u.unitNo === hasilScan.unitNo) ?? null
+    : null;
+
   return (
     <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
       {/* Header */}
@@ -852,6 +920,23 @@ export function Garden() {
             </p>
           )}
         </div>
+        {/* Pindai QR label. Label diberi input berkas tersembunyi, bukan
+            tombol yang membuka modal dulu — satu ketuk langsung ke kamera. */}
+        <label
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base cursor-pointer"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)', opacity: scanBusy ? 0.6 : 1 }}
+          title="Pindai QR label tanaman"
+        >
+          {scanBusy ? '⏳' : '📷'}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            disabled={scanBusy}
+            onChange={handleScanFile}
+          />
+        </label>
         <motion.button
           className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-base"
           style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
@@ -881,6 +966,73 @@ export function Garden() {
           🔬
         </motion.button>
       </div>
+
+      {scanError && (
+        <div
+          className="rounded-2xl p-3 mb-3 text-xs flex items-center gap-2"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised-sm)', color: 'var(--neg)' }}
+        >
+          <span className="flex-1">{scanError}</span>
+          <button className="font-bold" onClick={() => setScanError('')}>Tutup</button>
+        </div>
+      )}
+
+      {/* Hasil pindai: tiga aksi langsung ke pot itu, tanpa mencarinya lagi
+          di daftar. Inilah alasan QR-nya dicetak. */}
+      {tanamanScan && (
+        <motion.div
+          className="rounded-2xl p-3 mb-3"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-sm font-extrabold flex-1 min-w-0 truncate" style={{ color: 'var(--text)' }}>
+              📷 {tanamanScan.nickname || tanamanScan.name}
+              {potScan ? ` · #${potScan.code}` : ''}
+            </span>
+            <button className="text-[11px] font-bold" style={{ color: 'var(--text2)' }} onClick={() => setHasilScan(null)}>
+              Tutup
+            </button>
+          </div>
+          {hasilScan?.unitNo != null && !potScan && (
+            <p className="text-[10px] mb-2" style={{ color: 'var(--warn)' }}>
+              Pot #{hasilScan.unitNo} sudah tidak aktif — aksi berlaku untuk seluruh tanaman.
+            </p>
+          )}
+          <div className="flex gap-2">
+            {(['siram', 'pupuk', 'panen'] as const).map(action => (
+              <motion.button
+                key={action}
+                className="flex-1 py-2 rounded-xl text-[11px] font-bold"
+                style={{ background: 'var(--bg)', color: ACTION_META[action].color, boxShadow: 'var(--neu-raised-sm)' }}
+                whileTap={{ scale: 0.95 }}
+                transition={springs.snappy}
+                onClick={() => {
+                  // Pot yang dipindai sudah menjawab pertanyaan yang biasanya
+                  // ditanyakan pemilih pot, jadi pemilihnya dilewati.
+                  handleCare(tanamanScan.id, action, undefined, potScan ? [potScan.unitNo] : undefined);
+                  setHasilScan(null);
+                }}
+              >
+                {ACTION_META[action].emoji} {ACTION_META[action].label}
+              </motion.button>
+            ))}
+            <motion.button
+              className="flex-1 py-2 rounded-xl text-[11px] font-bold"
+              style={{ background: 'var(--bg)', color: 'var(--text2)', boxShadow: 'var(--neu-raised-sm)' }}
+              whileTap={{ scale: 0.95 }}
+              transition={springs.snappy}
+              onClick={() => {
+                setTab('kebun');
+                setOpenPlanting(tanamanScan.id);
+                setHasilScan(null);
+              }}
+            >
+              📋 Detail
+            </motion.button>
+          </div>
+        </motion.div>
+      )}
 
       <AiPanel
         module="kebun"
@@ -2064,12 +2216,14 @@ function formatLabelDate(iso: string): string {
  * `code` null hanya untuk tanaman yang belum punya pot sama sekali — labelnya
  * tetap dicetak tanpa lencana, bukan dilewati diam-diam.
  */
-interface LabelUnit {
+export interface LabelUnit {
   planting: Planting;
   code: string | null;
+  /** Nomor pot permanen, untuk QR. null = label menunjuk seluruh penanaman. */
+  unitNo: number | null;
 }
 
-async function buildLabelsPdf(
+export async function buildLabelsPdf(
   labels: LabelUnit[],
   size: LabelSize,
   colorMode: LabelColorMode,
@@ -2080,6 +2234,16 @@ async function buildLabelsPdf(
   const layout = labelLayout(size);
   const { cols, widthMm: w, labelHmm: h, perPage, fontTitle, fontBody, fontMeta } = layout;
   const { titleY: titleYOffset, titleLineHeight, bodyLineHeight } = labelContentLayout(layout);
+
+  // QR dibuat sekali per muatan, bukan sekali per label: mencetak lima salinan
+  // label yang sama berarti lima gambar identik, dan tiap render QR adalah
+  // pekerjaan kanvas yang tidak murah.
+  const qrMm = QR_MM[size];
+  const qrCache = new Map<string, string>();
+  await Promise.all(
+    [...new Set(labels.map(l => susunQr({ plantingId: l.planting.id, unitNo: l.unitNo })))]
+      .map(async (payload) => { qrCache.set(payload, await qrDataUrl(payload)); })
+  );
 
   // Font standar jsPDF (helvetica) cuma mengerti WinAnsi/Latin-1 — emoji
   // dilewatkan lewat sini jadi karakter acak yang berantakan (Ø>ÝÅ dst),
@@ -2096,7 +2260,7 @@ async function buildLabelsPdf(
     return `${truncated}…`;
   };
 
-  labels.forEach(({ planting: p, code: kode }, i) => {
+  labels.forEach(({ planting: p, code: kode, unitNo }, i) => {
     const posInPage = i % perPage;
     if (i > 0 && posInPage === 0) doc.addPage();
 
@@ -2162,12 +2326,23 @@ async function buildLabelsPdf(
       badgeW += 1.5;
     }
 
+    // QR di kanan bawah, memindai langsung ke pot ini. Digambar sebelum teks
+    // supaya lebar baris isi bisa dikurangi selebar QR — kalau tidak, "Lokasi"
+    // dan "Ditanam" akan tercetak menembus gambarnya dan merusak keduanya.
+    const qrPayload = susunQr({ plantingId: p.id, unitNo });
+    const qrImg = qrCache.get(qrPayload);
+    if (qrImg) {
+      doc.addImage(qrImg, 'PNG', x + w - qrMm - 1.5, y + h - qrMm - 1.5, qrMm, qrMm);
+    }
+
     const textX = x + (colorMode === 'warna' ? 4.5 : 3);
     const textWidth = w - (colorMode === 'warna' ? 7.5 : 6);
-    // Hanya JUDUL yang dipersempit: lencana cuma menghalangi baris teratas.
-    // Mempersempit baris Lokasi dan Ditanam juga akan memotongnya tanpa ada
-    // yang menghalangi di sana.
+    // Dua penghalang di dua ketinggian berbeda, jadi dua lebar berbeda:
+    // lencana kode hanya menutupi baris teratas, QR hanya baris-baris bawah.
+    // Memakai satu lebar tersempit untuk keduanya akan memotong judul karena
+    // gambar yang letaknya jauh di bawahnya.
     const titleWidth = textWidth - badgeW;
+    const bodyWidth = textWidth - (qrImg ? qrMm + 1.5 : 0);
     const titleY = y + titleYOffset;
 
     // Judul memakai warna kategori penuh — elemen paling pekat di label.
@@ -2190,9 +2365,9 @@ async function buildLabelsPdf(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontBody);
     let ly = titleY + (titleLines.length - 1) * titleLineHeight + bodyLineHeight;
-    doc.text(truncateToWidth(`Lokasi: ${p.location || '-'}`, textWidth), textX, ly);
+    doc.text(truncateToWidth(`Lokasi: ${p.location || '-'}`, bodyWidth), textX, ly);
     ly += bodyLineHeight;
-    doc.text(`Ditanam: ${formatLabelDate(p.plantedDate)}`, textX, ly);
+    doc.text(truncateToWidth(`Ditanam: ${formatLabelDate(p.plantedDate)}`, bodyWidth), textX, ly);
 
     // Nama kategori hanya muncul di mode Warna, sebagai penjelas warna aksen
     // di sampingnya — di mode Monokrom baris ini tidak menambah apa pun
@@ -2201,7 +2376,7 @@ async function buildLabelsPdf(
       ly += bodyLineHeight;
       doc.setTextColor(ar, ag, ab);
       doc.setFontSize(fontMeta);
-      doc.text(truncateToWidth(categoryLabel(p.category), textWidth), textX, ly);
+      doc.text(truncateToWidth(categoryLabel(p.category), bodyWidth), textX, ly);
     }
   });
 
@@ -2364,10 +2539,13 @@ function LabelPrintSheet({
     const aktif = (p.units ?? []).filter(u => !u.retired);
     // Tanaman yang belum punya pot tetap dapat label, tanpa lencana — lebih
     // baik daripada hilang diam-diam dari lembar cetak.
-    const kodeUntukDicetak: (string | null)[] = aktif.length > 0 ? aktif.map(u => u.code) : [null];
+    const potUntukDicetak: Array<{ code: string | null; unitNo: number | null }> =
+      aktif.length > 0
+        ? aktif.map(u => ({ code: u.code, unitNo: u.unitNo }))
+        : [{ code: null, unitNo: null }];
 
-    for (const code of kodeUntukDicetak) {
-      for (let i = 0; i < salinan; i++) labels.push({ planting: p, code });
+    for (const pot of potUntukDicetak) {
+      for (let i = 0; i < salinan; i++) labels.push({ planting: p, ...pot });
     }
   }
   const totalLabels = labels.length;
