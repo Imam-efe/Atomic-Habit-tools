@@ -394,10 +394,13 @@ describe('saranPerbaikan', () => {
     expect(angka(pasir)).toBeLessThan(angka(liat));
   });
 
-  it('tanah basa disarankan bahan organik, bukan kapur', () => {
+  it('tanah basa disarankan bahan organik, dan justru dilarang dikapur', () => {
     const s = saranPerbaikan([5.5, 6.5], 7.8, 'lempung') ?? '';
-    expect(s).not.toMatch(/dolomit|kapur/i);
     expect(s).toMatch(/kompos|organik|belerang/i);
+    // Tidak boleh MENGANJURKAN kapur, tapi larangannya wajib disebut — jadi
+    // jangan pakai /kapur/ polos, "Jangan dikapur" akan ikut tertangkap.
+    expect(s).not.toMatch(/tabur dolomit/i);
+    expect(s).toMatch(/jangan dikapur/i);
   });
 
   it('tanah yang sudah cocok tidak diberi saran', () => {
@@ -865,8 +868,8 @@ export function pekanSemai(text: string): [number, number] | null {
 
   const hari = t.match(/(\d+)\s*(?:[-–]\s*(\d+)\s*)?hari/i);
   if (hari) {
-    const a = Math.max(1, Math.round(Number(hari[1]) / 7));
-    const b = hari[2] ? Math.max(1, Math.round(Number(hari[2]) / 7)) : a;
+    const a = Math.max(1, Math.ceil(Number(hari[1]) / 7));
+    const b = hari[2] ? Math.max(1, Math.ceil(Number(hari[2]) / 7)) : a;
     return [a, b];
   }
 
@@ -1595,7 +1598,7 @@ Tambahkan enam entri dengan bentuk yang sama persis dengan entri sayuran daun ya
     harvestEveryDays: null,
     waterIntervalDays: 1,
     waterNote: 'Semprot kabut dua kali sehari. Jangan disiram deras — benih akan hanyut dan tumbuh tidak rata.',
-    fertilizeIntervalDays: 0,
+    fertilizeIntervalDays: 30,  // BUKAN 0: tes katalog menuntut > 0 untuk semua tanaman.
     fertilizer: 'Tidak perlu. Cadangan makanan di dalam benih cukup sampai panen.',
     sunlight: 'sebagian',
     spacingCm: 0,
