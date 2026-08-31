@@ -11,10 +11,11 @@ import { AiPanel } from '@/components/AiPanel';
 import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
 import {
   LABEL_SIZES, LABEL_SIZE_TITLE, labelLayout, categoryColorRgb, labelContentLayout,
-  secondaryTextColor, A4_MARGIN_MM, LABEL_GAP_MM,
+  secondaryTextColor, A4_MARGIN_MM, LABEL_GAP_MM, badgeSpec, PT_TO_MM,
   type LabelSize, type LabelColorMode,
 } from '@/lib/labelPrint';
 import { susunLembarKerja, type LembarKerja, type TugasKebun } from '@/lib/gardenWorksheet';
+import { UnitManager } from './GardenUnits';
 
 interface Plant {
   id: string;
@@ -81,6 +82,19 @@ interface Planting {
   status: string;
   note: string | null;
   care: CareState;
+  /**
+   * Pot fisik pada catatan ini. `unitNo` permanen dan dipakai semua relasi,
+   * `code` yang tercetak di label dan bebas diubah pengguna.
+   */
+  units: PotUnit[];
+  /** Ringkasan siap tampil: '#3', '#1–#5', '#1, #3, #7'. */
+  kodeRingkas: string;
+}
+
+export interface PotUnit {
+  unitNo: number;
+  code: string;
+  retired: boolean;
 }
 
 interface GardenResponse {
@@ -277,6 +291,43 @@ export function Garden() {
   // Catatan suara: dikte catatan perawatan (catatan/pangkas/semprot) alih-alih
   // mengetik — kebun adalah tempat tangan biasanya kotor atau sibuk memegang alat.
   const [voiceNoteFor, setVoiceNoteFor] = useState<string | null>(null);
+
+  /** Catatan yang sedang dikelola nomor potnya; null berarti tidak ada. */
+  const [kelolaPot, setKelolaPot] = useState<string | null>(null);
+
+  /**
+   * Aksi yang menunggu pemilihan pot.
+   *
+   * Hanya muncul untuk tanaman berpot lebih dari satu — untuk yang satu pot,
+   * memilih pot adalah pertanyaan yang jawabannya sudah pasti, dan sekali
+   * ketuk tetap jalur tercepatnya.
+   */
+  const [pilihPot, setPilihPot] = useState<{ plantingId: string; action: string } | null>(null);
+  const [potTerpilih, setPotTerpilih] = useState<number[]>([]);
+
+  /** Buka pemilih pot bila perlu; kalau tidak, langsung catat. */
+  const mulaiAksi = (p: Planting, action: string) => {
+    const aktif = (p.units ?? []).filter(u => !u.retired);
+    if (aktif.length <= 1) {
+      handleCare(p.id, action);
+      return;
+    }
+    // Semua tercentang sebagai bawaan: yang paling sering terjadi adalah
+    // mengerjakan semuanya sekaligus.
+    setPotTerpilih(aktif.map(u => u.unitNo));
+    setPilihPot({ plantingId: p.id, action });
+  };
+
+  const kirimAksiTerpilih = (p: Planting) => {
+    if (!pilihPot) return;
+    const aktif = (p.units ?? []).filter(u => !u.retired);
+    // Semua terpilih dikirim sebagai daftar kosong: log "semua pot" sengaja
+    // tidak menulis baris cakupan sama sekali, sesuai perjanjian backend.
+    const semua = potTerpilih.length === aktif.length;
+    handleCare(p.id, pilihPot.action, undefined, semua ? undefined : potTerpilih);
+    setPilihPot(null);
+    setPotTerpilih([]);
+  };
   const [voiceNoteText, setVoiceNoteText] = useState('');
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceSaving, setVoiceSaving] = useState(false);
@@ -371,7 +422,12 @@ export function Garden() {
     };
   }, [queue]);
 
-  const handleCare = async (plantingId: string, action: string, note?: string) => {
+  /**
+   * @param units Pot mana yang dikerjakan. Dikosongkan berarti SEMUA pot —
+   *   perjanjian yang sama dengan backend, dan yang membuat sekali ketuk tetap
+   *   jadi jalur tercepat untuk tanaman berpot satu.
+   */
+  const handleCare = async (plantingId: string, action: string, note?: string, units?: number[]) => {
     // Panen boleh dicatat tanpa jumlah, tapi kalau diisi, dikirim ke backend
     // supaya hasil panen otomatis masuk ke Inventaris.
     let amount: number | undefined;
@@ -400,7 +456,15 @@ export function Garden() {
     // yang sama dan mengabaikan kiriman kedua alih-alih mencatat siram dobel.
     const clientId = newClientId();
     const path = `/garden/${plantingId}/care`;
-    const body = { action, date: todayISO(), ...(amount ? { amount, unit: 'kg' } : {}), ...(note ? { note } : {}) };
+    const body = {
+      action, date: todayISO(),
+      ...(amount ? { amount, unit: 'kg' } : {}),
+      ...(note ? { note } : {}),
+      // Dikirim hanya kalau memang sebagian. Mengirim daftar lengkap akan
+      // menulis baris cakupan untuk log yang artinya "semua pot", dan itu
+      // membuat perjanjian "tanpa baris = semua pot" jadi tidak konsisten.
+      ...(units && units.length > 0 ? { units } : {}),
+    };
 
     try {
       await apiFetch(path, { method: 'POST', body: JSON.stringify({ ...body, clientId }) });
@@ -837,6 +901,17 @@ export function Garden() {
                           <h3 className="text-sm font-bold" style={{ color: 'var(--text)' }}>
                             {p.nickname || p.name}
                           </h3>
+                          {/* Nomor pot: inilah yang membedakan dua cabai
+                              tanpa perlu membuka apa pun, dan yang dicocokkan
+                              dengan label yang menempel di potnya. */}
+                          {p.units?.some(u => !u.retired) && (
+                            <span
+                              className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                              style={{ color: 'var(--text2)', boxShadow: 'var(--neu-inset)' }}
+                            >
+                              {p.kodeRingkas}
+                            </span>
+                          )}
                           {/* Tanpa latar: --pos/--neg di atas --track hanya
                               mencapai 4.2–4.5:1 di tema terang, sedangkan di
                               atas surface keduanya lolos 4.5:1. */}
@@ -912,7 +987,7 @@ export function Garden() {
                         style={{ background: 'var(--bg)', color: ACTION_META[action].color, boxShadow: 'var(--neu-raised-sm)' }}
                         whileTap={{ scale: 0.95 }}
                         transition={springs.snappy}
-                        onClick={() => handleCare(p.id, action)}
+                        onClick={() => mulaiAksi(p, action)}
                       >
                         {ACTION_META[action].emoji} {ACTION_META[action].label}
                       </motion.button>
@@ -927,6 +1002,83 @@ export function Garden() {
                       {ACTION_META.catatan.emoji} {ACTION_META.catatan.label}
                     </motion.button>
                   </div>
+
+                  {/* Jalan masuk ke pengelolaan nomor: dari sini pot ditambah,
+                      kodenya diubah, atau dipensiunkan. Selalu tampak, karena
+                      tanaman berpot satu pun perlu bisa menambah pot. */}
+                  <button
+                    className="mt-2 text-[10px] font-semibold self-start px-2 py-1 rounded-lg"
+                    style={{ color: 'var(--text3)', boxShadow: 'var(--neu-raised-sm)' }}
+                    onClick={() => setKelolaPot(p.id)}
+                  >
+                    🏷️ Nomor pot{p.units?.some(u => !u.retired) ? ` · ${p.kodeRingkas}` : ''}
+                  </button>
+
+                  {/* Pemilih pot — hanya untuk tanaman berpot lebih dari satu.
+                      Inilah yang membuat "baru sempat memupuk separuh" bisa
+                      dicatat apa adanya, bukan dibulatkan jadi semua. */}
+                  <AnimatePresence>
+                    {pilihPot?.plantingId === p.id && (
+                      <motion.div
+                        className="mt-2 rounded-xl p-3 flex flex-col gap-2"
+                        style={{ background: 'var(--bg)', boxShadow: 'var(--neu-inset)' }}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                      >
+                        <div className="text-[11px]" style={{ color: 'var(--text2)' }}>
+                          Pot mana yang {ACTION_META[pilihPot.action as keyof typeof ACTION_META]?.label.toLowerCase() ?? pilihPot.action}?
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(p.units ?? []).filter(u => !u.retired).map(u => {
+                            const aktif = potTerpilih.includes(u.unitNo);
+                            return (
+                              <button
+                                key={u.unitNo}
+                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
+                                style={{
+                                  background: aktif ? 'var(--accent)' : 'var(--surface)',
+                                  color: aktif ? 'white' : 'var(--text3)',
+                                  boxShadow: aktif ? 'none' : 'var(--neu-raised-sm)',
+                                }}
+                                onClick={() => setPotTerpilih(prev =>
+                                  prev.includes(u.unitNo)
+                                    ? prev.filter(n => n !== u.unitNo)
+                                    : [...prev, u.unitNo]
+                                )}
+                              >
+                                #{u.code}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="px-3 py-2 rounded-xl text-[11px] font-bold"
+                            style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-raised-sm)' }}
+                            disabled={potTerpilih.length === 0}
+                            onClick={() => kirimAksiTerpilih(p)}
+                          >
+                            Catat {potTerpilih.length} pot
+                          </button>
+                          <button
+                            className="px-3 py-2 rounded-xl text-[11px]"
+                            style={{ background: 'var(--bg)', color: 'var(--text3)', boxShadow: 'var(--neu-raised-sm)' }}
+                            onClick={() => { setPilihPot(null); setPotTerpilih([]); }}
+                          >
+                            Batal
+                          </button>
+                          <button
+                            className="px-3 py-2 rounded-xl text-[11px] ml-auto"
+                            style={{ background: 'var(--bg)', color: 'var(--text3)', boxShadow: 'var(--neu-raised-sm)' }}
+                            onClick={() => { setPilihPot(null); setPotTerpilih([]); setKelolaPot(p.id); }}
+                          >
+                            Nomor pot
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* Catatan suara — dikte catatan perawatan (pangkas, semprot, dst)
                       tanpa mengetik, tangan sering kotor atau sibuk di kebun. */}
@@ -1619,6 +1771,18 @@ export function Garden() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {kelolaPot && (
+          <UnitManager
+            plantingId={kelolaPot}
+            onClose={() => setKelolaPot(null)}
+            // Daftar tanaman ikut dimuat ulang: kode yang baru diubah harus
+            // langsung terlihat di baris tanamannya, bukan setelah pindah tab.
+            onChanged={load}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1793,8 +1957,19 @@ function formatLabelDate(iso: string): string {
  * berasal dari `labelLayout()` di `lib/labelPrint.ts` supaya angkanya sama
  * persis dengan yang diuji di sana.
  */
+/**
+ * Satu label yang akan dicetak: tanamannya, dan kode pot mana yang tertulis.
+ *
+ * `code` null hanya untuk tanaman yang belum punya pot sama sekali — labelnya
+ * tetap dicetak tanpa lencana, bukan dilewati diam-diam.
+ */
+interface LabelUnit {
+  planting: Planting;
+  code: string | null;
+}
+
 async function buildLabelsPdf(
-  labels: Planting[],
+  labels: LabelUnit[],
   size: LabelSize,
   colorMode: LabelColorMode,
   categoryLabel: (id: string) => string
@@ -1820,7 +1995,7 @@ async function buildLabelsPdf(
     return `${truncated}…`;
   };
 
-  labels.forEach((p, i) => {
+  labels.forEach(({ planting: p, code: kode }, i) => {
     const posInPage = i % perPage;
     if (i > 0 && posInPage === 0) doc.addPage();
 
@@ -1856,8 +2031,42 @@ async function buildLabelsPdf(
       doc.rect(x, y, 1.6, h, 'F');
     }
 
+    // Lencana kode di kanan atas. Digambar SEBELUM judul supaya lebar judul
+    // bisa dikurangi selebar lencana — tanpa itu nama tanaman yang panjang
+    // akan menabrak angkanya, dan angkanya justru yang paling perlu terbaca.
+    let badgeW = 0;
+    if (kode) {
+      const badge = badgeSpec(size);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(badge.fontSize);
+      const teks = `#${kode}`;
+      badgeW = doc.getTextWidth(teks) + badge.padXmm * 2;
+      const badgeH = badge.fontSize * PT_TO_MM + badge.padYmm * 2;
+      const bx = x + w - badgeW - 1.5;
+      const by = y + 1.5;
+
+      if (warna) {
+        doc.setFillColor(ar, ag, ab);
+        doc.roundedRect(bx, by, badgeW, badgeH, 0.8, 0.8, 'F');
+        doc.setTextColor(255, 255, 255);
+      } else {
+        // Monokrom: kotak bergaris, bukan blok hitam pekat — satu lembar
+        // penuh lencana hitam menghabiskan tinta tanpa menambah keterbacaan.
+        doc.setDrawColor(60, 60, 60);
+        doc.roundedRect(bx, by, badgeW, badgeH, 0.8, 0.8);
+        doc.setTextColor(20, 20, 20);
+      }
+      doc.text(teks, bx + badge.padXmm, by + badgeH - badge.padYmm);
+      // Jarak aman supaya judul tidak menempel ke tepi lencana.
+      badgeW += 1.5;
+    }
+
     const textX = x + (colorMode === 'warna' ? 4.5 : 3);
     const textWidth = w - (colorMode === 'warna' ? 7.5 : 6);
+    // Hanya JUDUL yang dipersempit: lencana cuma menghalangi baris teratas.
+    // Mempersempit baris Lokasi dan Ditanam juga akan memotongnya tanpa ada
+    // yang menghalangi di sana.
+    const titleWidth = textWidth - badgeW;
     const titleY = y + titleYOffset;
 
     // Judul memakai warna kategori penuh — elemen paling pekat di label.
@@ -1867,10 +2076,10 @@ async function buildLabelsPdf(
     // Maksimal dua baris judul — nama tanaman yang sangat panjang dipotong
     // dengan elipsis alih-alih membungkus tak terbatas dan menabrak baris
     // Lokasi/Ditanam di bawahnya.
-    const titleRaw = doc.splitTextToSize(p.nickname || p.name, textWidth) as string[];
+    const titleRaw = doc.splitTextToSize(p.nickname || p.name, titleWidth) as string[];
     const titleLines = titleRaw.slice(0, 2);
     if (titleRaw.length > 2) {
-      titleLines[1] = truncateToWidth(titleLines[1], textWidth);
+      titleLines[1] = truncateToWidth(titleLines[1], titleWidth);
     }
     titleLines.forEach((line, li) => doc.text(line, textX, titleY + li * titleLineHeight));
 
@@ -2036,10 +2245,29 @@ function LabelPrintSheet({
     setQty(prev => ({ ...prev, [id]: prev[id] > 0 ? 0 : 1 }));
   };
 
-  const labels: Planting[] = [];
+  /**
+   * Satu label per POT, bukan n salinan tanaman yang sama.
+   *
+   * Sebelumnya blok ini mendorong objek `p` yang identik sebanyak n kali, jadi
+   * mencetak tiga salinan cabai menghasilkan tiga label yang tidak bisa
+   * dibedakan satu sama lain — persis kebingungan yang nomor pot bereskan.
+   *
+   * `qty` sekarang berarti berapa SALINAN tiap label dicetak (untuk cadangan
+   * atau mengganti yang pudar), dan salinan itu memang sengaja kembar.
+   */
+  const labels: LabelUnit[] = [];
   for (const p of plantings) {
-    const n = qty[p.id] ?? 0;
-    for (let i = 0; i < n; i++) labels.push(p);
+    const salinan = qty[p.id] ?? 0;
+    if (salinan === 0) continue;
+
+    const aktif = (p.units ?? []).filter(u => !u.retired);
+    // Tanaman yang belum punya pot tetap dapat label, tanpa lencana — lebih
+    // baik daripada hilang diam-diam dari lembar cetak.
+    const kodeUntukDicetak: (string | null)[] = aktif.length > 0 ? aktif.map(u => u.code) : [null];
+
+    for (const code of kodeUntukDicetak) {
+      for (let i = 0; i < salinan; i++) labels.push({ planting: p, code });
+    }
   }
   const totalLabels = labels.length;
   const layout = labelLayout(size);
@@ -2047,7 +2275,9 @@ function LabelPrintSheet({
 
   // Kategori yang benar-benar ikut tercetak — legenda hanya menjelaskan
   // warna yang ada di halaman, bukan seluruh delapan kategori katalog.
-  const kategoriTerpilih = [...new Set(labels.map(p => p.category).filter((c): c is string => !!c))];
+  const kategoriTerpilih = [
+    ...new Set(labels.map(l => l.planting.category).filter((c): c is string => !!c)),
+  ];
 
   const handleExport = async () => {
     if (totalLabels === 0) return;
@@ -2204,7 +2434,7 @@ function LabelPrintSheet({
                 maxHeight: '160px', background: 'var(--bg)', boxShadow: 'var(--neu-inset)',
               }}
             >
-              {labels.map((p, i) => {
+              {labels.map(({ planting: p, code: kode }, i) => {
                 // Pratinjau memakai rumus warna yang sama persis dengan PDF-nya
                 // — kalau tidak, yang terlihat di layar bukan yang tercetak.
                 const warna = colorMode === 'warna';
@@ -2215,11 +2445,28 @@ function LabelPrintSheet({
                 const isiColor = sekunder ? `rgb(${sekunder[0]}, ${sekunder[1]}, ${sekunder[2]})` : 'var(--text3)';
                 return (
                   <div
-                    key={`${p.id}-${i}`}
-                    className="rounded-md pl-2 pr-1.5 py-1.5 flex flex-col justify-center border-l-4"
+                    key={`${p.id}-${kode ?? 'tanpa'}-${i}`}
+                    className="rounded-md pl-2 pr-1.5 py-1.5 flex flex-col justify-center border-l-4 relative"
                     style={{ background: 'var(--surface)', minHeight: '46px', borderColor: warna ? rgb : 'var(--sep)' }}
                   >
-                    <p className="truncate font-bold" style={{ color: judulColor, fontSize: `${Math.max(7, layout.fontTitle - 2)}px` }}>
+                    {/* Lencana kode, sepadan dengan yang tercetak di PDF. */}
+                    {kode && (
+                      <span
+                        className="absolute top-1 right-1 px-1 rounded font-bold leading-tight"
+                        style={{
+                          fontSize: `${Math.max(8, layout.fontTitle)}px`,
+                          background: warna ? rgb : 'transparent',
+                          color: warna ? '#fff' : 'var(--text)',
+                          border: warna ? 'none' : '1px solid var(--sep)',
+                        }}
+                      >
+                        #{kode}
+                      </span>
+                    )}
+                    <p
+                      className="truncate font-bold"
+                      style={{ color: judulColor, fontSize: `${Math.max(7, layout.fontTitle - 2)}px`, paddingRight: kode ? '22px' : undefined }}
+                    >
                       {p.nickname || p.name}
                     </p>
                     <p className="truncate" style={{ color: isiColor, fontSize: `${Math.max(6, layout.fontBody - 1)}px` }}>
