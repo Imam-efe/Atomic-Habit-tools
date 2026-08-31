@@ -88,6 +88,15 @@ export const SETTINGS: SettingDef[] = [
   toggle('notify.harvest_due', 'notifikasi', 'Menjelang Panen', true, 'Perkiraan panen dalam 3 hari ke depan.'),
   toggle('notify.garden_followup', 'notifikasi', 'Tindak Lanjut Kebun', true, 'Penilaian penanganan hama dan bibit siap pindah.'),
 
+  // Hidroponik punya tenggang yang tidak dimiliki media lain: larutan yang
+  // dibiarkan lewat sepuluh hari menumpuk garam dan menghanguskan akar,
+  // padahal tanamannya terlihat baik-baik saja sampai hari ia layu sekaligus.
+  toggle('notify.garden_solution', 'notifikasi', 'Ganti Larutan Hidroponik', true, 'Larutan nutrisi yang sudah lewat tenggang.'),
+
+  // Pergantian mangsa hanya terjadi dua belas kali setahun — cukup jarang
+  // untuk tidak jadi bising, dan justru hari itulah saran tanamnya berubah.
+  toggle('notify.garden_mangsa', 'notifikasi', 'Pergantian Mangsa', true, 'Hari pertama mangsa baru dan saran tanamnya.'),
+
   toggle('notify.expiry', 'notifikasi', 'Stok Mau Kedaluwarsa', true),
   hour('notify.expiry.hour', 'Jam kirim Stok Kedaluwarsa', 8),
 

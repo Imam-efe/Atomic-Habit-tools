@@ -13,6 +13,96 @@ import { suggestRecipes, type AiRunner } from '../lib/rescue';
 import { findClashes, type TimedEvent, type TimedHabit } from '../lib/reschedule';
 import { findPatterns, type DayRecord } from '../lib/patterns';
 import { loadSettings, num, bool } from '../lib/settings';
+import { computeCareState, lastActions, resolvePlants, type PlantingRow } from './garden';
+import { cariTerlantar, type Sentuhan } from '../lib/garden_neglect';
+
+/**
+ * Ringkasan tugas kebun hari ini, untuk Pagi Ini dan Tutup Hari.
+ *
+ * Kebun adalah modul dengan tugas harian terbanyak di seluruh aplikasi, dan
+ * sampai sekarang ia satu-satunya yang tidak pernah muncul di ringkasan harian
+ * — jadi tanaman yang telat siram hanya ketahuan kalau pengguna kebetulan
+ * membuka tabnya.
+ *
+ * Ditaruh di berkas rute, bukan di lib/daily.ts: hitungan jatuh temponya
+ * berasal dari `computeCareState` yang tinggal di routes/garden.ts, dan sebuah
+ * pustaka yang mengimpor rute akan membalik lapisan modul ini.
+ */
+export interface GardenToday {
+  perluSiram: number;
+  perluPupuk: number;
+  siapPanen: number;
+  terlantar: number;
+  /** Beberapa nama untuk ditampilkan; sengaja dibatasi agar teks tidak meluber. */
+  contoh: string[];
+}
+
+/** Di atas ini daftar nama lebih panjang daripada ringkasannya sendiri. */
+const MAKS_CONTOH = 3;
+
+export async function getGardenToday(
+  db: D1Database,
+  userId: string,
+  today: string
+): Promise<GardenToday> {
+  const [rows, lastMap] = await Promise.all([
+    db.prepare(
+      `SELECT id, plant_id, custom_name, nickname, location, quantity, planting_method,
+              planted_date, expected_harvest_date, status, note
+         FROM garden_plantings
+        WHERE user_id = ?1 AND status IN ('tumbuh', 'panen')`
+    ).bind(userId).all<PlantingRow>(),
+    lastActions(db, userId),
+  ]);
+
+  const plantings = rows.results ?? [];
+  const plantMap = await resolvePlants(
+    db,
+    [...new Set(plantings.map((p) => p.plant_id).filter((id): id is string => !!id))]
+  );
+
+  let perluSiram = 0;
+  let perluPupuk = 0;
+  let siapPanen = 0;
+  const contoh: string[] = [];
+  const sentuhan: Sentuhan[] = [];
+
+  for (const p of plantings) {
+    const plant = p.plant_id ? plantMap.get(p.plant_id) : undefined;
+    const last = lastMap.get(p.id) ?? {};
+    const care = computeCareState(p, plant, last, today);
+    const nama = p.nickname ?? plant?.name ?? p.custom_name ?? 'Tanaman';
+
+    if (care.waterOverdueDays > 0) perluSiram++;
+    if (care.fertilizeOverdueDays > 0) perluPupuk++;
+    if (care.harvestReady) siapPanen++;
+
+    if (
+      contoh.length < MAKS_CONTOH &&
+      (care.waterOverdueDays > 0 || care.fertilizeOverdueDays > 0 || care.harvestReady)
+    ) {
+      contoh.push(nama);
+    }
+
+    // Sentuhan terakhir apa pun jenisnya — bukan hanya siram — supaya tanaman
+    // yang cuma dipanen sebulan sekali tidak salah dianggap terlantar.
+    const tanggal = [last.siram, last.pupuk, last.panen].filter(Boolean) as string[];
+    sentuhan.push({
+      plantingId: p.id,
+      nama,
+      lastCare: tanggal.length > 0 ? tanggal.sort().at(-1)! : null,
+      plantedDate: p.planted_date,
+    });
+  }
+
+  return {
+    perluSiram,
+    perluPupuk,
+    siapPanen,
+    terlantar: cariTerlantar(sentuhan, today).length,
+    contoh,
+  };
+}
 
 // Agenda tidak menyimpan durasi (lihat 0015_calendar.sql). Perkiraan yang
 // dipakai pengecekan bentrok datang dari pengaturan
@@ -67,12 +157,13 @@ daily.get('/brief', async (c) => {
   // enam kueri berurutan akan terasa lambat justru di layar pertama pagi hari.
   const settings = await loadSettings(c.env.DB, user.sub);
 
-  const [safeToSpend, billRadar, missed, expiring, kidsToday, habitRows, events] = await Promise.all([
+  const [safeToSpend, billRadar, missed, expiring, kidsToday, kebun, habitRows, events] = await Promise.all([
     computeSafeToSpend(c.env.DB, user.sub, today, bool(settings, 'money.subtract_bills')),
     getBillRadar(c.env.DB, user.sub, today, num(settings, 'money.bill_horizon_days')),
     getMissedYesterday(c.env.DB, user.sub, today),
     getExpiringItems(c.env.DB, user.sub, today, num(settings, 'inventory.expiry_days')),
     getKidsFor(c.env.DB, user.sub, today),
+    getGardenToday(c.env.DB, user.sub, today),
     c.env.DB.prepare(
       `SELECT h.id, h.name, h.action_time, h.streak,
               EXISTS (
@@ -116,6 +207,7 @@ daily.get('/brief', async (c) => {
     missed,
     expiring,
     kids: kidsToday,
+    kebun,
   });
 });
 
@@ -199,11 +291,17 @@ daily.get('/shutdown', async (c) => {
   const user = c.get('user');
   const date = c.req.query('date') ?? jakartaToday();
 
-  const row = await c.env.DB.prepare(
-    'SELECT journal, mood, top_priorities, completed_at FROM daily_shutdown WHERE user_id = ?1 AND shutdown_date = ?2'
-  )
-    .bind(user.sub, date)
-    .first<{ journal: string | null; mood: number | null; top_priorities: string | null; completed_at: number }>();
+  // Kebun ikut ditanyakan supaya ritual malam menutup hari dengan gambaran
+  // lengkap — tanaman yang belum disiram hari ini masih sempat dikerjakan
+  // sebelum tidur, dan itu justru saat paling baik menyiram di iklim panas.
+  const [row, kebun] = await Promise.all([
+    c.env.DB.prepare(
+      'SELECT journal, mood, top_priorities, completed_at FROM daily_shutdown WHERE user_id = ?1 AND shutdown_date = ?2'
+    )
+      .bind(user.sub, date)
+      .first<{ journal: string | null; mood: number | null; top_priorities: string | null; completed_at: number }>(),
+    getGardenToday(c.env.DB, user.sub, date),
+  ]);
 
   return c.json({
     date,
@@ -222,6 +320,7 @@ daily.get('/shutdown', async (c) => {
       }
     })(),
     completedAt: row?.completed_at ?? null,
+    kebun,
   });
 });
 

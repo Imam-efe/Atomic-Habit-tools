@@ -30,6 +30,13 @@ interface Brief {
   missed: Array<{ id: string; name: string; streak: number; twoMin: string | null }>;
   expiring: Array<{ id: string; name: string; quantity: number; unit: string; daysLeft: number }>;
   kids: Array<{ kidName: string; title: string; type: string; time: string | null; note: string | null }>;
+  kebun: {
+    perluSiram: number;
+    perluPupuk: number;
+    siapPanen: number;
+    terlantar: number;
+    contoh: string[];
+  };
 }
 
 interface Suggestion {
@@ -350,6 +357,34 @@ export default function HarianScreen() {
               <div className="text-xs" style={{ color: 'var(--text3)' }}>
                 Buka Inventaris untuk minta saran masakan dari bahan ini.
               </div>
+            </Card>
+          )}
+
+          {/* Kebun punya tugas harian sama seperti kebiasaan dan tagihan, tapi
+              sampai sekarang ia satu-satunya modul yang tidak pernah muncul di
+              Pagi Ini — jadi ia hanya dikerjakan kalau tabnya kebetulan
+              dibuka. */}
+          {brief.kebun && (brief.kebun.perluSiram + brief.kebun.perluPupuk + brief.kebun.siapPanen + brief.kebun.terlantar) > 0 && (
+            <Card title="🌱 Kebun hari ini" delay={0.28}>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {brief.kebun.perluSiram > 0 && (
+                  <span style={{ color: 'var(--text)' }}>💧 {brief.kebun.perluSiram} perlu disiram</span>
+                )}
+                {brief.kebun.perluPupuk > 0 && (
+                  <span style={{ color: 'var(--text)' }}>🌿 {brief.kebun.perluPupuk} perlu dipupuk</span>
+                )}
+                {brief.kebun.siapPanen > 0 && (
+                  <span style={{ color: 'var(--text)' }}>🧺 {brief.kebun.siapPanen} siap panen</span>
+                )}
+                {brief.kebun.terlantar > 0 && (
+                  <span style={{ color: '#ff3b30' }}>🕸️ {brief.kebun.terlantar} lama tak tersentuh</span>
+                )}
+              </div>
+              {brief.kebun.contoh.length > 0 && (
+                <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                  {brief.kebun.contoh.join(', ')}
+                </div>
+              )}
             </Card>
           )}
         </>

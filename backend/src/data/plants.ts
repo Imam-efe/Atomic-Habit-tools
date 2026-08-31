@@ -116,6 +116,27 @@ export interface Plant {
   propagation: string;
   harvestNote: string;
   tips: string;
+  /**
+   * Aturan pangkas — hanya untuk tanaman yang pangkasnya benar-benar
+   * menentukan hasil.
+   *
+   * Opsional dengan sengaja. Kebanyakan sayuran daun tidak dipangkas sama
+   * sekali, dan mengisi kolom ini untuk seluruh katalog berarti menebak —
+   * tebakan yang tampil seyakin fakta lebih buruk daripada kolom yang kosong.
+   * Diisi hanya untuk tanaman yang aturannya disepakati luas dan dampaknya
+   * pada hasil sudah jelas.
+   *
+   * Tanaman hias tidak pernah diberi kolom ini: perawatan bentuknya sudah
+   * punya tempat sendiri di `ornamental.grooming`, dan dua sumber aturan untuk
+   * hal yang sama akan saling bertentangan diam-diam.
+   */
+  pruning?: {
+    /** Hari sejak tanam sebelum pangkas pertama masuk akal. */
+    mulaiHari: number;
+    /** Jarak antar pangkas sesudahnya, hari. */
+    ulangHari: number;
+    catatan: string;
+  };
   /** Terisi hanya untuk tanaman hias; tidak ada untuk tanaman pangan. */
   ornamental?: OrnamentalInfo;
 }
@@ -548,6 +569,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Semai 3–4 minggu, pindah tanam',
     harvestNote: 'Petik dengan tangkainya. Panen rutin tiap minggu justru memicu buah baru.',
     tips: 'Buang tunas air di bawah cabang Y pertama. Daun keriting ke atas biasanya trips, keriting ke bawah biasanya virus — yang kena virus harus dicabut.',
+    pruning: {
+      mulaiHari: 35,
+      ulangHari: 21,
+      catatan: 'Buang semua tunas dan daun di bawah percabangan Y pertama. Daun bawah yang menyentuh tanah adalah jalan masuk paling umum untuk penyakit dari percikan air.',
+    },
   },
   {
     id: 'cabai-merah',
@@ -575,6 +601,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Semai 4 minggu, pindah tanam',
     harvestNote: 'Panen saat merah merata. Untuk simpan lama, panen saat 80% merah.',
     tips: 'Butuh ajir/tiang penopang — batangnya patah kalau buahnya lebat dan kena angin.',
+    pruning: {
+      mulaiHari: 35,
+      ulangHari: 21,
+      catatan: 'Buang semua tunas dan daun di bawah percabangan Y pertama, lalu jarangkan cabang dalam yang saling menyilang supaya sinar dan angin masuk ke tengah tajuk.',
+    },
   },
   {
     id: 'tomat',
@@ -602,6 +633,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Semai 3–4 minggu, pindah tanam agak dalam',
     harvestNote: 'Panen saat warna berubah merata. Petik dengan tangkai agar awet.',
     tips: 'Tanam bibit lebih dalam dari media semai — batang yang terbenam akan tumbuh akar tambahan dan tanamannya jauh lebih kokoh.',
+    pruning: {
+      mulaiHari: 30,
+      ulangHari: 14,
+      catatan: 'Buang tunas air — tunas yang muncul di ketiak antara batang utama dan cabang. Dibiarkan, ia memakan energi yang seharusnya jadi buah, dan tajuknya jadi terlalu rapat sehingga lembap dan mudah berjamur.',
+    },
   },
   {
     id: 'terong',
@@ -629,6 +665,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Semai 4 minggu, pindah tanam',
     harvestNote: 'Panen saat kulit masih mengkilap. Kalau kusam, bijinya sudah keras.',
     tips: 'Salah satu yang paling murah hati di pot — satu tanaman sehat bisa panen berbulan-bulan.',
+    pruning: {
+      mulaiHari: 40,
+      ulangHari: 21,
+      catatan: 'Sisakan dua sampai tiga cabang utama, buang sisanya beserta daun di bawah buah pertama. Terong yang dibiarkan bercabang bebas menghasilkan banyak buah kecil.',
+    },
   },
   {
     id: 'timun',
@@ -1553,6 +1594,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Bibit cangkok (berbuah 1–2 tahun) atau biji (3–4 tahun)',
     harvestNote: 'Panen saat warna kulit menguning ringan dan wangi mulai tercium.',
     tips: 'Bungkus buah muda dengan plastik/kertas — cara paling efektif melawan lalat buah tanpa semprot.',
+    pruning: {
+      mulaiHari: 150,
+      ulangHari: 120,
+      catatan: 'Potong pucuk cabang utama untuk memancing cabang samping, dan buang tunas air yang tumbuh tegak dari batang. Buah muncul di ujung cabang baru, jadi cabang baru itu yang dikejar.',
+    },
   },
   {
     id: 'jambu-air',
@@ -1580,6 +1626,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Bibit cangkok atau okulasi',
     harvestNote: 'Panen saat warna merata dan buah terasa renyah.',
     tips: 'Kalau berbuah terlalu lebat, jarangkan buah muda — sisanya jadi jauh lebih besar dan manis.',
+    pruning: {
+      mulaiHari: 150,
+      ulangHari: 120,
+      catatan: 'Jarangkan cabang bagian dalam supaya sinar sampai ke tengah tajuk, dan pendekkan cabang yang terlalu tinggi agar buahnya masih bisa dijangkau tanpa tangga.',
+    },
   },
   {
     id: 'mangga',
@@ -1607,6 +1658,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Bibit okulasi/sambung (berbuah 3–4 tahun); dari biji butuh 6–8 tahun',
     harvestNote: 'Panen saat pundak buah penuh dan warna pangkal berubah. Sisakan tangkai agar getah tidak melukai kulit.',
     tips: 'Jangan disiram saat mulai berbunga — kelembapan tinggi di fase ini bikin bunga rontok.',
+    pruning: {
+      mulaiHari: 180,
+      ulangHari: 180,
+      catatan: 'Pangkas sesudah panen, bukan sebelum berbunga. Buang cabang yang menyilang dan tunas air tegak; pangkas menjelang musim bunga justru membuang calon bunganya.',
+    },
   },
   {
     id: 'jeruk-nipis',
@@ -1634,6 +1690,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Bibit cangkok atau okulasi (berbuah 2–3 tahun)',
     harvestNote: 'Panen saat kulit mulai mengkilap dan buah terasa berat berair.',
     tips: 'Waspadai CVPD — daun belang kuning tidak simetris. Tidak ada obatnya, pohon terinfeksi harus dibongkar agar tidak menular.',
+    pruning: {
+      mulaiHari: 150,
+      ulangHari: 120,
+      catatan: 'Buang tunas air tegak dan cabang berduri yang tumbuh ke dalam. Sisakan bentuk terbuka di tengah supaya buah bagian dalam ikut matang merata.',
+    },
   },
   {
     id: 'belimbing',
@@ -1742,6 +1803,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Biji atau stek batang',
     harvestNote: 'Buah yang jatuh sendiri justru yang paling matang — kumpulkan dari tanah.',
     tips: 'Butuh para-para kuat. Pangkas sulur tua tiap tahun agar tetap produktif.',
+    pruning: {
+      mulaiHari: 90,
+      ulangHari: 45,
+      catatan: 'Pangkas sulur yang sudah berbuah sampai menyisakan beberapa mata. Markisa berbuah di sulur baru, jadi sulur lama yang dibiarkan menutupi para-para tanpa memberi buah.',
+    },
   },
   {
     id: 'buah-naga',
@@ -1904,6 +1970,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Stek batang berkayu atau bibit okulasi',
     harvestNote: 'Panen 100–120 hari setelah pangkas pembuahan, saat semua buah dalam tandan berwarna merata.',
     tips: 'Berbuah karena pangkasan, bukan karena umur. Kuasai teknik pangkas pembuahan — tanpa itu hanya jadi tanaman rambat.',
+    pruning: {
+      mulaiHari: 120,
+      ulangHari: 90,
+      catatan: 'Pangkas berat saat tanaman istirahat — anggur hanya berbuah di tunas dari kayu tahun lalu. Sisakan dua sampai tiga mata per cabang; tanpa pangkas, tanaman jadi rimbun tapi nyaris tidak berbuah.',
+    },
   },
   {
     id: 'srikaya',
@@ -2094,6 +2165,11 @@ export const PLANTS: Plant[] = [
     propagation: 'Stek batang; berakar dalam 3–4 pekan di media sekam bakar lembap',
     harvestNote: 'Panen saat buah menunduk, kulitnya melunak, dan warnanya berubah dari hijau ke ungu atau cokelat sesuai varietasnya.',
     tips: 'Pakai media porous — sekam bakar dan pasir lebih banyak daripada tanah. Tin yang mati di Indonesia hampir selalu mati karena media terlalu padat, bukan karena iklimnya.',
+    pruning: {
+      mulaiHari: 120,
+      ulangHari: 90,
+      catatan: 'Pangkas di akhir musim kemarau saat pertumbuhan melambat. Potong cabang yang tumbuh ke dalam dan yang lebih tipis dari pensil; tin berbuah di kayu muda, jadi cabang tua yang dibiarkan hanya menghabiskan ruang.',
+    },
   },
   {
     id: 'lemon',

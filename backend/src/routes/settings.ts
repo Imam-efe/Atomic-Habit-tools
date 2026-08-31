@@ -42,6 +42,7 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'garden_planting_media', label: 'Media tanam', group: 'Kebun', userScoped: true },
   { table: 'garden_planting_unit', label: 'Nomor pot', group: 'Kebun', userScoped: true },
   { table: 'garden_care_log_unit', label: 'Pot pada log perawatan', group: 'Kebun', userScoped: true },
+  { table: 'garden_measurement', label: 'Ukuran tanaman', group: 'Kebun', userScoped: true },
   { table: 'cooking_recipes', label: 'Resep tersimpan', group: 'Masakan', userScoped: true },
   { table: 'zakat_payments', label: 'Zakat yang ditunaikan', group: 'Ibadah', userScoped: true },
   { table: 'fasting_log', label: 'Catatan puasa sunnah', group: 'Ibadah', userScoped: true },

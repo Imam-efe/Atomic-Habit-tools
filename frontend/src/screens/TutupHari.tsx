@@ -9,6 +9,13 @@ interface Shutdown {
   journal: string | null;
   mood: number | null;
   topPriorities: string[];
+  kebun: {
+    perluSiram: number;
+    perluPupuk: number;
+    siapPanen: number;
+    terlantar: number;
+    contoh: string[];
+  };
 }
 
 const MOODS = [
@@ -29,6 +36,7 @@ export default function TutupHariScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [kebun, setKebun] = useState<Shutdown['kebun'] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +48,7 @@ export default function TutupHariScreen() {
         setMood(data.mood);
         setPriorities([0, 1, 2].map((i) => data.topPriorities[i] ?? ''));
         setSaved(data.done);
+        setKebun(data.kebun ?? null);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -96,6 +105,31 @@ export default function TutupHariScreen() {
         </div>
       ) : (
         <>
+          {/* Menyiram sore justru lebih baik daripada tidak sama sekali di
+              iklim panas, jadi sisa tugas kebun disebut di sini selagi masih
+              sempat dikerjakan — bukan sebagai teguran, melainkan kesempatan
+              terakhir hari itu. */}
+          {kebun && (kebun.perluSiram + kebun.perluPupuk + kebun.siapPanen + kebun.terlantar) > 0 && (
+            <motion.div
+              className="rounded-[18px] p-4 mb-3 flex flex-col gap-1.5"
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={springs.gentle}
+            >
+              <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>🌱 Kebun belum selesai</div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--text2)' }}>
+                {kebun.perluSiram > 0 && <span>💧 {kebun.perluSiram} perlu disiram</span>}
+                {kebun.perluPupuk > 0 && <span>🌿 {kebun.perluPupuk} perlu dipupuk</span>}
+                {kebun.siapPanen > 0 && <span>🧺 {kebun.siapPanen} siap panen</span>}
+                {kebun.terlantar > 0 && <span style={{ color: '#ff3b30' }}>🕸️ {kebun.terlantar} lama tak tersentuh</span>}
+              </div>
+              {kebun.contoh.length > 0 && (
+                <div className="text-[11px]" style={{ color: 'var(--text3)' }}>{kebun.contoh.join(', ')}</div>
+              )}
+            </motion.div>
+          )}
+
           <motion.div
             className="rounded-[18px] p-5 mb-3 flex flex-col gap-3"
             style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
