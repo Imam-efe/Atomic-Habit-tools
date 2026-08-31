@@ -27,6 +27,7 @@ import garden, { computeCareState, lastActions, resolvePlants, type PlantingRow 
 import gardenExtra from './routes/garden_extra';
 import gardenExtra2 from './routes/garden_extra2';
 import gardenExtra3 from './routes/garden_extra3';
+import gardenExtra4 from './routes/garden_extra4';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { pendingReviews } from './lib/garden_treatment';
@@ -133,6 +134,7 @@ app.route('/api/monthly-review', monthlyReview);
 app.route('/api/garden', gardenExtra);
 app.route('/api/garden', gardenExtra2);
 app.route('/api/garden', gardenExtra3);
+app.route('/api/garden', gardenExtra4);
 app.route('/api/garden', garden);
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
