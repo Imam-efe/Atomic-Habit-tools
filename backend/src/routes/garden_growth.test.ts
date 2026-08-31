@@ -192,10 +192,13 @@ describe('terlantar', () => {
     seedCare('user-1', 'c1', 'p1', 'siram', '2026-01-02');
 
     const body = await (await req('/api/garden/neglected')).json() as {
-      ambang: number; terlantar: Array<{ plantingId: string; hari: number }>;
+      ambang: number; terlantar: Array<{ plantingId: string; nama: string; hariDiam: number }>;
     };
     expect(body.ambang).toBe(21);
-    expect(body.terlantar.map((t) => t.plantingId)).toContain('p1');
+    const p1 = body.terlantar.find((t) => t.plantingId === 'p1');
+    expect(p1).toBeDefined();
+    expect(p1!.hariDiam).toBeGreaterThan(21);
+    expect(p1!.nama).toBe('Tomat');
   });
 
   it('yang baru disentuh tidak ikut, dan aksi apa pun dihitung sentuhan', async () => {

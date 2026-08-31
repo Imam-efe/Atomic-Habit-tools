@@ -14,6 +14,7 @@ import { GrowPlannerSections, GrowRecordSections } from './GardenGrow';
 import { GrowPlannerSections2, GrowRecordSections2 } from './GardenGrow2';
 import { GrowPlannerSections3, GrowRecordSections3 } from './GardenGrow3';
 import { MangsaSection, SoilSections, PropagationSections, MediaSection } from './GardenGrow4';
+import { MeasureSections, CalibrationSection } from './GardenMeasure';
 
 const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString('id-ID')}`;
 
@@ -21,6 +22,8 @@ export interface PlantingOption {
   id: string;
   label: string;
   plantId: string | null;
+  /** Pot aktif saja — pot pensiun tidak bisa lagi jadi sasaran catatan baru. */
+  units?: Array<{ unitNo: number; code: string }>;
 }
 
 function Card({
@@ -556,6 +559,7 @@ export function GardenPlanner({ plantings }: { plantings: PlantingOption[] }) {
       <GrowPlannerSections3 />
       <MangsaSection />
       <SoilSections />
+      <CalibrationSection />
     </div>
   );
 }
@@ -1058,6 +1062,7 @@ export function GardenRecords({ plantings }: { plantings: PlantingOption[] }) {
       <GrowRecordSections3 plantings={plantings} />
       <PropagationSections plantings={plantings} />
       <MediaSection />
+      <MeasureSections plantings={plantings} />
     </div>
   );
 }

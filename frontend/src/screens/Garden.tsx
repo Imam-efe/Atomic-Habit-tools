@@ -134,6 +134,24 @@ interface FertilizePlanEntry {
   guidance: string;
 }
 
+interface NeglectResponse {
+  ambang: number;
+  terlantar: Array<{ plantingId: string; nama: string; hariDiam: number }>;
+}
+
+interface PruningResponse {
+  today: string;
+  jatuhTempo: number;
+  jadwal: Array<{
+    plantingId: string;
+    nama: string;
+    emoji: string;
+    catatan: string;
+    berikutnya: string;
+    telat: number;
+  }>;
+}
+
 const PHASE_LABEL: Record<FertilizePlanEntry['phase'], string> = {
   semai: '🌱 Semai',
   vegetatif: '🌿 Vegetatif',
@@ -237,16 +255,21 @@ export function Garden() {
   const [data, setData] = useState<GardenResponse | null>(null);
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
   const [fertilizePlan, setFertilizePlan] = useState<FertilizePlanEntry[]>([]);
+  const [neglect, setNeglect] = useState<NeglectResponse | null>(null);
+  const [pruning, setPruning] = useState<PruningResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fertilizeByPlanting = new Map(fertilizePlan.map((f) => [f.plantingId, f]));
 
-  // Bentuk ringkas untuk tab Rencana dan Catatan — keduanya hanya butuh id,
-  // label, dan id katalognya.
+  // Bentuk ringkas untuk tab Rencana dan Catatan. Pot ikut dibawa karena
+  // pencatatan ukuran boleh menunjuk satu pot — tanpa itu, dua tanaman sejenis
+  // di dua pot akan berbagi satu kurva pertumbuhan yang tidak menggambarkan
+  // keduanya.
   const plantingOptions: PlantingOption[] = (data?.plantings ?? []).map(p => ({
     id: p.id,
     label: p.nickname || p.name,
     plantId: p.plantId,
+    units: (p.units ?? []).filter(u => !u.retired).map(u => ({ unitNo: u.unitNo, code: u.code })),
   }));
 
   // Katalog
@@ -380,14 +403,21 @@ export function Garden() {
   const load = async () => {
     setLoading(true);
     try {
-      const [g, s, f] = await Promise.all([
+      // Terlantar dan pangkas sengaja `.catch` sendiri-sendiri: keduanya
+      // peringatan tambahan, dan kebun yang gagal memuat salah satunya tetap
+      // harus bisa dirawat seperti biasa.
+      const [g, s, f, n, pr] = await Promise.all([
         apiFetch<GardenResponse>('/garden'),
         apiFetch<ScheduleResponse>('/garden/schedule?days=14'),
         apiFetch<{ plan: FertilizePlanEntry[] }>('/garden/fertilize-plan'),
+        apiFetch<NeglectResponse>('/garden/neglected').catch(() => null),
+        apiFetch<PruningResponse>('/garden/pruning').catch(() => null),
       ]);
       setData(g);
       setSchedule(s);
       setFertilizePlan(f.plan);
+      setNeglect(n);
+      setPruning(pr);
       setLoadFailed(false);
     } catch {
       // Kegagalan muat WAJIB dibedakan dari kebun yang memang kosong.
@@ -1122,6 +1152,55 @@ export function Garden() {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            {/* Terlantar: bukan "telat siram" yang muncul-hilang tiap pekan dan
+                akhirnya berhenti dibaca, melainkan tanaman yang tidak disentuh
+                sama sekali selama berminggu-minggu. Yang mati di kebun rumahan
+                biasanya yang lupa ada. */}
+            {neglect && neglect.terlantar.length > 0 && (
+              <div
+                className="rounded-[18px] p-3.5"
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)', borderLeft: '3px solid var(--neg)' }}
+              >
+                <p className="text-xs font-extrabold mb-1.5" style={{ color: 'var(--neg)' }}>
+                  🕸️ {neglect.terlantar.length} tanaman tak tersentuh lebih dari {neglect.ambang} hari
+                </p>
+                <div className="flex flex-col gap-1">
+                  {neglect.terlantar.slice(0, 5).map(t => (
+                    <button
+                      key={t.plantingId}
+                      className="text-left text-[11px]"
+                      style={{ color: 'var(--text2)' }}
+                      onClick={() => setOpenPlanting(t.plantingId)}
+                    >
+                      {t.nama} — {t.hariDiam} hari
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pangkas hanya ditampilkan saat sudah jatuh tempo. Jadwal yang
+                belum tiba tidak menuntut apa pun hari ini, dan menampilkannya
+                cuma menambah baris yang selalu ada di layar. */}
+            {pruning && pruning.jatuhTempo > 0 && (
+              <div
+                className="rounded-[18px] p-3.5"
+                style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)', borderLeft: '3px solid var(--warn)' }}
+              >
+                <p className="text-xs font-extrabold mb-1.5" style={{ color: 'var(--warn)' }}>
+                  ✂️ {pruning.jatuhTempo} tanaman menunggu dipangkas
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {pruning.jadwal.filter(j => j.telat > 0).slice(0, 4).map(j => (
+                    <div key={j.plantingId} className="text-[11px]" style={{ color: 'var(--text2)' }}>
+                      <span style={{ color: 'var(--text)' }}>{j.emoji} {j.nama}</span> — telat {j.telat} hari.
+                      <span className="block" style={{ color: 'var(--text3)' }}>{j.catatan}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {data.plantings.map(p => {
               const status = STATUS_META[p.status] ?? STATUS_META.tumbuh;
               const isOpen = openPlanting === p.id;
