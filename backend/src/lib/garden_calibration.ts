@@ -110,3 +110,56 @@ export function effectiveDaysToHarvest(
     ? { days: match.actualDays, calibrated: true }
     : { days: catalogDays, calibrated: false };
 }
+
+// ──────────────── KALIBRASI INTERVAL SIRAM & PUPUK ────────────────
+
+export interface CareGap {
+  plantId: string;
+  action: 'siram' | 'pupuk';
+  /** Jarak hari ke catatan perawatan sejenis sebelumnya. */
+  gapDays: number;
+}
+
+export interface IntervalNyata {
+  intervalNyata: number;
+  sampel: number;
+  andal: boolean;
+}
+
+/** Minimal jarak tersisa sesudah penyaringan sebelum angkanya layak dipakai. */
+const MIN_GAP_SAMPEL = 4;
+
+/**
+ * Batas atas jarak yang masih dianggap "kebiasaan", sebagai kelipatan interval
+ * katalog.
+ *
+ * Skalanya mengikuti katalog, bukan angka tetap: jeda 40 hari itu anomali
+ * untuk siram tiap 2 hari, tapi wajar untuk pupuk tiap 30 hari. Batas tetap
+ * akan membuang separuh data pupuk yang sah.
+ */
+const BATAS_KELIPATAN = 5;
+
+/**
+ * Interval siram atau pupuk yang BENAR-BENAR terjadi, dari jarak antar catatan.
+ *
+ * `waterIntervalDays` di katalog adalah anjuran; yang dikerjakan pengguna
+ * adalah kenyataan. Kalau keduanya berbeda jauh dan tanamannya sehat, yang
+ * pantas dikoreksi adalah anjurannya.
+ *
+ * Jeda panjang dibuang lebih dulu: pengguna yang pergi sepekan meninggalkan
+ * satu jarak 9 hari di tengah kebiasaan 2 hari, dan satu angka seperti itu
+ * cukup untuk menggeser rata-rata sampai anjurannya jadi berbahaya.
+ */
+export function calibrateInterval(gaps: CareGap[], katalog: number): IntervalNyata | null {
+  const batas = Math.max(katalog * BATAS_KELIPATAN, katalog + 1);
+  const bersih = gaps.map((g) => g.gapDays).filter((d) => d > 0 && d <= batas);
+
+  if (bersih.length < MIN_GAP_SAMPEL) return null;
+
+  const rata = bersih.reduce((a, b) => a + b, 0) / bersih.length;
+  return {
+    intervalNyata: Math.round(rata),
+    sampel: bersih.length,
+    andal: bersih.length >= MIN_GAP_SAMPEL,
+  };
+}
