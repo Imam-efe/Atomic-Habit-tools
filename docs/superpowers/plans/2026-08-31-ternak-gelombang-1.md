@@ -1416,7 +1416,7 @@ export function statusKarantina(
 - [ ] **Step 7: Jalankan ketiga berkas tes, pastikan lolos**
 
 Run: `cd backend && npx vitest run src/lib/ternak_air.test.ts src/lib/ternak_kepadatan.test.ts src/lib/ternak_biosekuriti.test.ts`
-Expected: PASS — 12 + 6 + 5 = 23 tes.
+Expected: PASS — 10 + 6 + 5 = 21 tes.
 
 - [ ] **Step 8: Periksa tipe dan commit**
 
@@ -1821,7 +1821,7 @@ SELECT
 - [ ] **Step 4: Jalankan tes, pastikan lolos**
 
 Run: `cd backend && npx vitest run src/routes/ternak_routes.test.ts`
-Expected: PASS, 16 tes.
+Expected: PASS, 15 tes.
 
 Catatan: `all()` dan `first()` pada FakeD1 **asinkron**. Lupa `await` menghasilkan `Cannot read properties of undefined (reading 'map')` — galat yang menuduh kode rutenya padahal salahnya di tes.
 
