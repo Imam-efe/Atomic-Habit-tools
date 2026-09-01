@@ -14,6 +14,7 @@ import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import { ANIMAL_BY_ID, type TugasKatalog } from '../data/animals';
 import { jadwalSubjek, type Subjek, type Ubahan, type TugasJatuhTempo } from '../lib/ternak_jadwal';
+import { spesiesKandang } from '../lib/ternak_spesies';
 import { namaSubjekHewan } from './ternak';
 
 const care = new Hono<AuthContext>();
@@ -79,11 +80,17 @@ export async function jadwalPengguna(
   hariIni: string
 ): Promise<TugasJatuhTempo[]> {
   const [kandang, hewan, ubahan, log] = await Promise.all([
+    // Subquery ini adalah semantik `spesiesKandang` (lib/ternak_spesies.ts)
+    // yang sama persis, ditulis ulang sebagai SQL berkorelasi karena
+    // memanggilnya sekali per kandang berarti satu kueri per kandang — dan D1
+    // membatasi jumlah subrequest per permintaan. Ada tes yang membuktikan
+    // keduanya sepakat untuk fixture yang sama.
     db.prepare(
       `SELECT k.id, k.nama, k.tanggal_mulai,
               (SELECT h.animal_id FROM ternak_hewan h
-                WHERE h.kandang_id = k.id AND h.status = 'hidup'
-                ORDER BY h.created_at ASC LIMIT 1) AS animal_id
+                WHERE h.kandang_id = k.id AND h.user_id = k.user_id AND h.status = 'hidup'
+                  AND h.animal_id IS NOT NULL
+                ORDER BY h.created_at ASC, h.id ASC LIMIT 1) AS animal_id
          FROM ternak_kandang k
         WHERE k.user_id = ?1 AND k.status = 'aktif'`
     ).bind(userId).all<KandangJadwalRow>(),
@@ -181,19 +188,16 @@ async function subjekMilik(
  * penghuni hidup pertama untuk kandang. Dipakai untuk mencegah kode tugas
  * custom bentrok dengan kode katalog spesies yang sama.
  */
-async function spesiesSubjek(db: D1Database, tipe: SubjekTipe, id: string): Promise<string | null> {
+async function spesiesSubjek(
+  db: D1Database, userId: string, tipe: SubjekTipe, id: string
+): Promise<string | null> {
   if (tipe === 'hewan') {
     const row = await db.prepare(
-      'SELECT animal_id FROM ternak_hewan WHERE id = ?1'
-    ).bind(id).first<{ animal_id: string | null }>();
+      'SELECT animal_id FROM ternak_hewan WHERE id = ?1 AND user_id = ?2'
+    ).bind(id, userId).first<{ animal_id: string | null }>();
     return row?.animal_id ?? null;
   }
-  const row = await db.prepare(
-    `SELECT h.animal_id FROM ternak_hewan h
-      WHERE h.kandang_id = ?1 AND h.status = 'hidup'
-      ORDER BY h.created_at ASC LIMIT 1`
-  ).bind(id).first<{ animal_id: string | null }>();
-  return row?.animal_id ?? null;
+  return spesiesKandang(db, id, userId);
 }
 
 // GET /api/ternak/jadwal?hari=14
@@ -367,7 +371,7 @@ care.post('/tugas/custom', async (c) => {
   // Kalau dibiarkan bentrok, PATCH berikutnya akan mengubah dua hal
   // sekaligus tanpa pengguna tahu yang mana — jadi kode custom tidak boleh
   // sama dengan kode katalog milik spesies subjek ini.
-  const animalId = await spesiesSubjek(c.env.DB, body.subjekTipe, subjekId);
+  const animalId = await spesiesSubjek(c.env.DB, user.sub, body.subjekTipe, subjekId);
   const katalog = animalId ? (ANIMAL_BY_ID.get(animalId)?.tugas ?? []) : [];
   if (katalog.some((t) => t.kode === kodeTugas)) {
     return c.json({ error: 'kodeTugas bentrok dengan kode katalog spesies ini' }, 400);

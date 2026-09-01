@@ -18,6 +18,7 @@ import { ANIMAL_BY_ID } from '../data/animals';
 import { nilaiAir, type HasilAir } from '../lib/ternak_air';
 import { cekKepadatan, type Penghuni } from '../lib/ternak_kepadatan';
 import { statusKarantina } from '../lib/ternak_biosekuriti';
+import { spesiesKandang } from '../lib/ternak_spesies';
 import { namaSubjekHewan } from './ternak';
 
 const health = new Hono<AuthContext>();
@@ -173,12 +174,8 @@ health.get('/air/:kandangId', async (c) => {
   const kandang = await kandangMilik(c.env.DB, user.sub, kandangId);
   if (!kandang) return c.json({ error: 'kandang tidak ditemukan' }, 404);
 
-  const penghuniPertama = await c.env.DB.prepare(`
-    SELECT animal_id FROM ternak_hewan
-     WHERE kandang_id = ?1 AND user_id = ?2 AND status = 'hidup'
-     ORDER BY created_at ASC LIMIT 1
-  `).bind(kandangId, user.sub).first<{ animal_id: string | null }>();
-  const animal = penghuniPertama?.animal_id ? (ANIMAL_BY_ID.get(penghuniPertama.animal_id) ?? null) : null;
+  const animalIdKandang = await spesiesKandang(c.env.DB, kandangId, user.sub);
+  const animal = animalIdKandang ? (ANIMAL_BY_ID.get(animalIdKandang) ?? null) : null;
 
   const rows = await c.env.DB.prepare(`
     SELECT id, tanggal, suhu_c, ph, amonia_ppm, nitrit_ppm, nitrat_ppm, salinitas_ppt, catatan

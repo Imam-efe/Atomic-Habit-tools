@@ -128,3 +128,12 @@ CREATE TABLE IF NOT EXISTS ternak_air (
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX IF NOT EXISTS idx_ternak_air_kandang ON ternak_air(kandang_id, tanggal DESC);
+
+-- Fix I3 (tinjauan Ternak): idx_ternak_hewan_kandang di atas tidak mencakup
+-- filter dan urutan yang sebenarnya dipakai "spesies penghuni pertama
+-- kandang" (lib/ternak_spesies.ts) — user_id, animal_id IS NOT NULL, dan
+-- dua kunci urut created_at+id. File ini sudah dijalankan di produksi, jadi
+-- baris ini HANYA MENAMBAH indeks baru, tidak pernah mengubah yang di atas.
+CREATE INDEX IF NOT EXISTS idx_ternak_hewan_kandang_spesies
+  ON ternak_hewan(kandang_id, user_id, status, created_at, id)
+  WHERE animal_id IS NOT NULL;
