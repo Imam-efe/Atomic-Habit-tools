@@ -112,6 +112,13 @@ ternak.get('/', async (c) => {
 
   const hewan = (hewanRows.results ?? []).map((h) => {
     const animal = h.animal_id ? ANIMAL_BY_ID.get(h.animal_id) : undefined;
+    // Hewan hidup, punya spesies katalog, tanpa kandang, dan spesiesnya
+    // punya tugas bersasaran kandang: tugas itu tidak dimiliki siapa pun dan
+    // tidak akan pernah dijadwalkan sampai kandangnya diisi. Lihat POST
+    // /hewan untuk penjelasan lengkap kenapa ini terjadi.
+    const tugasKandangDorman =
+      h.status === 'hidup' && !h.kandang_id
+      && (animal?.tugas.some((t) => t.sasaran === 'kandang') ?? false);
     return {
       id: h.id,
       kandangId: h.kandang_id,
@@ -122,6 +129,7 @@ ternak.get('/', async (c) => {
       status: h.status,
       tanggalMasuk: h.tanggal_masuk,
       kesulitan: animal?.kesulitan ?? null,
+      tugasKandangDorman,
     };
   });
 
@@ -251,6 +259,13 @@ ternak.delete('/kandang/:id', async (c) => {
 //   3. Tanpa animalId maupun namaKustom, barisnya tidak punya identitas apa
 //      pun dan akan tampil sebagai baris kosong di daftar — 400.
 //   4. jumlah dibulatkan; kurang dari 1 ditolak 400.
+//
+// Respons 201 membawa `peringatan` (opsional) kalau spesiesnya punya tugas
+// bersasaran kandang tapi hewan ini tidak dimasukkan ke kandang mana pun.
+// jadwalSubjek/jadwalPengguna cuma menagih tugas kandang lewat kandangnya —
+// tanpa kandang, tugas itu tidak dimiliki siapa pun dan diam-diam tidak
+// pernah dijadwalkan. Peringatan ini satu-satunya tempat pengguna diberi
+// tahu; tanpanya ia tidak akan pernah tahu kenapa jadwalnya kosong.
 ternak.post('/hewan', async (c) => {
   const user = c.get('user');
   type Body = {
@@ -296,6 +311,17 @@ ternak.post('/hewan', async (c) => {
     body.tanggalLahir?.trim() || null, tanggalMasuk,
     body.asal?.trim() || null, body.catatan?.trim() || null
   ).run();
+
+  if (!body.kandangId && body.animalId) {
+    const jumlahTugasKandang = ANIMAL_BY_ID.get(body.animalId)?.tugas
+      .filter((t) => t.sasaran === 'kandang').length ?? 0;
+    if (jumlahTugasKandang > 0) {
+      return c.json({
+        id,
+        peringatan: `${jumlahTugasKandang} tugas perawatan spesies ini menempel ke kandang, jadi belum dijadwalkan karena hewan ini belum punya kandang. Pilih kandang untuk mengaktifkannya.`,
+      }, 201);
+    }
+  }
 
   return c.json({ id }, 201);
 });

@@ -142,6 +142,29 @@ describe('hewan', () => {
     expect(body.hewan[0].kandangId).toBeNull();
   });
 
+  it('menandai tugasKandangDorman true untuk hewan berspesies tugas kandang tanpa kandang', async () => {
+    await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ animalId: 'cupang', tanggalMasuk: '2026-02-01' }),
+    });
+    const body = await (await req('/api/ternak')).json() as {
+      hewan: Array<{ animalId: string | null; tugasKandangDorman: boolean }>;
+    };
+    expect(body.hewan[0].tugasKandangDorman).toBe(true);
+  });
+
+  it('tugasKandangDorman false begitu kandangnya diisi', async () => {
+    const { id: kandangId } = await buatKandang();
+    await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ kandangId, animalId: 'cupang', tanggalMasuk: '2026-02-01' }),
+    });
+    const body = await (await req('/api/ternak')).json() as {
+      hewan: Array<{ tugasKandangDorman: boolean }>;
+    };
+    expect(body.hewan[0].tugasKandangDorman).toBe(false);
+  });
+
   it('menolak kandang milik orang lain', async () => {
     const { id } = await buatKandang({}, otherToken);
     const res = await req('/api/ternak/hewan', {
@@ -162,6 +185,43 @@ describe('hewan', () => {
       method: 'POST', body: JSON.stringify({ tanggalMasuk: '2026-02-01' }),
     });
     expect(gagal.status).toBe(400);
+  });
+
+  it('memperingatkan kalau spesiesnya punya tugas kandang tapi belum punya kandang', async () => {
+    // cupang: kedua tugasnya bersasaran kandang, jadi tanpa kandang keduanya
+    // dorman — jadwalPengguna tidak pernah menagihnya karena tidak ada
+    // kandang untuk memilikinya.
+    const res = await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ animalId: 'cupang', tanggalMasuk: '2026-02-01' }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as { id: string; peringatan?: string };
+    expect(body.peringatan).toBeDefined();
+    expect(body.peringatan).toContain('2');
+  });
+
+  it('tidak memperingatkan kalau hewannya punya kandang', async () => {
+    const { id: kandangId } = await buatKandang();
+    const res = await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ kandangId, animalId: 'cupang', tanggalMasuk: '2026-02-01' }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as { id: string; peringatan?: string };
+    expect(body.peringatan).toBeUndefined();
+  });
+
+  it('tidak memperingatkan kalau spesiesnya tidak punya tugas kandang sama sekali', async () => {
+    // anjing-kampung: seluruh tugasnya bersasaran hewan, jadi tanpa kandang
+    // pun tidak ada yang dorman.
+    const res = await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ animalId: 'anjing-kampung', tanggalMasuk: '2026-02-01' }),
+    });
+    expect(res.status).toBe(201);
+    const body = await res.json() as { id: string; peringatan?: string };
+    expect(body.peringatan).toBeUndefined();
   });
 
   it('jumlah minimal satu', async () => {
