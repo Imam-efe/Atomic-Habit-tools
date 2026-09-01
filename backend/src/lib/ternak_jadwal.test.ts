@@ -162,6 +162,20 @@ describe('tugas custom', () => {
     }];
     expect(jadwalSubjek(subjek(), [], ubahan, new Map(), HARI_INI)).toEqual([]);
   });
+
+  it('tiapHari nol atau negatif diabaikan, jangan dijadwalkan tiap hari', () => {
+    const ubahanNol: Ubahan[] = [{
+      kodeTugas: 'entah', tiapHari: 0, nonaktif: false,
+      namaKustom: 'Entah nol', caraKustom: null,
+    }];
+    expect(jadwalSubjek(subjek(), [], ubahanNol, new Map(), HARI_INI)).toEqual([]);
+
+    const ubahanNegatif: Ubahan[] = [{
+      kodeTugas: 'entah', tiapHari: -5, nonaktif: false,
+      namaKustom: 'Entah negatif', caraKustom: null,
+    }];
+    expect(jadwalSubjek(subjek(), [], ubahanNegatif, new Map(), HARI_INI)).toEqual([]);
+  });
 });
 
 describe('urutan', () => {
