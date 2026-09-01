@@ -78,6 +78,11 @@ describe('kandang', () => {
     expect(res.status).toBe(400);
   });
 
+  it('menolak jenis di luar daftar', async () => {
+    const { res } = await buatKandang({ jenis: 'lemari' });
+    expect(res.status).toBe(400);
+  });
+
   it('PATCH milik orang lain 404 dan tidak mengubah apa pun', async () => {
     const { id } = await buatKandang();
     const res = await req(`/api/ternak/kandang/${id}`, {
@@ -207,6 +212,23 @@ describe('hewan', () => {
 
     const body = await (await req('/api/ternak')).json() as { hewan: Array<{ kandangId: string }> };
     expect(body.hewan[0].kandangId).toBe(k2);
+  });
+
+  it('menolak memindahkan hewan ke kandang milik orang lain', async () => {
+    const id = (await (await req('/api/ternak/hewan', {
+      method: 'POST', body: JSON.stringify({ animalId: 'cupang', tanggalMasuk: '2026-02-01' }),
+    })).json() as { id: string }).id;
+    const { id: kandangOrangLain } = await buatKandang({}, otherToken);
+
+    const res = await req(`/api/ternak/hewan/${id}`, {
+      method: 'PATCH', body: JSON.stringify({ kandangId: kandangOrangLain }),
+    });
+    expect(res.status).toBe(404);
+
+    // 404 yang diam-diam tetap menulis lebih berbahaya daripada 404 biasa —
+    // pastikan hewan ini tidak ikut pindah ke kandang orang lain.
+    const body = await (await req('/api/ternak')).json() as { hewan: Array<{ kandangId: string | null }> };
+    expect(body.hewan[0].kandangId).toBeNull();
   });
 
   it('kebun kosong menghasilkan ringkasan nol, bukan galat', async () => {
