@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { resolvePlants } from './garden';
+import { namaSubjekHewan } from './ternak';
 
 const search = new Hono<AuthContext>();
 search.use('/*', requireAuth);
@@ -47,7 +48,7 @@ search.get('/', async (c) => {
   const p = likePattern(q);
   const uid = user.sub;
 
-  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events, userNotes, garden, recipes] = await Promise.all([
+  const [budget, inventory, habits, goals, projects, tasks, kids, debts, events, userNotes, garden, recipes, ternakHewan, ternakKandang] = await Promise.all([
     c.env.DB.prepare(
       `SELECT id, type, amount_idr, category, note, entry_date FROM budget_entries
        WHERE user_id = ?1 AND (note LIKE ?2 ESCAPE '\\' OR category LIKE ?2 ESCAPE '\\')
@@ -145,6 +146,26 @@ search.get('/', async (c) => {
        ORDER BY created_at DESC LIMIT ?3`
     ).bind(uid, p, PER_SOURCE).all<{
       id: string; name: string; have_json: string; missing_json: string; minutes: number | null;
+    }>(),
+
+    // animal_id (slug katalog, mis. 'kucing-domestik') dicocokkan juga —
+    // panggilan sering diketik lebih pendek dari spesiesnya.
+    c.env.DB.prepare(
+      `SELECT id, animal_id, nama_kustom, nama_panggilan, status FROM ternak_hewan
+       WHERE user_id = ?1 AND status = 'hidup'
+         AND (nama_kustom LIKE ?2 ESCAPE '\\' OR nama_panggilan LIKE ?2 ESCAPE '\\' OR animal_id LIKE ?2 ESCAPE '\\')
+       ORDER BY created_at DESC LIMIT ?3`
+    ).bind(uid, p, PER_SOURCE).all<{
+      id: string; animal_id: string | null; nama_kustom: string | null;
+      nama_panggilan: string | null; status: string;
+    }>(),
+
+    c.env.DB.prepare(
+      `SELECT id, nama, jenis, lokasi FROM ternak_kandang
+       WHERE user_id = ?1 AND status = 'aktif' AND (nama LIKE ?2 ESCAPE '\\' OR lokasi LIKE ?2 ESCAPE '\\')
+       ORDER BY created_at DESC LIMIT ?3`
+    ).bind(uid, p, PER_SOURCE).all<{
+      id: string; nama: string; jenis: string; lokasi: string | null;
     }>(),
   ]);
 
@@ -285,6 +306,24 @@ search.get('/', async (c) => {
         subScreen: 'garden',
       };
     }),
+    ...(ternakHewan.results ?? []).map(h => ({
+      type: 'ternak',
+      label: 'Ternak',
+      id: h.id,
+      title: namaSubjekHewan(h),
+      subtitle: null,
+      date: null,
+      subScreen: 'ternak',
+    })),
+    ...(ternakKandang.results ?? []).map(k => ({
+      type: 'ternak',
+      label: 'Ternak',
+      id: k.id,
+      title: k.nama,
+      subtitle: [k.jenis, k.lokasi].filter(Boolean).join(' · ') || null,
+      date: null,
+      subScreen: 'ternak',
+    })),
   ];
 
   // Dated hits first, newest first — a search is nearly always about something

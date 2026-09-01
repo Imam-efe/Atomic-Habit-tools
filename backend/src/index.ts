@@ -31,10 +31,11 @@ import gardenExtra4 from './routes/garden_extra4';
 import gardenUnit from './routes/garden_unit';
 import gardenGrowth from './routes/garden_growth';
 import ternak from './routes/ternak';
-import ternakCare from './routes/ternak_care';
+import ternakCare, { jadwalPengguna } from './routes/ternak_care';
 import ternakCatalog from './routes/ternak_catalog';
 import ternakHealth from './routes/ternak_health';
 import ternakAi from './routes/ternak_ai';
+import { HARI_TES_AIR } from './lib/ternak_air';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { pendingReviews } from './lib/garden_treatment';
@@ -1060,6 +1061,148 @@ async function triggerMangsaChange(env: Env) {
   }
 }
 
+/**
+ * Pengingat perawatan ternak harian: tugas jatuh tempo yang bukan kategori
+ * mendesak (lihat triggerTernakPenting untuk itu).
+ *
+ * Memakai jadwalPengguna, bukan menghitung ulang sendiri — alasan yang sama
+ * dengan getTernakToday: dua hitungan untuk pertanyaan yang sama pasti
+ * menyimpang.
+ */
+async function triggerTernakCare(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  // Hanya pengguna yang punya push subscription DAN benar-benar punya
+  // kandang atau hewan — sisanya tidak ada gunanya dihitung.
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT s.user_id
+      FROM push_subscriptions s
+     WHERE EXISTS (SELECT 1 FROM ternak_kandang k WHERE k.user_id = s.user_id AND k.status = 'aktif')
+        OR EXISTS (SELECT 1 FROM ternak_hewan h WHERE h.user_id = s.user_id AND h.status = 'hidup')
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.ternak')) continue;
+    if (num(settings, 'notify.ternak.hour') !== nowHour) continue;
+
+    const semua = await jadwalPengguna(env.DB, userId, today);
+    // Tugas penting dikirim terpisah lewat triggerTernakPenting supaya tidak
+    // tenggelam di bawah tugas rutin seperti potong kuku.
+    const jatuhTempo = semua.filter((t) => t.berikutnya <= today && !t.penting);
+    if (jatuhTempo.length === 0) continue;
+
+    const lines = jatuhTempo.slice(0, 8).map((t) => `🐾 ${t.nama} — ${t.labelTugas}`);
+    const title = `🐾 ${jatuhTempo.length} tugas ternak jatuh tempo`;
+    const body = lines.join('\n');
+
+    if (!(await claimDailyAlert(env.DB, userId, 'ternak_care', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'ternak_care', title, body, { url: '/ternak' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/ternak' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'ternak_care', today);
+    }
+  }
+}
+
+/**
+ * Tugas yang kelalaiannya berujung mati, dikirim terpisah.
+ *
+ * Digabung ke pengingat harian biasa, "ganti lampu UVB" akan berada di baris
+ * keenam di bawah "potong kuku" dan tenggelam. Pemisahan inilah gunanya
+ * kolom `penting` di katalog.
+ */
+async function triggerTernakPenting(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT s.user_id
+      FROM push_subscriptions s
+     WHERE EXISTS (SELECT 1 FROM ternak_kandang k WHERE k.user_id = s.user_id AND k.status = 'aktif')
+        OR EXISTS (SELECT 1 FROM ternak_hewan h WHERE h.user_id = s.user_id AND h.status = 'hidup')
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    // Sakelar induk tetap dihormati: mematikan modul Ternak mematikan semua
+    // pengingatnya sekaligus, termasuk yang mendesak ini.
+    if (!bool(settings, 'notify.ternak')) continue;
+    if (!bool(settings, 'notify.ternak_penting')) continue;
+    if (num(settings, 'notify.ternak.hour') !== nowHour) continue;
+
+    const semua = await jadwalPengguna(env.DB, userId, today);
+    const jatuhTempo = semua.filter((t) => t.berikutnya <= today && t.penting);
+    if (jatuhTempo.length === 0) continue;
+
+    const lines = jatuhTempo.slice(0, 8).map((t) => `⚠️ ${t.nama} — ${t.labelTugas}`);
+    const title = '⚠️ Tugas ternak mendesak';
+    const body = lines.join('\n');
+
+    if (!(await claimDailyAlert(env.DB, userId, 'ternak_penting', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'ternak_penting', title, body, { url: '/ternak' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/ternak' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'ternak_penting', today);
+    }
+  }
+}
+
+/** Kandang berair yang lebih dari HARI_TES_AIR tidak dites, atau belum pernah. */
+async function triggerTernakAir(env: Env) {
+  const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
+  const today = jakartaToday();
+
+  const users = await env.DB.prepare(`
+    SELECT DISTINCT k.user_id
+      FROM ternak_kandang k
+      JOIN push_subscriptions s ON s.user_id = k.user_id
+     WHERE k.status = 'aktif' AND k.habitat != 'darat'
+  `).all<{ user_id: string }>();
+
+  for (const { user_id: userId } of users.results ?? []) {
+    const settings = await loadSettings(env.DB, userId);
+    if (!bool(settings, 'notify.ternak')) continue;
+    if (!bool(settings, 'notify.ternak_air')) continue;
+    if (num(settings, 'notify.ternak.hour') !== nowHour) continue;
+
+    const rows = await env.DB.prepare(`
+      SELECT k.id, k.nama,
+             (SELECT MAX(a.tanggal) FROM ternak_air a WHERE a.kandang_id = k.id) AS last_test
+        FROM ternak_kandang k
+       WHERE k.user_id = ?1 AND k.status = 'aktif' AND k.habitat != 'darat'
+    `).bind(userId).all<{ id: string; nama: string; last_test: string | null }>();
+
+    const lines: string[] = [];
+    for (const r of rows.results ?? []) {
+      // Belum pernah dites bukan berarti baru dites. Ditagih sekali saja, dan
+      // kandang yang tidak pernah dites tidak akan pernah lolos.
+      const umur = r.last_test ? daysBetween(r.last_test, today) : null;
+      if (umur !== null && umur < HARI_TES_AIR) continue;
+
+      lines.push(umur === null
+        ? `💧 ${r.nama} — air belum pernah dites`
+        : `💧 ${r.nama} — air sudah ${umur} hari tidak dites`);
+    }
+
+    if (lines.length === 0) continue;
+
+    const title = '💧 Tes air kandang';
+    const body = lines.slice(0, 8).join('\n');
+
+    if (!(await claimDailyAlert(env.DB, userId, 'ternak_air', today))) continue;
+
+    await queueNotificationEvent(env, userId, 'ternak_air', title, body, { url: '/ternak' });
+    const result = await sendPushToUser(env, userId, { title, body, url: '/ternak' });
+    if (result.subscriptions === 0) {
+      await releaseDailyAlert(env.DB, userId, 'ternak_air', today);
+    }
+  }
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -1079,6 +1222,9 @@ const handler = {
       triggerHarvestDue(env).catch((err) => console.error('Harvest due push failed', err)),
       triggerSolutionChange(env).catch((err) => console.error('Solution change push failed', err)),
       triggerMangsaChange(env).catch((err) => console.error('Mangsa change push failed', err)),
+      triggerTernakCare(env).catch((err) => console.error('Ternak care push failed', err)),
+      triggerTernakPenting(env).catch((err) => console.error('Ternak urgent push failed', err)),
+      triggerTernakAir(env).catch((err) => console.error('Ternak water test push failed', err)),
       processStreakFreezes(env).catch((err) => console.error('Streak freeze grant failed', err)),
       triggerMorningBrief(env).catch((err) => console.error('Morning brief push failed', err)),
       triggerBillRadar(env).catch((err) => console.error('Bill radar push failed', err)),

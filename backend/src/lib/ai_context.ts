@@ -14,11 +14,13 @@
  */
 
 import type { D1Database } from '@cloudflare/workers-types';
+import { jadwalPengguna } from '../routes/ternak_care';
+import { HARI_TES_AIR } from './ternak_air';
 
 /** Modul yang punya potret sendiri. Sama dengan tab dan sub-layar di aplikasi. */
 export const MODULES = [
   'kebiasaan', 'uang', 'inventaris', 'kebun', 'kalender',
-  'catatan', 'proyek', 'nutrisi', 'masakan',
+  'catatan', 'proyek', 'nutrisi', 'masakan', 'ternak',
 ] as const;
 
 export type ModuleKey = (typeof MODULES)[number];
@@ -215,6 +217,65 @@ const buildNutrisi: Builder = async (db, userId, today) => {
 };
 
 /**
+ * Kandang, hewan, tugas telat, dan peringatan air, dalam satu potret.
+ *
+ * Memakai jadwalPengguna untuk tugas telat — alasan yang sama dengan
+ * getTernakToday dan ketiga push ternak: dua hitungan untuk pertanyaan yang
+ * sama pasti menyimpang.
+ */
+const buildTernak: Builder = async (db, userId, today) => {
+  const [kandangRows, hewanRows, semua] = await Promise.all([
+    db.prepare(
+      `SELECT id, nama, habitat FROM ternak_kandang WHERE user_id = ?1 AND status = 'aktif'`
+    ).bind(userId).all<{ id: string; nama: string; habitat: string }>(),
+    db.prepare(
+      `SELECT jumlah FROM ternak_hewan WHERE user_id = ?1 AND status = 'hidup'`
+    ).bind(userId).all<{ jumlah: number }>(),
+    jadwalPengguna(db, userId, today),
+  ]);
+
+  const kandang = kandangRows.results ?? [];
+  const hewan = hewanRows.results ?? [];
+  if (kandang.length === 0 && hewan.length === 0) return ['Belum ada kandang atau hewan yang dicatat.'];
+
+  const ekorTotal = hewan.reduce((n, h) => n + h.jumlah, 0);
+  const lines = [`${kandang.length} kandang aktif, ${ekorTotal} ekor hidup.`];
+
+  const telat = semua.filter((t) => t.berikutnya <= today);
+  const penting = telat.filter((t) => t.penting);
+  if (telat.length > 0) {
+    lines.push(
+      `${telat.length} tugas jatuh tempo${penting.length > 0 ? `, ${penting.length} di antaranya mendesak` : ''}.`
+    );
+    for (const t of telat.slice(0, 10)) {
+      lines.push(`- ${t.nama}: ${t.labelTugas}${t.penting ? ' (mendesak)' : ''}`);
+    }
+  } else {
+    lines.push('Tidak ada tugas ternak yang jatuh tempo.');
+  }
+
+  // Peringatan air: kandang berair yang lama tidak dites atau belum pernah.
+  const kandangAir = kandang.filter((k) => k.habitat !== 'darat');
+  if (kandangAir.length > 0) {
+    const lastTests = await db.prepare(
+      `SELECT kandang_id, MAX(tanggal) AS last_test FROM ternak_air
+         WHERE user_id = ?1 GROUP BY kandang_id`
+    ).bind(userId).all<{ kandang_id: string; last_test: string }>();
+    const lastMap = new Map((lastTests.results ?? []).map((r) => [r.kandang_id, r.last_test]));
+
+    for (const k of kandangAir) {
+      const last = lastMap.get(k.id) ?? null;
+      const umur = last ? selisihHari(last, today) : null;
+      if (umur === null || umur >= HARI_TES_AIR) {
+        lines.push(`- ${k.nama}: air ${umur === null ? 'belum pernah dites' : `sudah ${umur} hari tidak dites`}.`);
+      }
+    }
+  }
+
+  return lines;
+};
+
+/**
  * Masakan membaca inventaris — bahan yang dimiliki adalah seluruh dasar
  * saran masak, jadi tidak ada potret terpisah untuknya.
  */
@@ -228,6 +289,7 @@ const BUILDERS: Record<ModuleKey, Builder> = {
   proyek: buildProyek,
   nutrisi: buildNutrisi,
   masakan: buildInventaris,
+  ternak: buildTernak,
 };
 
 const JUDUL: Record<ModuleKey, string> = {
@@ -240,6 +302,7 @@ const JUDUL: Record<ModuleKey, string> = {
   proyek: 'TUGAS & PROYEK',
   nutrisi: 'NUTRISI',
   masakan: 'BAHAN DI INVENTARIS',
+  ternak: 'TERNAK',
 };
 
 /**

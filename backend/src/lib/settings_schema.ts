@@ -97,6 +97,15 @@ export const SETTINGS: SettingDef[] = [
   // untuk tidak jadi bising, dan justru hari itulah saran tanamnya berubah.
   toggle('notify.garden_mangsa', 'notifikasi', 'Pergantian Mangsa', true, 'Hari pertama mangsa baru dan saran tanamnya.'),
 
+  // Sakelar induk modul Ternak. Ketiga push di bawahnya menghormatinya,
+  // mengikuti pola sakelar induk Perawatan Kebun: mematikan modulnya
+  // mematikan semua pengingatnya sekaligus.
+  toggle('notify.ternak', 'notifikasi', 'Ternak', true, 'Perawatan hewan dan kandang.'),
+  hour('notify.ternak.hour', 'Jam kirim Ternak', 7),
+
+  toggle('notify.ternak_penting', 'notifikasi', 'Ternak Mendesak', true, 'Tugas yang kelalaiannya berujung mati, dikirim terpisah.'),
+  toggle('notify.ternak_air', 'notifikasi', 'Tes Air Kandang', true, 'Kandang berair yang lama tidak dites.'),
+
   toggle('notify.expiry', 'notifikasi', 'Stok Mau Kedaluwarsa', true),
   hour('notify.expiry.hour', 'Jam kirim Stok Kedaluwarsa', 8),
 

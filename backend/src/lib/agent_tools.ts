@@ -27,6 +27,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { nanoid } from './nanoid';
 import { PLANTS, PLANT_BY_ID, dipanen } from '../data/plants';
+import { ANIMALS, ANIMAL_BY_ID } from '../data/animals';
 import { addHarvestToInventory } from '../routes/garden';
 import { pilahBahan, type StockItem } from './cooking';
 import type { ModuleKey } from './ai_context';
@@ -161,6 +162,31 @@ export function cocokkanTanaman(nama: string): string | null {
 
   if (kandidat.length === 0) return null;
   return kandidat.reduce((a, b) => (b.name.length > a.name.length ? b : a)).id;
+}
+
+/**
+ * Cocokkan nama bebas ke katalog hewan/ternak.
+ *
+ * Sama persis alasannya dengan cocokkanTanaman: model menulis "kucing"
+ * sedangkan katalog menyimpan "Kucing domestik", dan tanpa pencocokan longgar
+ * hewannya masuk sebagai nama kustom dan kehilangan seluruh jadwal
+ * perawatannya.
+ */
+export function cocokkanHewan(nama: string): string | null {
+  const q = nama.toLowerCase().trim();
+  if (ANIMAL_BY_ID.has(q)) return q;
+
+  const exact = ANIMALS.find((a) => a.nama.toLowerCase() === q);
+  if (exact) return exact.id;
+
+  const kata = new Set(q.split(/\s+/).filter(Boolean));
+  const kandidat = ANIMALS.filter((a) => {
+    const namaKata = a.nama.toLowerCase().split(/\s+/).filter(Boolean);
+    return namaKata.every((w) => kata.has(w)) || [...kata].every((w) => namaKata.includes(w));
+  });
+
+  if (kandidat.length === 0) return null;
+  return kandidat.reduce((a, b) => (b.nama.length > a.nama.length ? b : a)).id;
 }
 
 // ─────────────────────────────────── alat ───────────────────────────────────
@@ -327,6 +353,143 @@ const tools: AgentTool[] = [
           "UPDATE garden_plantings SET status = 'tumbuh' WHERE id = ?1 AND user_id = ?2 AND status = 'panen'"
         ).bind(plantingId, ctx.userId).run();
       }
+    },
+  },
+
+  {
+    name: 'ternak.tambah',
+    table: 'ternak_hewan',
+    module: 'ternak',
+    risk: 'aman',
+    description:
+      'Mencatat satu atau beberapa hewan/ternak baru. Pakai ini kalau pengguna bilang baru beli, dikasih, atau menetaskan hewan.',
+    args: {
+      hewan: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Nama spesies atau nama panggilan, satu per elemen. Contoh: ["Kucing domestik", "Lovebird"]',
+      },
+      kandang: { type: 'string', description: 'Nama kandang tempat hewan ini tinggal. Kosongkan kalau tidak disebut atau tidak berkandang.' },
+      jumlah: { type: 'number', description: 'Jumlah per baris, misal 30 ekor lele dalam satu kolam. Default 1.' },
+      tanggal: { type: 'string', description: 'Tanggal masuk YYYY-MM-DD. Kosongkan untuk hari ini.' },
+    },
+    required: ['hewan'],
+    async run(ctx, args) {
+      const nama = daftarTeks(args, 'hewan', 15);
+      const namaKandang = teksOpsional(args, 'kandang', 80);
+      const jumlah = Math.round(angka(args, 'jumlah', 1));
+      const masuk = tanggal(args, 'tanggal', ctx.today);
+
+      let kandangId: string | null = null;
+      if (namaKandang) {
+        const k = await ctx.db.prepare(
+          `SELECT id FROM ternak_kandang
+            WHERE user_id = ?1 AND status = 'aktif' AND LOWER(nama) LIKE ?2
+            ORDER BY created_at DESC LIMIT 1`
+        ).bind(ctx.userId, `%${namaKandang.toLowerCase()}%`).first<{ id: string }>();
+        if (!k) throw new ToolError(`tidak menemukan kandang "${namaKandang}"`);
+        kandangId = k.id;
+      }
+
+      const ids: string[] = [];
+      const statements = nama.map((n) => {
+        const id = nanoid();
+        ids.push(id);
+        const animalId = cocokkanHewan(n);
+
+        return ctx.db.prepare(
+          `INSERT INTO ternak_hewan
+             (id, user_id, kandang_id, animal_id, nama_kustom, jumlah, tanggal_masuk)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+        ).bind(id, ctx.userId, kandangId, animalId, animalId ? null : n, jumlah, masuk);
+      });
+
+      await ctx.db.batch(statements);
+      return { ringkasan: `${nama.length} hewan dicatat: ${nama.join(', ')}.`, ids };
+    },
+  },
+
+  {
+    name: 'ternak.catat',
+    table: 'ternak_log',
+    module: 'ternak',
+    risk: 'aman',
+    description:
+      'Mencatat satu tugas perawatan ternak yang sudah selesai dikerjakan, misalnya ganti air, potong kuku, atau vaksin.',
+    args: {
+      subjek: { type: 'string', description: 'Nama hewan atau kandang yang dirawat, seperti tertulis di daftar Ternak.' },
+      tugas: { type: 'string', description: 'Nama tugas yang dikerjakan, misal "ganti air" atau "potong kuku".' },
+      tanggal: { type: 'string', description: 'YYYY-MM-DD. Kosongkan untuk hari ini.' },
+      catatan: { type: 'string' },
+    },
+    required: ['subjek', 'tugas'],
+    async run(ctx, args) {
+      const subjek = teks(args, 'subjek', 80);
+      const namaTugas = teks(args, 'tugas', 80);
+      const q = `%${subjek.toLowerCase()}%`;
+
+      // Hewan dicari lebih dulu: kalimat pengguna jauh lebih sering menyebut
+      // nama panggilan seekor hewan daripada nama kandangnya.
+      const hewan = await ctx.db.prepare(
+        `SELECT id, animal_id FROM ternak_hewan
+          WHERE user_id = ?1 AND status = 'hidup'
+            AND (LOWER(COALESCE(nama_panggilan, '')) LIKE ?2
+              OR LOWER(COALESCE(nama_kustom, '')) LIKE ?2
+              OR LOWER(COALESCE(animal_id, '')) LIKE ?2)
+          ORDER BY created_at DESC LIMIT 1`
+      ).bind(ctx.userId, q).first<{ id: string; animal_id: string | null }>();
+
+      let subjekTipe: 'hewan' | 'kandang';
+      let subjekId: string;
+      let animalId: string | null;
+
+      if (hewan) {
+        subjekTipe = 'hewan';
+        subjekId = hewan.id;
+        animalId = hewan.animal_id;
+      } else {
+        const kandang = await ctx.db.prepare(
+          `SELECT id FROM ternak_kandang
+            WHERE user_id = ?1 AND status = 'aktif' AND LOWER(nama) LIKE ?2
+            ORDER BY created_at DESC LIMIT 1`
+        ).bind(ctx.userId, q).first<{ id: string }>();
+        if (!kandang) throw new ToolError(`tidak menemukan hewan atau kandang "${subjek}" di Ternak`);
+
+        subjekTipe = 'kandang';
+        subjekId = kandang.id;
+
+        // Kode tugasnya diambil dari spesies penghuni pertama — sama seperti
+        // jadwalPengguna mengambil tugas kandang dari penghuninya.
+        const penghuni = await ctx.db.prepare(
+          `SELECT animal_id FROM ternak_hewan
+            WHERE kandang_id = ?1 AND user_id = ?2 AND status = 'hidup'
+            ORDER BY created_at ASC LIMIT 1`
+        ).bind(kandang.id, ctx.userId).first<{ animal_id: string | null }>();
+        animalId = penghuni?.animal_id ?? null;
+      }
+
+      // Nama tugas dicocokkan ke katalog spesiesnya kalau ada, supaya
+      // tersimpan dengan kode yang sama dipakai jadwal — bukan kode buatan
+      // yang tidak akan pernah cocok dengan apa pun di sana.
+      const katalog = animalId ? (ANIMAL_BY_ID.get(animalId)?.tugas ?? []) : [];
+      const cocok =
+        katalog.find((t) => t.nama.toLowerCase() === namaTugas.toLowerCase()) ??
+        katalog.find(
+          (t) => t.nama.toLowerCase().includes(namaTugas.toLowerCase())
+            || namaTugas.toLowerCase().includes(t.nama.toLowerCase())
+        );
+      const kodeTugas = cocok?.kode ?? namaTugas.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
+
+      const id = nanoid();
+      await ctx.db.prepare(
+        `INSERT INTO ternak_log (id, user_id, subjek_tipe, subjek_id, kode_tugas, tanggal, catatan)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
+      ).bind(
+        id, ctx.userId, subjekTipe, subjekId, kodeTugas,
+        tanggal(args, 'tanggal', ctx.today), teksOpsional(args, 'catatan', 200)
+      ).run();
+
+      return { ringkasan: `${cocok?.nama ?? namaTugas} untuk ${subjek} dicatat.`, ids: [id] };
     },
   },
 
