@@ -16,6 +16,12 @@ interface Shutdown {
     terlantar: number;
     contoh: string[];
   };
+  ternak: {
+    tugasJatuhTempo: number;
+    penting: number;
+    kandangSesak: number;
+    contoh: string[];
+  };
 }
 
 const MOODS = [
@@ -37,6 +43,7 @@ export default function TutupHariScreen() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [kebun, setKebun] = useState<Shutdown['kebun'] | null>(null);
+  const [ternak, setTernak] = useState<Shutdown['ternak'] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +56,7 @@ export default function TutupHariScreen() {
         setPriorities([0, 1, 2].map((i) => data.topPriorities[i] ?? ''));
         setSaved(data.done);
         setKebun(data.kebun ?? null);
+        setTernak(data.ternak ?? null);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -126,6 +134,29 @@ export default function TutupHariScreen() {
               </div>
               {kebun.contoh.length > 0 && (
                 <div className="text-[11px]" style={{ color: 'var(--text3)' }}>{kebun.contoh.join(', ')}</div>
+              )}
+            </motion.div>
+          )}
+
+          {/* Sama alasannya dengan kebun: kesempatan terakhir hari itu untuk
+              tugas rawat yang masih bisa dikerjakan sebelum tidur — dan di
+              sini, kelalaian yang dibawa ke besok bisa berarti hewan mati. */}
+          {ternak && (ternak.tugasJatuhTempo + ternak.kandangSesak) > 0 && (
+            <motion.div
+              className="rounded-[18px] p-4 mb-3 flex flex-col gap-1.5"
+              style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...springs.gentle, delay: 0.03 }}
+            >
+              <div className="text-sm font-bold" style={{ color: 'var(--text)' }}>🐾 Ternak belum selesai</div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--text2)' }}>
+                <span>📋 {ternak.tugasJatuhTempo} tugas jatuh tempo</span>
+                {ternak.penting > 0 && <span style={{ color: '#ff3b30' }}>🚨 {ternak.penting} penting</span>}
+                {ternak.kandangSesak > 0 && <span style={{ color: '#ff9f0a' }}>🏠 {ternak.kandangSesak} kandang sesak</span>}
+              </div>
+              {ternak.contoh.length > 0 && (
+                <div className="text-[11px]" style={{ color: 'var(--text3)' }}>{ternak.contoh.join(', ')}</div>
               )}
             </motion.div>
           )}
