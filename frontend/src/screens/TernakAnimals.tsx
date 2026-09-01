@@ -269,6 +269,11 @@ export function TernakAnimalsTab({
                     <span style={{ color: KESULITAN_COLOR[h.kesulitan] ?? 'var(--text3)' }}> · {h.kesulitan}</span>
                   )}
                 </p>
+                {h.tugasKandangDorman && (
+                  <p className="text-[10px] mt-0.5" style={{ color: 'var(--warn)' }}>
+                    💤 Belum punya kandang — sebagian tugas perawatannya belum terjadwal
+                  </p>
+                )}
               </div>
               <span className="text-[11px] font-bold flex-shrink-0" style={{ color: STATUS_COLOR[h.status] ?? 'var(--text3)' }}>
                 {STATUS_HEWAN_LABEL[h.status] ?? h.status}

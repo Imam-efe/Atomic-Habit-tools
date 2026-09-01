@@ -66,7 +66,12 @@ export function TernakCatalogTab({
   const [detail, setDetail] = useState<AnimalDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
-  /** Kandang tujuan opsional — mengisi ini di sini menghemat satu langkah di formulir Hewan sesudahnya. */
+  /**
+   * Kandang tujuan — boleh dikosongkan di sini, tapi bukan berarti tidak
+   * penting: banyak spesies punya tugas rawat yang menempel ke kandang
+   * (ganti air, bersih kandang), bukan ke hewannya. Tanpa kandang, tugas itu
+   * tidak dijadwalkan siapa pun sampai kandangnya diisi belakangan.
+   */
   const [kandangTujuan, setKandangTujuan] = useState('');
 
   const load = async () => {
@@ -254,12 +259,15 @@ export function TernakCatalogTab({
 
                 {subjekKandang.length > 0 && (
                   <label className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold" style={{ color: 'var(--text3)' }}>Kandang tujuan (opsional)</span>
+                    <span className="text-[10px] font-bold" style={{ color: 'var(--text3)' }}>Kandang tujuan</span>
                     <select className="w-full rounded-xl px-3 py-2 text-xs outline-none" style={inputStyle}
                       value={kandangTujuan} onChange={(e) => setKandangTujuan(e.target.value)}>
                       <option value="">Belum ditentukan</option>
                       {subjekKandang.map((k) => <option key={k.id} value={k.id}>{k.nama}</option>)}
                     </select>
+                    <span className="text-[10px]" style={{ color: 'var(--text3)' }}>
+                      Sebagian tugas rawat menempel ke kandang, bukan ke hewannya — tanpa kandang, tugas itu belum terjadwal.
+                    </span>
                   </label>
                 )}
 

@@ -59,6 +59,8 @@ export interface HewanItem {
   status: string;
   tanggalMasuk: string;
   kesulitan: string | null;
+  /** true = spesiesnya punya tugas bersasaran kandang tapi hewan ini belum punya kandang, jadi tugas itu dorman. */
+  tugasKandangDorman: boolean;
 }
 
 interface TernakResponse {
@@ -156,6 +158,12 @@ export default function TernakScreen() {
   const [kepadatan, setKepadatan] = useState<KepadatanItem[]>([]);
   const [karantina, setKarantina] = useState<KarantinaItem[]>([]);
   const [amoniaKandang, setAmoniaKandang] = useState<{ kandangId: string; nama: string }[]>([]);
+  // Gagal dimuat HARUS beda tampilannya dari "sudah dicek, tidak ada masalah"
+  // — kalau tidak, kandang yang amonianya belum sempat dites akan terlihat
+  // sama amannya dengan kandang yang sungguh sudah dites dan bersih.
+  const [kepadatanError, setKepadatanError] = useState(false);
+  const [karantinaError, setKarantinaError] = useState(false);
+  const [amoniaError, setAmoniaError] = useState(false);
 
   /** Baris jadwal yang carany-nya sedang dibuka, keyed subjekTipe|subjekId|kodeTugas. */
   const [openCara, setOpenCara] = useState<string | null>(null);
@@ -173,16 +181,20 @@ export default function TernakScreen() {
   const loadKepadatan = async () => {
     try {
       setKepadatan((await apiFetch<{ kepadatan: KepadatanItem[] }>('/ternak/kepadatan')).kepadatan);
+      setKepadatanError(false);
     } catch {
       setKepadatan([]);
+      setKepadatanError(true);
     }
   };
 
   const loadKarantina = async () => {
     try {
       setKarantina((await apiFetch<{ today: string; karantina: KarantinaItem[] }>('/ternak/karantina')).karantina);
+      setKarantinaError(false);
     } catch {
       setKarantina([]);
+      setKarantinaError(true);
     }
   };
 
@@ -194,6 +206,7 @@ export default function TernakScreen() {
    */
   const loadAmonia = async (kandang: KandangItem[]) => {
     const berair = kandang.filter((k) => k.habitat !== 'darat' && k.status === 'aktif');
+    let gagal = false;
     const hasil = await Promise.all(
       berair.map(async (k) => {
         try {
@@ -204,11 +217,15 @@ export default function TernakScreen() {
           const bahaya = terakhir?.penilaian.some((p) => p.parameter === 'amonia' && p.status === 'bahaya');
           return bahaya ? { kandangId: k.id, nama: k.nama } : null;
         } catch {
+          // Satu kandang yang gagal dicek tidak boleh diam-diam terlihat
+          // seaman kandang yang benar-benar sudah dites dan bersih.
+          gagal = true;
           return null;
         }
       })
     );
     setAmoniaKandang(hasil.filter((x): x is { kandangId: string; nama: string } => x !== null));
+    setAmoniaError(gagal);
   };
 
   const load = async () => {
@@ -453,6 +470,9 @@ export default function TernakScreen() {
           kepadatan={kepadatan}
           karantina={karantina}
           amoniaKandang={amoniaKandang}
+          kepadatanError={kepadatanError}
+          karantinaError={karantinaError}
+          amoniaError={amoniaError}
           openCara={openCara}
           setOpenCara={setOpenCara}
           logging={logging}
@@ -516,6 +536,7 @@ function relativeTelat(telat: number): string {
 
 function HariIniTab({
   data, jadwal, kepadatan, karantina, amoniaKandang,
+  kepadatanError, karantinaError, amoniaError,
   openCara, setOpenCara, logging, logError, onCatat,
   onFocusKandang, onFocusHewan, onFocusKesehatan,
 }: {
@@ -524,6 +545,9 @@ function HariIniTab({
   kepadatan: KepadatanItem[];
   karantina: KarantinaItem[];
   amoniaKandang: { kandangId: string; nama: string }[];
+  kepadatanError: boolean;
+  karantinaError: boolean;
+  amoniaError: boolean;
   openCara: string | null;
   setOpenCara: (v: string | null) => void;
   logging: string | null;
@@ -535,9 +559,12 @@ function HariIniTab({
 }) {
   const sesak = kepadatan.filter((k) => k.sesak);
   const pentingTelat = (jadwal?.penting ?? []).filter((t) => t.telat > 0);
+  const dorman = (data?.hewan ?? []).filter((h) => h.tugasKandangDorman);
   const tidakAdaApaApa =
     (!data || (data.kandang.length === 0 && data.hewan.length === 0)) &&
-    sesak.length === 0 && pentingTelat.length === 0 && amoniaKandang.length === 0 && karantina.length === 0;
+    sesak.length === 0 && pentingTelat.length === 0 && amoniaKandang.length === 0
+    && karantina.length === 0 && dorman.length === 0
+    && !kepadatanError && !karantinaError && !amoniaError;
 
   if (tidakAdaApaApa) {
     return (
@@ -549,8 +576,23 @@ function HariIniTab({
     );
   }
 
+  const gagalMuat = [
+    kepadatanError && 'kepadatan kandang',
+    amoniaError && 'tes amonia',
+    karantinaError && 'status karantina',
+  ].filter((x): x is string => typeof x === 'string');
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Gagal dimuat ditampilkan tegas, bukan disamarkan jadi "tidak ada
+          masalah" — pengguna yang amonianya belum sempat dicek tidak boleh
+          mengira kandangnya sudah dinyatakan aman. */}
+      {gagalMuat.length > 0 && (
+        <div className="rounded-xl p-2.5 text-[11px]" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-inset)', color: 'var(--text3)' }}>
+          📡 Gagal memuat {gagalMuat.join(', ')} — bukan berarti aman, cuma belum berhasil dicek. Tarik untuk muat ulang.
+        </div>
+      )}
+
       {/* Empat peringatan yang membunuh hewan, di atas daftar — bukan
           menunggu ditemukan di sub-layar. */}
       {pentingTelat.length > 0 && (
@@ -569,6 +611,11 @@ function HariIniTab({
                 {t.nama} — {t.labelTugas}, telat {t.telat} hari
               </button>
             ))}
+            {pentingTelat.length > 5 && (
+              <p className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
+                +{pentingTelat.length - 5} lainnya
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -632,6 +679,34 @@ function HariIniTab({
                 {k.nama} — {k.sisaHari} hari lagi (selesai {k.selesai})
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {dorman.length > 0 && (
+        <div className="rounded-[18px] p-3.5" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)', borderLeft: '3px solid var(--warn)' }}>
+          <p className="text-xs font-extrabold mb-1.5" style={{ color: 'var(--warn)' }}>
+            💤 {dorman.length} hewan belum punya kandang — tugasnya belum terjadwal
+          </p>
+          <p className="text-[11px] mb-1" style={{ color: 'var(--text2)' }}>
+            Sebagian tugas perawatan spesies ini menempel ke kandang, bukan ke hewannya — tanpa kandang, tugas itu diam saja.
+          </p>
+          <div className="flex flex-col gap-1">
+            {dorman.slice(0, 5).map((h) => (
+              <button
+                key={h.id}
+                className="text-left text-[11px]"
+                style={{ color: 'var(--text2)' }}
+                onClick={() => onFocusHewan(h.id, h.nama)}
+              >
+                {h.emoji} {h.nama}
+              </button>
+            ))}
+            {dorman.length > 5 && (
+              <p className="text-[11px] font-semibold" style={{ color: 'var(--text3)' }}>
+                +{dorman.length - 5} lainnya
+              </p>
+            )}
           </div>
         </div>
       )}
