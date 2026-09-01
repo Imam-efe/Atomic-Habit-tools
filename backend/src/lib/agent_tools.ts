@@ -27,7 +27,8 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { nanoid } from './nanoid';
 import { PLANTS, PLANT_BY_ID, dipanen } from '../data/plants';
-import { ANIMALS, ANIMAL_BY_ID } from '../data/animals';
+import { ANIMALS, ANIMAL_BY_ID, type TugasKatalog } from '../data/animals';
+import { spesiesKandang } from './ternak_spesies';
 import { addHarvestToInventory } from '../routes/garden';
 import { pilahBahan, type StockItem } from './cooking';
 import type { ModuleKey } from './ai_context';
@@ -431,22 +432,25 @@ const tools: AgentTool[] = [
       // Hewan dicari lebih dulu: kalimat pengguna jauh lebih sering menyebut
       // nama panggilan seekor hewan daripada nama kandangnya.
       const hewan = await ctx.db.prepare(
-        `SELECT id, animal_id FROM ternak_hewan
+        `SELECT id, animal_id, kandang_id FROM ternak_hewan
           WHERE user_id = ?1 AND status = 'hidup'
             AND (LOWER(COALESCE(nama_panggilan, '')) LIKE ?2
               OR LOWER(COALESCE(nama_kustom, '')) LIKE ?2
               OR LOWER(COALESCE(animal_id, '')) LIKE ?2)
           ORDER BY created_at DESC LIMIT 1`
-      ).bind(ctx.userId, q).first<{ id: string; animal_id: string | null }>();
+      ).bind(ctx.userId, q).first<{ id: string; animal_id: string | null; kandang_id: string | null }>();
 
       let subjekTipe: 'hewan' | 'kandang';
       let subjekId: string;
       let animalId: string | null;
+      /** kandang_id hewan ini, untuk dialihkan kalau tugasnya ternyata bersasaran kandang. */
+      let kandangHewan: string | null = null;
 
       if (hewan) {
         subjekTipe = 'hewan';
         subjekId = hewan.id;
         animalId = hewan.animal_id;
+        kandangHewan = hewan.kandang_id;
       } else {
         const kandang = await ctx.db.prepare(
           `SELECT id FROM ternak_kandang
@@ -460,24 +464,52 @@ const tools: AgentTool[] = [
 
         // Kode tugasnya diambil dari spesies penghuni pertama — sama seperti
         // jadwalPengguna mengambil tugas kandang dari penghuninya.
-        const penghuni = await ctx.db.prepare(
-          `SELECT animal_id FROM ternak_hewan
-            WHERE kandang_id = ?1 AND user_id = ?2 AND status = 'hidup'
-            ORDER BY created_at ASC LIMIT 1`
-        ).bind(kandang.id, ctx.userId).first<{ animal_id: string | null }>();
-        animalId = penghuni?.animal_id ?? null;
+        animalId = await spesiesKandang(ctx.db, kandang.id, ctx.userId);
       }
 
       // Nama tugas dicocokkan ke katalog spesiesnya kalau ada, supaya
       // tersimpan dengan kode yang sama dipakai jadwal — bukan kode buatan
       // yang tidak akan pernah cocok dengan apa pun di sana.
-      const katalog = animalId ? (ANIMAL_BY_ID.get(animalId)?.tugas ?? []) : [];
-      const cocok =
-        katalog.find((t) => t.nama.toLowerCase() === namaTugas.toLowerCase()) ??
-        katalog.find(
+      //
+      // Katalog disaring ke sasaran subjek yang sedang dicatat DULU, sebelum
+      // dicocokkan — kalau tidak, "ganti air" bisa cocok dengan tugas
+      // bersasaran kandang padahal subjeknya seekor ikan, tersimpan dengan
+      // subjek yang salah dan tidak akan pernah terbaca jadwalPengguna, yang
+      // mencari kode itu di kandangnya, bukan di ekornya.
+      const katalog: TugasKatalog[] = animalId ? (ANIMAL_BY_ID.get(animalId)?.tugas ?? []) : [];
+      const cariCocok = (daftar: TugasKatalog[]) =>
+        daftar.find((t) => t.nama.toLowerCase() === namaTugas.toLowerCase()) ??
+        daftar.find(
           (t) => t.nama.toLowerCase().includes(namaTugas.toLowerCase())
             || namaTugas.toLowerCase().includes(t.nama.toLowerCase())
         );
+
+      const sesuaiSasaran = katalog.filter((t) => t.sasaran === subjekTipe);
+      let cocok = cariCocok(sesuaiSasaran);
+      let catatanAlih = '';
+
+      if (!cocok && katalog.length > 0) {
+        const bedaSasaran = katalog.filter((t) => t.sasaran !== subjekTipe);
+        const cocokBeda = cariCocok(bedaSasaran);
+
+        // Satu-satunya arah pengalihan yang punya subjek tunggal yang masuk
+        // akal: seekor hewan yang menyebut tugas kandangnya sendiri,
+        // dialihkan ke kandang itu. Kebalikannya — kandang yang menyebut
+        // tugas per-ekor — tidak punya satu ekor tunggal untuk dituju kalau
+        // penghuninya lebih dari satu, jadi tidak dialihkan.
+        if (cocokBeda && subjekTipe === 'hewan' && cocokBeda.sasaran === 'kandang' && kandangHewan) {
+          subjekTipe = 'kandang';
+          subjekId = kandangHewan;
+          cocok = cocokBeda;
+          catatanAlih = ' (dicatat ke kandangnya — ini tugas kandang, bukan tugas per-ekor)';
+        }
+      }
+
+      if (!cocok && katalog.length > 0) {
+        const namaValid = [...new Set(katalog.map((t) => t.nama))].join(', ');
+        throw new ToolError(`"${namaTugas}" bukan nama tugas untuk ${subjek}. Tugas yang ada: ${namaValid}.`);
+      }
+
       const kodeTugas = cocok?.kode ?? namaTugas.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
 
       const id = nanoid();
@@ -489,7 +521,7 @@ const tools: AgentTool[] = [
         tanggal(args, 'tanggal', ctx.today), teksOpsional(args, 'catatan', 200)
       ).run();
 
-      return { ringkasan: `${cocok?.nama ?? namaTugas} untuk ${subjek} dicatat.`, ids: [id] };
+      return { ringkasan: `${cocok?.nama ?? namaTugas} untuk ${subjek} dicatat.${catatanAlih}`, ids: [id] };
     },
   },
 
