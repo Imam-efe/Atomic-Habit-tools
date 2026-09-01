@@ -32,6 +32,9 @@ import gardenUnit from './routes/garden_unit';
 import gardenGrowth from './routes/garden_growth';
 import ternak from './routes/ternak';
 import ternakCare from './routes/ternak_care';
+import ternakCatalog from './routes/ternak_catalog';
+import ternakHealth from './routes/ternak_health';
+import ternakAi from './routes/ternak_ai';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { pendingReviews } from './lib/garden_treatment';
@@ -144,6 +147,9 @@ app.route('/api/garden', gardenExtra4);
 app.route('/api/garden', gardenUnit);
 app.route('/api/garden', gardenGrowth);
 app.route('/api/garden', garden);
+app.route('/api/ternak', ternakCatalog);   // /katalog dan /katalog/:animalId
+app.route('/api/ternak', ternakHealth);    // /ukur/:id, /air/:id, /kepadatan, /karantina
+app.route('/api/ternak', ternakAi);        // /diagnosa, /tanya
 app.route('/api/ternak', ternakCare);
 app.route('/api/ternak', ternak);   // ternak.ts punya /kandang/:id, dipasang terakhir
 app.route('/api/export', exportRoute);
