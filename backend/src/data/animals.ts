@@ -204,7 +204,7 @@ export const ANIMALS: Animal[] = [
     suhuC: null,
     phAir: null,
     salinitasPpt: null,
-    ruangMinimal: 'Kandang minimal 1 x 0,6 m ditambah waktu bebas berlari di luar kandang tiap hari.',
+    ruangMinimal: 'Kandang minimal 1 x 0,6 m ditambah waktu bebas berlari di luar kandang tiap hari, ditempatkan di tempat teduh dan berventilasi — kelinci tidak berkeringat dan gampang heat stroke kalau kandangnya kena panas langsung, apalagi di atas 30°C.',
     // Kelinci butuh ruang untuk berlari, bukan sekadar volume kandang — angka
     // liter tidak menangkap kebutuhan itu, jadi tidak dipaksakan.
     literPerEkor: null,
@@ -213,12 +213,12 @@ export const ANIMALS: Animal[] = [
     sosial: 'berpasangan',
     tugas: [
       {
-        kode: 'vaksin',
-        nama: 'Vaksin RHD dan myxomatosis',
-        tiapHari: 365,
-        mulaiHari: 70,
+        kode: 'kudis',
+        nama: 'Periksa kudis/tungau',
+        tiapHari: 30,
+        mulaiHari: 0,
         sasaran: 'hewan',
-        cara: 'Vaksin ke dokter hewan mulai umur 10 minggu, diulang tiap tahun. Wabah RHD menyebar cepat dan sering fatal dalam hitungan jam.',
+        cara: 'Periksa telinga, wajah, dan kulit dari kerak tebal keabuan atau bulu rontok disertai gatal — tanda kudis (Sarcoptes), parasit yang sangat umum pada kelinci di iklim lembap Indonesia. Kalau ditemukan, obati dengan ivermectin dari dokter hewan; dibiarkan bisa memicu infeksi kulit sekunder dan kematian.',
         penting: true,
       },
       {
@@ -245,15 +245,15 @@ export const ANIMALS: Animal[] = [
         tiapHari: 3,
         mulaiHari: 0,
         sasaran: 'kandang',
-        cara: 'Buang sisa hay dan kotoran, ganti alas. Kandang lembap dan kotor memicu sore hocks (luka telapak kaki) dan infeksi saluran napas.',
-        penting: false,
+        cara: 'Buang sisa hay dan kotoran, ganti alas dengan yang kering. Kandang lembap adalah pemicu utama koksidiosis — penyebab kematian nomor satu pada anak kelinci — selain memicu sore hocks (luka telapak kaki) dan infeksi saluran napas.',
+        penting: true,
       },
     ],
-    penyakit: ['RHD', 'myxomatosis', 'sore hocks', 'stasis usus'],
+    penyakit: ['kudis (scabies)', 'koksidiosis', 'heat stroke', 'sore hocks', 'stasis usus'],
     kesulitan: 'sedang',
     legal: null,
     bahaya: 'Gigitan jarang, tapi cakaran kaki belakang saat meronta bisa melukai cukup dalam.',
-    tips: 'Jangan pernah kasih pelet sebagai makanan utama — hay harus jadi porsi terbesar, atau usus kelinci berhenti bergerak (stasis) dan itu darurat.',
+    tips: 'Jangan pernah kasih pelet sebagai makanan utama — hay harus jadi porsi terbesar, atau usus kelinci berhenti bergerak (stasis) dan itu darurat. Kelinci yang tiba-tiba berhenti makan lebih dari 12 jam butuh dokter hewan segera, bukan ditunggu.',
   },
 
   // ────────────────────────── UNGGAS ──────────────────────────
