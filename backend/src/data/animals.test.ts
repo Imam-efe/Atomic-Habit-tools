@@ -128,9 +128,16 @@ describe('katalog hewan', () => {
     }
   });
 
-  it('tiap hewan punya sekurangnya satu tugas penting', () => {
+  it('penting adalah boolean eksplisit pada setiap tugas', () => {
+    // Bukan "sekurangnya satu tugas penting per spesies" — tes lama itu
+    // mendorong penulis menandai sesuatu jadi penting hanya demi lulus tes,
+    // bukan karena kelalaiannya sungguh berujung mati. Yang bisa dijaga
+    // tanpa menilai isinya cuma bahwa setiap tugas memang membuat keputusan
+    // eksplisit, true atau false, bukan lupa mengisi sama sekali.
     for (const a of ANIMALS) {
-      expect(a.tugas.some((t) => t.penting), `${a.id} tanpa tugas penting`).toBe(true);
+      for (const t of a.tugas) {
+        expect(typeof t.penting, `${a.id}/${t.kode} penting bukan boolean`).toBe('boolean');
+      }
     }
   });
 
@@ -142,5 +149,120 @@ describe('katalog hewan', () => {
       if (a.grup !== 'reptil') continue;
       expect(a.tugas.some((t) => t.kode === 'uvb'), `${a.id} tanpa tugas uvb`).toBe(true);
     }
+  });
+});
+
+/**
+ * `literPerEkor` yang bertentangan dengan `ruangMinimal` di baris yang sama
+ * pernah lolos review tiga kali (patin, banggai-cardinal, kepe-kepe) karena
+ * tidak ada yang membandingkan keduanya secara mekanis. Fungsi di bawah
+ * menguraikan angka liter dari kalimat `ruangMinimal` lalu membandingkannya
+ * ke `literPerEkor` — dengan aturan yang beda-beda tergantung bagaimana
+ * kalimatnya menyebut jumlah ekor:
+ *
+ *   - Tidak ada penanda kelompok ("sekelompok"/"kawanan") sama sekali: angka
+ *     liternya (atau rentangnya) ADALAH literPerEkor.
+ *   - Kepadatan per meter kubik (budidaya kolam/keramba): dikonversi jadi
+ *     rentang liter/ekor (1000 / kepadatan), lalu dibandingkan.
+ *   - Kelompok dengan jumlah ekor eksplisit dalam kurung, "(A-B ekor)":
+ *     volume dibagi rentang itu.
+ *   - Kelompok dengan HANYA batas bawah, "kawanan minimal N ekor": literPerEkor
+ *     paling banyak volume/N — menambah ekor cuma mengurangi jatah tiap
+ *     ekor, tidak pernah menambah.
+ *   - Kepadatan per meter PERSEGI (bukan kubik) butuh asumsi kedalaman kolam
+ *     yang tidak pernah disebutkan, dan kalimat "sekelompok kecil" tanpa
+ *     angka sama sekali tidak punya pembagi yang bisa diambil — keduanya
+ *     dianggap TIDAK BISA DIURAIKAN dan harus disebut eksplisit di
+ *     `TIDAK_TERURAI`, bukan diam-diam dilewati.
+ */
+type HasilLiter =
+  | { tipe: 'pasti'; nilai: number }
+  | { tipe: 'rentang'; lo: number; hi: number }
+  | { tipe: 'maksimal'; batas: number }
+  | { tipe: 'tidak-terurai'; alasan: string };
+
+function uraikanLiterRuangMinimal(ruangMinimal: string): HasilLiter {
+  const perM2 = /(\d+)\s*-\s*(\d+)\s*ekor per meter persegi|(\d+)\s*ekor per meter persegi/.exec(ruangMinimal);
+  if (perM2) return { tipe: 'tidak-terurai', alasan: 'kepadatan per meter persegi butuh asumsi kedalaman' };
+
+  const perM3 = /(\d+)\s*-\s*(\d+)\s*ekor per meter kubik/.exec(ruangMinimal);
+  if (perM3) {
+    const lo = Number(perM3[1]);
+    const hi = Number(perM3[2]);
+    return { tipe: 'rentang', lo: 1000 / hi, hi: 1000 / lo };
+  }
+
+  const adaKelompok = /sekelompok|kelompok|kawanan/.test(ruangMinimal);
+  const literMatch = /(\d+)\s*-\s*(\d+)\s*liter|(\d+)\s*liter/.exec(ruangMinimal);
+
+  if (adaKelompok) {
+    const dalamKurung = /\((\d+)\s*-\s*(\d+)\s*ekor\)|\((\d+)\s*ekor\)/.exec(ruangMinimal);
+    const minimalSaja = /minimal\s+(\d+)\s*ekor/.exec(ruangMinimal);
+
+    if (!literMatch) return { tipe: 'tidak-terurai', alasan: 'kelompok tanpa angka liter yang bisa dipasangkan' };
+    const volLo = literMatch[1] ? Number(literMatch[1]) : Number(literMatch[3]);
+    const volHi = literMatch[2] ? Number(literMatch[2]) : volLo;
+
+    if (dalamKurung) {
+      const cLo = dalamKurung[1] ? Number(dalamKurung[1]) : Number(dalamKurung[3]);
+      const cHi = dalamKurung[2] ? Number(dalamKurung[2]) : cLo;
+      return { tipe: 'rentang', lo: volLo / cHi, hi: volHi / cLo };
+    }
+    if (minimalSaja) {
+      return { tipe: 'maksimal', batas: volHi / Number(minimalSaja[1]) };
+    }
+    return { tipe: 'tidak-terurai', alasan: 'kelompok tanpa jumlah ekor eksplisit ("sekelompok kecil")' };
+  }
+
+  if (!literMatch) return { tipe: 'tidak-terurai', alasan: 'tidak ada angka liter di ruangMinimal' };
+  const lo = literMatch[1] ? Number(literMatch[1]) : Number(literMatch[3]);
+  const hi = literMatch[2] ? Number(literMatch[2]) : lo;
+  return lo === hi ? { tipe: 'pasti', nilai: lo } : { tipe: 'rentang', lo, hi };
+}
+
+describe('literPerEkor konsisten dengan ruangMinimal', () => {
+  // Spesies yang prosa ruangMinimal-nya genuinely tidak bisa diuraikan jadi
+  // angka liter/ekor — didaftar eksplisit, bukan dilewati diam-diam. Kalau
+  // spesies baru jatuh ke sini tanpa didaftarkan, tesnya gagal dan memaksa
+  // seseorang memutuskan: tulis ulang prosanya supaya bisa diuraikan, atau
+  // tambahkan ke daftar ini dengan sadar.
+  const TIDAK_TERURAI = new Set([
+    'guppy', 'molly', 'platy', 'sepat', // "sekelompok kecil" tanpa angka ekor
+    'nila', 'mujair', 'gurame', // kepadatan per meter PERSEGI, bukan kubik
+    'anemon', 'karang-lunak', // tidak ada angka liter sama sekali di kalimatnya
+  ]);
+
+  const aquatik = ANIMALS.filter((a) => a.habitat !== 'darat' && a.literPerEkor !== null);
+
+  it('setiap spesies akuatik terhitung: terurai dan cocok, atau eksplisit di TIDAK_TERURAI', () => {
+    const takTerdaftarTapiTakTerurai: string[] = [];
+    const terdaftarPadahalTerurai: string[] = [];
+
+    for (const a of aquatik) {
+      const hasil = uraikanLiterRuangMinimal(a.ruangMinimal);
+      const adaDiDaftar = TIDAK_TERURAI.has(a.id);
+
+      if (hasil.tipe === 'tidak-terurai') {
+        if (!adaDiDaftar) takTerdaftarTapiTakTerurai.push(`${a.id} (${hasil.alasan})`);
+        continue;
+      }
+      if (adaDiDaftar) { terdaftarPadahalTerurai.push(a.id); continue; }
+
+      const nilai = a.literPerEkor!;
+      if (hasil.tipe === 'pasti') {
+        expect(nilai, `${a.id}: literPerEkor=${nilai} vs ruangMinimal=${hasil.nilai}`).toBe(hasil.nilai);
+      } else if (hasil.tipe === 'rentang') {
+        expect(nilai, `${a.id}: literPerEkor=${nilai} di bawah rentang ruangMinimal [${hasil.lo.toFixed(1)}, ${hasil.hi.toFixed(1)}]`)
+          .toBeGreaterThanOrEqual(hasil.lo - 0.01);
+        expect(nilai, `${a.id}: literPerEkor=${nilai} di atas rentang ruangMinimal [${hasil.lo.toFixed(1)}, ${hasil.hi.toFixed(1)}]`)
+          .toBeLessThanOrEqual(hasil.hi + 0.01);
+      } else {
+        expect(nilai, `${a.id}: literPerEkor=${nilai} melebihi maksimal ${hasil.batas.toFixed(1)} dari ruangMinimal`)
+          .toBeLessThanOrEqual(hasil.batas + 0.01);
+      }
+    }
+
+    expect(takTerdaftarTapiTakTerurai, 'spesies tidak terurai tapi belum didaftar di TIDAK_TERURAI').toEqual([]);
+    expect(terdaftarPadahalTerurai, 'spesies di TIDAK_TERURAI padahal sekarang bisa diuraikan — keluarkan dari daftar').toEqual([]);
   });
 });
