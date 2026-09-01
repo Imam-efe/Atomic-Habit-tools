@@ -1837,7 +1837,11 @@ export const ANIMALS: Animal[] = [
     phAir: [6.5, 8.5],
     salinitasPpt: null,
     ruangMinimal: 'Kolam tanah/terpal dengan kepadatan tebar 5-10 ekor per meter persegi untuk budidaya semi-intensif.',
-    literPerEkor: 10,
+    // Pada kedalaman kolam sekitar 1 meter, 5-10 ekor/m² berarti sekitar
+    // 100-200 liter per ekor — dihitung dari sisi yang lebih longgar (6-7
+    // ekor/m²) supaya peringatan kepadatan lebih cepat menyala, bukan lebih
+    // lambat, kalau kolamnya ternyata lebih dangkal dari perkiraan ini.
+    literPerEkor: 150,
     pakan: 'Pelet apung sesuai fase umur, bisa ditambah pakan alami (plankton dari pemupukan kolam).',
     frekuensiPakan: '2-3 kali sehari.',
     sosial: 'berkelompok',
@@ -1881,7 +1885,11 @@ export const ANIMALS: Animal[] = [
     phAir: [6.5, 8.0],
     salinitasPpt: null,
     ruangMinimal: 'Kolam dengan kepadatan rendah, 1-3 ekor per meter persegi — gurame tumbuh besar dan lambat, butuh waktu lama sampai ukuran panen.',
-    literPerEkor: 50,
+    // Pada kedalaman kolam sekitar 1 meter, 1-3 ekor/m² berarti sekitar
+    // 330-1000 liter per ekor — dihitung dari sisi yang lebih longgar
+    // (~1,7 ekor/m²) supaya peringatan kepadatan lebih cepat menyala, bukan
+    // lebih lambat, kalau kolamnya ternyata lebih dangkal dari perkiraan ini.
+    literPerEkor: 600,
     pakan: 'Pelet apung, dilengkapi daun-daunan (daun sente, talas, singkong) karena gurame dewasa cenderung omnivora ke arah herbivora.',
     frekuensiPakan: '1-2 kali sehari.',
     sosial: 'berkelompok',
@@ -1969,7 +1977,11 @@ export const ANIMALS: Animal[] = [
     phAir: [6.5, 8.5],
     salinitasPpt: null,
     ruangMinimal: 'Kolam tanah/terpal dengan kepadatan tebar 5-10 ekor per meter persegi.',
-    literPerEkor: 8,
+    // Sama seperti nila: pada kedalaman kolam sekitar 1 meter, 5-10 ekor/m²
+    // berarti sekitar 100-200 liter per ekor — dihitung dari sisi yang lebih
+    // longgar supaya peringatan kepadatan lebih cepat menyala, bukan lebih
+    // lambat, kalau kolamnya ternyata lebih dangkal dari perkiraan ini.
+    literPerEkor: 150,
     pakan: 'Pelet apung, bisa dibantu pakan alami dari pemupukan kolam.',
     frekuensiPakan: '2 kali sehari.',
     sosial: 'berkelompok',
@@ -2708,6 +2720,15 @@ export const ANIMALS: Animal[] = [
         mulaiHari: 0,
         sasaran: 'kandang',
         cara: 'Ganti tabung/lampu UVB intensitas rendah tiap 6 bulan meski masih menyala terang — panduan reptil terkini merekomendasikan UVB rendah tetap disediakan untuk ular meski secara historis dianggap tidak wajib.',
+        penting: false,
+      },
+      {
+        kode: 'cek-suhu',
+        nama: 'Cek suhu kandang',
+        tiapHari: 1,
+        mulaiHari: 0,
+        sasaran: 'kandang',
+        cara: 'Pastikan gradien suhu kandang terjaga dengan termometer di sisi panas dan sisi sejuk, idealnya 24-29°C. Kandang yang terlalu dingin membuat ular jagung gagal mencerna mangsanya dengan benar — makanan yang membusuk di perut sebelum tercerna memicu muntah paksa (regurgitasi) atau impaksi, dan keduanya bisa berujung fatal kalau berulang.',
         penting: true,
       },
       {
