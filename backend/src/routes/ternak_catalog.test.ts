@@ -12,7 +12,7 @@ import catalog from './ternak_catalog';
 import { Hono } from 'hono';
 import { signJWT } from '../lib/jwt';
 import { createTestDb, seedUser, type FakeD1 } from '../test/d1';
-import { ANIMALS } from '../data/animals';
+import { ANIMALS, ANIMAL_BY_ID } from '../data/animals';
 
 const JWT_SECRET = 'rahasia-untuk-test';
 let db: FakeD1;
@@ -78,39 +78,72 @@ describe('GET /api/ternak/katalog', () => {
   });
 
   it('filter grup', async () => {
+    // Bentuk katalognya sengaja bertambah dari waktu ke waktu (lihat
+    // data/animals.ts) — tes ini menguji sifat filternya ("menyaring
+    // grup ini, bukan grup lain"), bukan jumlah/id persis hasilnya, supaya
+    // tidak ikut gagal tiap kali spesies baru ditambah.
     const res = await req('/api/ternak/katalog?grup=ikan-tawar');
     const body = await res.json() as { hewan: Ringkas[] };
-    expect(body.hewan.map((h) => h.id).sort()).toEqual(['cupang', 'koi']);
+    expect(body.hewan.length).toBeGreaterThan(0);
+    expect(body.hewan.every((h) => h.grup === 'ikan-tawar')).toBe(true);
+    const ids = body.hewan.map((h) => h.id);
+    expect(ids).toContain('cupang');
+    expect(ids).not.toContain('ayam-kampung'); // grup unggas, harus tersaring keluar
   });
 
   it('filter habitat', async () => {
     const res = await req('/api/ternak/katalog?habitat=air-laut');
     const body = await res.json() as { hewan: Ringkas[] };
-    expect(body.hewan.map((h) => h.id)).toEqual(['ikan-badut']);
+    expect(body.hewan.length).toBeGreaterThan(0);
+    expect(body.hewan.every((h) => h.habitat === 'air-laut')).toBe(true);
+    const ids = body.hewan.map((h) => h.id);
+    expect(ids).toContain('ikan-badut');
+    expect(ids).not.toContain('kucing-domestik'); // habitat darat, harus tersaring keluar
   });
 
   it('filter peran', async () => {
     const res = await req('/api/ternak/katalog?peran=keduanya');
     const body = await res.json() as { hewan: Ringkas[] };
-    expect(body.hewan.map((h) => h.id)).toEqual(['ayam-kampung']);
+    expect(body.hewan.length).toBeGreaterThan(0);
+    expect(body.hewan.every((h) => h.peran === 'keduanya')).toBe(true);
+    const ids = body.hewan.map((h) => h.id);
+    expect(ids).toContain('ayam-kampung');
+    expect(ids).not.toContain('cupang'); // peran peliharaan, harus tersaring keluar
   });
 
   it('filter kesulitan', async () => {
     const res = await req('/api/ternak/katalog?kesulitan=sulit');
     const body = await res.json() as { hewan: Ringkas[] };
-    expect(body.hewan.map((h) => h.id)).toEqual(['ikan-badut']);
+    expect(body.hewan.length).toBeGreaterThan(0);
+    expect(body.hewan.every((h) => h.kesulitan === 'sulit')).toBe(true);
+    const ids = body.hewan.map((h) => h.id);
+    expect(ids).toContain('ikan-badut');
+    expect(ids).not.toContain('kucing-domestik'); // kesulitan mudah, harus tersaring keluar
   });
 
   it('filter q cocok pada nama, tidak peka huruf besar-kecil', async () => {
     const res = await req('/api/ternak/katalog?q=KUCING');
     const body = await res.json() as { hewan: Ringkas[] };
-    expect(body.hewan.map((h) => h.id)).toEqual(['kucing-domestik']);
+    expect(body.hewan.map((h) => h.id)).toContain('kucing-domestik');
+    // Tiap hasil harus benar-benar mengandung query di nama atau latinnya —
+    // bukan cuma daftar tidak kosong, itu tidak membuktikan apa-apa soal
+    // penyaringannya.
+    for (const h of body.hewan) {
+      const penuh = ANIMAL_BY_ID.get(h.id)!;
+      const cocok = penuh.nama.toLowerCase().includes('kucing') || penuh.latin.toLowerCase().includes('kucing');
+      expect(cocok, `${h.id} tidak benar-benar cocok query "kucing"`).toBe(true);
+    }
   });
 
   it('filter q cocok pada latin, tidak peka huruf besar-kecil', async () => {
     const res = await req('/api/ternak/katalog?q=felis');
     const body = await res.json() as { hewan: Ringkas[] };
-    expect(body.hewan.map((h) => h.id)).toEqual(['kucing-domestik']);
+    expect(body.hewan.map((h) => h.id)).toContain('kucing-domestik');
+    for (const h of body.hewan) {
+      const penuh = ANIMAL_BY_ID.get(h.id)!;
+      const cocok = penuh.nama.toLowerCase().includes('felis') || penuh.latin.toLowerCase().includes('felis');
+      expect(cocok, `${h.id} tidak benar-benar cocok query "felis"`).toBe(true);
+    }
   });
 
   it('filter dengan nilai yang tidak dikenal mengembalikan daftar kosong, bukan seluruh katalog', async () => {
