@@ -31,6 +31,7 @@ import gardenExtra4 from './routes/garden_extra4';
 import gardenUnit from './routes/garden_unit';
 import gardenGrowth from './routes/garden_growth';
 import ternak from './routes/ternak';
+import ternakCare from './routes/ternak_care';
 import { getRain, shouldSkipWatering, wateringNote } from './lib/garden_weather';
 import { findSuccessionDue, type ActivePlanting } from './lib/garden_succession';
 import { pendingReviews } from './lib/garden_treatment';
@@ -143,7 +144,8 @@ app.route('/api/garden', gardenExtra4);
 app.route('/api/garden', gardenUnit);
 app.route('/api/garden', gardenGrowth);
 app.route('/api/garden', garden);
-app.route('/api/ternak', ternak);
+app.route('/api/ternak', ternakCare);
+app.route('/api/ternak', ternak);   // ternak.ts punya /kandang/:id, dipasang terakhir
 app.route('/api/export', exportRoute);
 app.route('/api/habit-bundles', habitBundles);
 app.route('/api/habit-stacks', habitStacks);
