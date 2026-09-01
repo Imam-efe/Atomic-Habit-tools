@@ -103,4 +103,44 @@ describe('katalog hewan', () => {
       expect(grup.has(g as never), `belum ada ${g}`).toBe(true);
     }
   });
+
+  it('jumlah spesies sesuai janji gelombang pertama', () => {
+    expect(ANIMALS.length).toBeGreaterThanOrEqual(60);
+  });
+
+  it('tiap golongan punya cukup pilihan untuk berguna', () => {
+    const per = new Map<string, number>();
+    for (const a of ANIMALS) per.set(a.grup, (per.get(a.grup) ?? 0) + 1);
+    for (const [grup, minimal] of [
+      ['mamalia', 6], ['unggas', 10], ['ikan-tawar', 14],
+      ['ikan-laut', 5], ['reptil', 6], ['ternak-besar', 4],
+    ] as const) {
+      expect(per.get(grup) ?? 0, `${grup} terlalu sedikit`).toBeGreaterThanOrEqual(minimal);
+    }
+  });
+
+  it('tiap hewan berhabitat air punya tugas ganti air bersasaran kandang', () => {
+    // Ikan yang tidak pernah ditagih ganti air adalah ikan yang mati pelan.
+    for (const a of ANIMALS) {
+      if (a.habitat === 'darat') continue;
+      const ada = a.tugas.some((t) => t.sasaran === 'kandang' && /air/i.test(t.nama));
+      expect(ada, `${a.id} tanpa tugas air`).toBe(true);
+    }
+  });
+
+  it('tiap hewan punya sekurangnya satu tugas penting', () => {
+    for (const a of ANIMALS) {
+      expect(a.tugas.some((t) => t.penting), `${a.id} tanpa tugas penting`).toBe(true);
+    }
+  });
+
+  it('reptil berjemur punya tugas ganti UVB', () => {
+    // Lampu UVB berhenti memancarkan UVB jauh sebelum lampunya mati, jadi
+    // "masih menyala" bukan tanda ia masih bekerja. Ini penyebab paling umum
+    // cangkang bengkok pada kura-kura peliharaan.
+    for (const a of ANIMALS) {
+      if (a.grup !== 'reptil') continue;
+      expect(a.tugas.some((t) => t.kode === 'uvb'), `${a.id} tanpa tugas uvb`).toBe(true);
+    }
+  });
 });
