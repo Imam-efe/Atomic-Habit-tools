@@ -119,6 +119,59 @@ describe('ternak.catat', () => {
     expect(log?.subjekId).toBe(hewanId);
   });
 
+  it('tugas custom milik subjek dicocokkan lewat ternak_tugas_ubah, bukan ditolak', async () => {
+    // Mimi (kucing-domestik, katalog bukan kosong) punya tugas custom
+    // 'antibiotik' yang dibuat lewat POST /ternak/tugas/custom. Sebelum
+    // perbaikan, guard katalog>0 menolaknya karena 'antibiotik' bukan nama
+    // tugas katalog kucing.
+    const hewanId = await buatHewan({ kandangId: null, animalId: 'kucing-domestik', namaPanggilan: 'Mimi' });
+    await db.prepare(`
+      INSERT INTO ternak_tugas_ubah (user_id, subjek_tipe, subjek_id, kode_tugas, tiap_hari, nama_kustom, cara_kustom)
+      VALUES ('user-1', 'hewan', ?1, 'antibiotik', 7, 'Antibiotik', 'Sesuai resep dokter')
+    `).bind(hewanId).run();
+
+    const hasil = await catat.run(ctx(), { subjek: 'Mimi', tugas: 'antibiotik' });
+    expect(hasil.ringkasan).toContain('Antibiotik');
+
+    const log = await logTerakhir();
+    expect(log?.subjekTipe).toBe('hewan');
+    expect(log?.subjekId).toBe(hewanId);
+    expect(log?.kodeTugas).toBe('antibiotik');
+  });
+
+  it('tetap menolak kalau tidak cocok dengan katalog maupun tugas custom subjek', async () => {
+    const hewanId = await buatHewan({ kandangId: null, animalId: 'kucing-domestik', namaPanggilan: 'Mimi' });
+    await db.prepare(`
+      INSERT INTO ternak_tugas_ubah (user_id, subjek_tipe, subjek_id, kode_tugas, tiap_hari, nama_kustom, cara_kustom)
+      VALUES ('user-1', 'hewan', ?1, 'antibiotik', 7, 'Antibiotik', 'Sesuai resep dokter')
+    `).bind(hewanId).run();
+
+    try {
+      await catat.run(ctx(), { subjek: 'Mimi', tugas: 'terbang keliling rumah' });
+      expect.fail('harus melempar ToolError');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ToolError);
+      const pesan = (err as ToolError).message;
+      expect(pesan).toContain('Vaksin tahunan');
+      expect(pesan).toContain('Antibiotik');
+    }
+  });
+
+  it('tidak mengalihkan ke kandang yang sudah nonaktif — jatuh ke penolakan', async () => {
+    // Kandang dinonaktifkan dikeluarkan dari jadwalPengguna (ternak_care.ts)
+    // sama seperti hewan tanpa kandang — mengalihkan log ke sana menciptakan
+    // lagi baris yatim yang pengalihan justru dimaksudkan untuk mencegah.
+    const kandangId = await buatKandang();
+    await db.prepare(`UPDATE ternak_kandang SET status = 'nonaktif' WHERE id = ?1`).bind(kandangId).run();
+    const hewanId = await buatHewan({ kandangId, animalId: 'cupang', namaPanggilan: 'Bewok' });
+
+    await expect(catat.run(ctx(), { subjek: 'Bewok', tugas: 'ganti air' })).rejects.toThrow(ToolError);
+
+    const log = await logTerakhir();
+    expect(log).toBeNull();
+    void hewanId;
+  });
+
   it('kandang yang tugasnya cocok dengan tugas bersasaran hewan spesiesnya: tidak dialihkan, ditolak', async () => {
     // ular-jagung punya tugas 'cek-ganti-kulit' bersasaran hewan. Kandangnya
     // tidak boleh mencatat tugas itu atas nama dirinya sendiri — kalaupun

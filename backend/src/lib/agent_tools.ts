@@ -498,19 +498,61 @@ const tools: AgentTool[] = [
         // tugas per-ekor — tidak punya satu ekor tunggal untuk dituju kalau
         // penghuninya lebih dari satu, jadi tidak dialihkan.
         if (cocokBeda && subjekTipe === 'hewan' && cocokBeda.sasaran === 'kandang' && kandangHewan) {
-          subjekTipe = 'kandang';
-          subjekId = kandangHewan;
-          cocok = cocokBeda;
-          catatanAlih = ' (dicatat ke kandangnya — ini tugas kandang, bukan tugas per-ekor)';
+          // Kandang tujuan harus masih aktif. Kandang yang dinonaktifkan
+          // dikeluarkan dari jadwalPengguna (ternak_care.ts) persis seperti
+          // hewan tanpa kandang — mengalihkan ke sana menciptakan lagi baris
+          // yatim yang pengalihan ini justru dimaksudkan untuk mencegah.
+          const kandangAktif = await ctx.db.prepare(
+            `SELECT 1 FROM ternak_kandang WHERE id = ?1 AND user_id = ?2 AND status = 'aktif'`
+          ).bind(kandangHewan, ctx.userId).first();
+          if (kandangAktif) {
+            subjekTipe = 'kandang';
+            subjekId = kandangHewan;
+            cocok = cocokBeda;
+            catatanAlih = ' (dicatat ke kandangnya — ini tugas kandang, bukan tugas per-ekor)';
+          }
         }
       }
 
+      // Tugas custom milik subjek ini sendiri (dibuat lewat POST
+      // /ternak/tugas/custom) bukan bagian dari katalog spesies, tapi
+      // jadwalSubjek tetap menjadwalkannya lewat ternak_tugas_ubah — jadi
+      // sebelum menyerah, cocokkan juga ke situ. Tanpa ini, tugas custom
+      // yang sudah pernah dibuat pengguna tidak akan pernah bisa dicatat
+      // lewat asisten lagi setelah spesiesnya punya katalog sendiri.
+      let cocokKustom: { kode_tugas: string; nama_kustom: string | null } | null = null;
+      let namaKustomSemua: string[] = [];
       if (!cocok && katalog.length > 0) {
-        const namaValid = [...new Set(katalog.map((t) => t.nama))].join(', ');
+        const kustomRows = await ctx.db.prepare(
+          `SELECT kode_tugas, nama_kustom FROM ternak_tugas_ubah
+            WHERE user_id = ?1 AND subjek_tipe = ?2 AND subjek_id = ?3
+              AND nama_kustom IS NOT NULL`
+        ).bind(ctx.userId, subjekTipe, subjekId)
+          .all<{ kode_tugas: string; nama_kustom: string | null }>();
+        const kustom = kustomRows.results ?? [];
+        namaKustomSemua = [...new Set(kustom.map((r) => r.nama_kustom).filter((n): n is string => !!n))];
+        cocokKustom =
+          kustom.find((r) => r.nama_kustom?.toLowerCase() === namaTugas.toLowerCase()) ??
+          kustom.find(
+            (r) => r.nama_kustom
+              && (r.nama_kustom.toLowerCase().includes(namaTugas.toLowerCase())
+                || namaTugas.toLowerCase().includes(r.nama_kustom.toLowerCase()))
+          ) ?? null;
+      }
+
+      if (!cocok && !cocokKustom && katalog.length > 0) {
+        const namaValid = [...new Set(katalog.map((t) => t.nama)), ...namaKustomSemua].join(', ');
         throw new ToolError(`"${namaTugas}" bukan nama tugas untuk ${subjek}. Tugas yang ada: ${namaValid}.`);
       }
 
-      const kodeTugas = cocok?.kode ?? namaTugas.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
+      // Tanpa katalog (hewan/kandang tanpa spesies) tidak ada apa pun untuk
+      // divalidasi, jadi kodeTugas disintesis langsung dari nama tugas alih-
+      // alih menolaknya. jadwalSubjek tidak pernah membaca kode sintesis ini
+      // kembali (dariKatalog kosong untuk subjek tanpa spesies), tapi baris
+      // lognya tetap tampil apa adanya di GET /ternak/log/:tipe/:id — ini
+      // disengaja, bukan celah yang perlu ditutup.
+      const kodeTugas = cocok?.kode ?? cocokKustom?.kode_tugas
+        ?? namaTugas.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40);
 
       const id = nanoid();
       await ctx.db.prepare(
@@ -521,7 +563,10 @@ const tools: AgentTool[] = [
         tanggal(args, 'tanggal', ctx.today), teksOpsional(args, 'catatan', 200)
       ).run();
 
-      return { ringkasan: `${cocok?.nama ?? namaTugas} untuk ${subjek} dicatat.${catatanAlih}`, ids: [id] };
+      return {
+        ringkasan: `${cocok?.nama ?? cocokKustom?.nama_kustom ?? namaTugas} untuk ${subjek} dicatat.${catatanAlih}`,
+        ids: [id],
+      };
     },
   },
 
