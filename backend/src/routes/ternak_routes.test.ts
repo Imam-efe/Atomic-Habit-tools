@@ -165,6 +165,33 @@ describe('hewan', () => {
     expect(body.hewan[0].tugasKandangDorman).toBe(false);
   });
 
+  it('kucing (tugas kandang dorman hanya litter, penting:false) — dorman luas true, dorman penting false', async () => {
+    // kucing-domestik cuma punya satu tugas bersasaran kandang: litter,
+    // penting:false. Ini populasi luas yang boleh dapat catatan baris di
+    // TernakAnimals, tapi tidak boleh mengangkat banner ancaman-nyawa.
+    await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ animalId: 'kucing-domestik', namaPanggilan: 'Mimi', tanggalMasuk: '2026-01-15' }),
+    });
+    const body = await (await req('/api/ternak')).json() as {
+      hewan: Array<{ tugasKandangDorman: boolean; tugasKandangDormanPenting: boolean }>;
+    };
+    expect(body.hewan[0].tugasKandangDorman).toBe(true);
+    expect(body.hewan[0].tugasKandangDormanPenting).toBe(false);
+  });
+
+  it('hamster (tugas kandang dorman termasuk ganti-alas, penting:true) — dorman luas dan dorman penting sama-sama true', async () => {
+    await req('/api/ternak/hewan', {
+      method: 'POST',
+      body: JSON.stringify({ animalId: 'hamster', namaPanggilan: 'Coklat', tanggalMasuk: '2026-01-15' }),
+    });
+    const body = await (await req('/api/ternak')).json() as {
+      hewan: Array<{ tugasKandangDorman: boolean; tugasKandangDormanPenting: boolean }>;
+    };
+    expect(body.hewan[0].tugasKandangDorman).toBe(true);
+    expect(body.hewan[0].tugasKandangDormanPenting).toBe(true);
+  });
+
   it('menolak kandang milik orang lain', async () => {
     const { id } = await buatKandang({}, otherToken);
     const res = await req('/api/ternak/hewan', {

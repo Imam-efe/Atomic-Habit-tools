@@ -31,7 +31,8 @@ const dataDasar = {
   }],
   hewan: [{
     id: 'h1', kandangId: 'k1', animalId: 'cupang', nama: 'Cupang', emoji: '🐟',
-    jumlah: 1, status: 'hidup', tanggalMasuk: '2026-01-01', kesulitan: 'mudah', tugasKandangDorman: false,
+    jumlah: 1, status: 'hidup', tanggalMasuk: '2026-01-01', kesulitan: 'mudah',
+    tugasKandangDorman: false, tugasKandangDormanPenting: false,
   }],
   ringkasan: { kandangAktif: 1, hewanHidup: 1, ekorTotal: 1 },
 };
@@ -86,22 +87,46 @@ describe('Ternak — gagal muat peringatan tambahan', () => {
 });
 
 describe('Ternak — banner hewan tanpa kandang (C1)', () => {
-  it('menampilkan banner kelima untuk hewan yang tugas kandangnya dorman', async () => {
+  it('menampilkan banner kelima untuk hewan yang tugas kandang dormannya penting (mis. hamster)', async () => {
     vi.stubGlobal('fetch', routeFetch({
       ...rutePenuh,
       '/ternak': {
         ...dataDasar,
-        hewan: [{ ...dataDasar.hewan[0], kandangId: null, tugasKandangDorman: true }],
+        hewan: [{
+          ...dataDasar.hewan[0], nama: 'Hamster', kandangId: null,
+          tugasKandangDorman: true, tugasKandangDormanPenting: true,
+        }],
       },
     }));
     render(<TernakScreen />);
 
     expect(await screen.findByText(/belum punya kandang — tugasnya belum terjadwal/)).toBeInTheDocument();
-    expect(screen.getByText(/Cupang/)).toBeInTheDocument();
+    expect(screen.getByText(/Hamster/)).toBeInTheDocument();
   });
 
   it('tidak menampilkan banner kelima kalau tidak ada hewan yang dorman', async () => {
     vi.stubGlobal('fetch', routeFetch(rutePenuh));
+    render(<TernakScreen />);
+
+    expect(await screen.findByText('Tidak ada jadwal rawat dalam 14 hari ke depan.')).toBeInTheDocument();
+    expect(screen.queryByText(/tugasnya belum terjadwal/)).not.toBeInTheDocument();
+  });
+
+  it('tidak menampilkan banner kelima untuk hewan yang dorman tapi tugasnya tidak penting (mis. kucing)', async () => {
+    // kucing-domestik: satu-satunya tugas kandangnya adalah litter, penting:
+    // false — dorman secara luas, tapi bukan ancaman nyawa. Banner ini
+    // khusus ancaman nyawa, jadi kucing seperti ini tidak boleh muncul di
+    // sini walau tugasKandangDorman (populasi luas) tetap true.
+    vi.stubGlobal('fetch', routeFetch({
+      ...rutePenuh,
+      '/ternak': {
+        ...dataDasar,
+        hewan: [{
+          ...dataDasar.hewan[0], nama: 'Mimi', kandangId: null,
+          tugasKandangDorman: true, tugasKandangDormanPenting: false,
+        }],
+      },
+    }));
     render(<TernakScreen />);
 
     expect(await screen.findByText('Tidak ada jadwal rawat dalam 14 hari ke depan.')).toBeInTheDocument();

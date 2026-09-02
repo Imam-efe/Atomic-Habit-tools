@@ -116,9 +116,17 @@ ternak.get('/', async (c) => {
     // punya tugas bersasaran kandang: tugas itu tidak dimiliki siapa pun dan
     // tidak akan pernah dijadwalkan sampai kandangnya diisi. Lihat POST
     // /hewan untuk penjelasan lengkap kenapa ini terjadi.
-    const tugasKandangDorman =
-      h.status === 'hidup' && !h.kandang_id
-      && (animal?.tugas.some((t) => t.sasaran === 'kandang') ?? false);
+    //
+    // Dua populasi, bukan satu: mayoritas spesies (termasuk kucing rumahan,
+    // yang litter box-nya sengaja tidak dianggap "kandang" — lihat migrasi
+    // 0040) punya tugas kandang tapi bukan yang fatal kalau telat. Baris
+    // catatan hewan (TernakAnimals.tsx) boleh memakai populasi luas ini;
+    // strip peringatan di Hari Ini (Ternak.tsx) yang khusus untuk ancaman
+    // nyawa hanya boleh memakai versi `Penting`.
+    const dormanTugas = animal?.tugas.filter((t) => t.sasaran === 'kandang') ?? [];
+    const tugasKandangDorman = h.status === 'hidup' && !h.kandang_id && dormanTugas.length > 0;
+    const tugasKandangDormanPenting =
+      tugasKandangDorman && dormanTugas.some((t) => t.penting);
     return {
       id: h.id,
       kandangId: h.kandang_id,
@@ -130,6 +138,7 @@ ternak.get('/', async (c) => {
       tanggalMasuk: h.tanggal_masuk,
       kesulitan: animal?.kesulitan ?? null,
       tugasKandangDorman,
+      tugasKandangDormanPenting,
     };
   });
 

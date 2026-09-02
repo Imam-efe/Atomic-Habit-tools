@@ -61,6 +61,8 @@ export interface HewanItem {
   kesulitan: string | null;
   /** true = spesiesnya punya tugas bersasaran kandang tapi hewan ini belum punya kandang, jadi tugas itu dorman. */
   tugasKandangDorman: boolean;
+  /** true = di antara tugas dorman itu, ada minimal satu yang `penting` — kelalaiannya bisa berujung mati. */
+  tugasKandangDormanPenting: boolean;
 }
 
 interface TernakResponse {
@@ -559,7 +561,11 @@ function HariIniTab({
 }) {
   const sesak = kepadatan.filter((k) => k.sesak);
   const pentingTelat = (jadwal?.penting ?? []).filter((t) => t.telat > 0);
-  const dorman = (data?.hewan ?? []).filter((h) => h.tugasKandangDorman);
+  // Strip ini khusus ancaman nyawa — hanya hewan yang tugas kandang
+  // dormannya mengandung minimal satu tugas `penting` masuk sini. Populasi
+  // lebih luas (mis. kucing rumahan yang tugas litter-nya dorman tapi tidak
+  // fatal) tetap dapat catatan informasional di TernakAnimals.tsx.
+  const dorman = (data?.hewan ?? []).filter((h) => h.tugasKandangDormanPenting);
   const tidakAdaApaApa =
     (!data || (data.kandang.length === 0 && data.hewan.length === 0)) &&
     sesak.length === 0 && pentingTelat.length === 0 && amoniaKandang.length === 0
@@ -593,7 +599,7 @@ function HariIniTab({
         </div>
       )}
 
-      {/* Empat peringatan yang membunuh hewan, di atas daftar — bukan
+      {/* Lima peringatan yang membunuh hewan, di atas daftar — bukan
           menunggu ditemukan di sub-layar. */}
       {pentingTelat.length > 0 && (
         <div className="rounded-[18px] p-3.5" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)', borderLeft: '3px solid var(--neg)' }}>
