@@ -361,7 +361,8 @@ daily.get('/shutdown', async (c) => {
 
   // Kebun dan ternak ikut ditanyakan supaya ritual malam menutup hari dengan
   // gambaran lengkap — tanaman yang belum disiram atau hewan yang belum
-  // dirawat hari ini masih sempat dikerjakan sebelum tidur.
+  // dirawat hari ini masih sempat dikerjakan sebelum tidur, dan malam justru
+  // saat paling baik menyiram di iklim panas.
   const [row, kebun, ternak] = await Promise.all([
     c.env.DB.prepare(
       'SELECT journal, mood, top_priorities, completed_at FROM daily_shutdown WHERE user_id = ?1 AND shutdown_date = ?2'
