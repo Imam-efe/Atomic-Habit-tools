@@ -25,7 +25,7 @@ import { useAuthStore } from '@/stores/authStore';
 /** Modul harus sama persis dengan MODULES di backend/src/lib/ai_context.ts. */
 export type AiModule =
   | 'kebiasaan' | 'uang' | 'inventaris' | 'kebun' | 'kalender'
-  | 'catatan' | 'proyek' | 'nutrisi' | 'masakan';
+  | 'catatan' | 'proyek' | 'nutrisi' | 'masakan' | 'ternak';
 
 interface AgentAction {
   alat: string;

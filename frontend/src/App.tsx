@@ -42,6 +42,7 @@ const RiwayatAi = lazy(() => import('@/screens/RiwayatAi').then(m => ({ default:
 const Shortcuts = lazy(() => import('@/screens/Shortcuts'));
 const Harian = lazy(() => import('@/screens/Harian'));
 const TutupHari = lazy(() => import('@/screens/TutupHari'));
+const Ternak = lazy(() => import('@/screens/Ternak'));
 const Pola = lazy(() => import('@/screens/Pola'));
 const Pengaturan = lazy(() => import('@/screens/Pengaturan'));
 
@@ -186,6 +187,7 @@ function AppShell() {
       'shortcuts': <Shortcuts />,
       'harian': <Harian />,
       'tutup-hari': <TutupHari />,
+      'ternak': <Ternak />,
       'pola': <Pola />,
       'pengaturan': <Pengaturan />,
     }),

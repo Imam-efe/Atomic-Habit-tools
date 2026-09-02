@@ -15,6 +15,9 @@ import { findPatterns, type DayRecord } from '../lib/patterns';
 import { loadSettings, num, bool } from '../lib/settings';
 import { computeCareState, lastActions, resolvePlants, type PlantingRow } from './garden';
 import { cariTerlantar, type Sentuhan } from '../lib/garden_neglect';
+import { jadwalPengguna } from './ternak_care';
+import { cekKepadatan, type Penghuni } from '../lib/ternak_kepadatan';
+import { ANIMAL_BY_ID } from '../data/animals';
 
 /**
  * Ringkasan tugas kebun hari ini, untuk Pagi Ini dan Tutup Hari.
@@ -104,6 +107,69 @@ export async function getGardenToday(
   };
 }
 
+export interface TernakToday {
+  tugasJatuhTempo: number;
+  penting: number;
+  kandangSesak: number;
+  /** Beberapa nama untuk ditampilkan; sengaja dibatasi agar teks tidak meluber. */
+  contoh: string[];
+}
+
+const MAKS_CONTOH_TERNAK = 3;
+
+/**
+ * Ringkasan ternak untuk Pagi Ini dan Tutup Hari.
+ *
+ * Memanggil jadwalPengguna, bukan menghitung ulang sendiri: dua hitungan
+ * untuk pertanyaan yang sama pasti menyimpang, dan ringkasan yang tidak cocok
+ * dengan layarnya membuat keduanya diragukan.
+ */
+export async function getTernakToday(
+  db: D1Database, userId: string, today: string
+): Promise<TernakToday> {
+  const [semua, kandangRows, hewanRows] = await Promise.all([
+    jadwalPengguna(db, userId, today),
+    db.prepare(
+      `SELECT id, volume_liter FROM ternak_kandang
+        WHERE user_id = ?1 AND status = 'aktif' AND volume_liter IS NOT NULL AND volume_liter > 0`
+    ).bind(userId).all<{ id: string; volume_liter: number }>(),
+    db.prepare(
+      `SELECT kandang_id, animal_id, jumlah FROM ternak_hewan
+        WHERE user_id = ?1 AND status = 'hidup' AND kandang_id IS NOT NULL`
+    ).bind(userId).all<{ kandang_id: string; animal_id: string | null; jumlah: number }>(),
+  ]);
+
+  const jatuhTempo = semua.filter((t) => t.berikutnya <= today);
+  const penting = jatuhTempo.filter((t) => t.penting).length;
+
+  // Kepadatan dihitung sama persis dengan GET /api/ternak/kepadatan: kandang
+  // tanpa volume tercatat dilewati, penghuni tanpa angka kebutuhan tidak ikut
+  // menghitung — lihat cekKepadatan untuk alasannya.
+  const penghuniPerKandang = new Map<string, Penghuni[]>();
+  for (const h of hewanRows.results ?? []) {
+    const list = penghuniPerKandang.get(h.kandang_id) ?? [];
+    list.push({
+      animalId: h.animal_id,
+      jumlah: h.jumlah,
+      literPerEkor: h.animal_id ? (ANIMAL_BY_ID.get(h.animal_id)?.literPerEkor ?? null) : null,
+    });
+    penghuniPerKandang.set(h.kandang_id, list);
+  }
+
+  let kandangSesak = 0;
+  for (const k of kandangRows.results ?? []) {
+    const nilai = cekKepadatan(k.volume_liter, penghuniPerKandang.get(k.id) ?? []);
+    if (nilai?.sesak) kandangSesak++;
+  }
+
+  return {
+    tugasJatuhTempo: jatuhTempo.length,
+    penting,
+    kandangSesak,
+    contoh: jatuhTempo.slice(0, MAKS_CONTOH_TERNAK).map((t) => t.nama),
+  };
+}
+
 // Agenda tidak menyimpan durasi (lihat 0015_calendar.sql). Perkiraan yang
 // dipakai pengecekan bentrok datang dari pengaturan
 // `calendar.default_event_minutes`, bukan angka tetap di berkas ini.
@@ -157,13 +223,14 @@ daily.get('/brief', async (c) => {
   // enam kueri berurutan akan terasa lambat justru di layar pertama pagi hari.
   const settings = await loadSettings(c.env.DB, user.sub);
 
-  const [safeToSpend, billRadar, missed, expiring, kidsToday, kebun, habitRows, events] = await Promise.all([
+  const [safeToSpend, billRadar, missed, expiring, kidsToday, kebun, ternak, habitRows, events] = await Promise.all([
     computeSafeToSpend(c.env.DB, user.sub, today, bool(settings, 'money.subtract_bills')),
     getBillRadar(c.env.DB, user.sub, today, num(settings, 'money.bill_horizon_days')),
     getMissedYesterday(c.env.DB, user.sub, today),
     getExpiringItems(c.env.DB, user.sub, today, num(settings, 'inventory.expiry_days')),
     getKidsFor(c.env.DB, user.sub, today),
     getGardenToday(c.env.DB, user.sub, today),
+    getTernakToday(c.env.DB, user.sub, today),
     c.env.DB.prepare(
       `SELECT h.id, h.name, h.action_time, h.streak,
               EXISTS (
@@ -208,6 +275,7 @@ daily.get('/brief', async (c) => {
     expiring,
     kids: kidsToday,
     kebun,
+    ternak,
   });
 });
 
@@ -291,16 +359,18 @@ daily.get('/shutdown', async (c) => {
   const user = c.get('user');
   const date = c.req.query('date') ?? jakartaToday();
 
-  // Kebun ikut ditanyakan supaya ritual malam menutup hari dengan gambaran
-  // lengkap — tanaman yang belum disiram hari ini masih sempat dikerjakan
-  // sebelum tidur, dan itu justru saat paling baik menyiram di iklim panas.
-  const [row, kebun] = await Promise.all([
+  // Kebun dan ternak ikut ditanyakan supaya ritual malam menutup hari dengan
+  // gambaran lengkap — tanaman yang belum disiram atau hewan yang belum
+  // dirawat hari ini masih sempat dikerjakan sebelum tidur, dan malam justru
+  // saat paling baik menyiram di iklim panas.
+  const [row, kebun, ternak] = await Promise.all([
     c.env.DB.prepare(
       'SELECT journal, mood, top_priorities, completed_at FROM daily_shutdown WHERE user_id = ?1 AND shutdown_date = ?2'
     )
       .bind(user.sub, date)
       .first<{ journal: string | null; mood: number | null; top_priorities: string | null; completed_at: number }>(),
     getGardenToday(c.env.DB, user.sub, date),
+    getTernakToday(c.env.DB, user.sub, date),
   ]);
 
   return c.json({
@@ -321,6 +391,7 @@ daily.get('/shutdown', async (c) => {
     })(),
     completedAt: row?.completed_at ?? null,
     kebun,
+    ternak,
   });
 });
 

@@ -37,6 +37,12 @@ interface Brief {
     terlantar: number;
     contoh: string[];
   };
+  ternak: {
+    tugasJatuhTempo: number;
+    penting: number;
+    kandangSesak: number;
+    contoh: string[];
+  };
 }
 
 interface Suggestion {
@@ -383,6 +389,34 @@ export default function HarianScreen() {
               {brief.kebun.contoh.length > 0 && (
                 <div className="text-xs" style={{ color: 'var(--text3)' }}>
                   {brief.kebun.contoh.join(', ')}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Ternak punya jadwal harian sama seperti kebun, dan taruhannya
+              lebih tinggi: tugas penting yang telat di sini berarti nyawa
+              hewan, bukan cuma tanaman layu. */}
+          {brief.ternak && (brief.ternak.tugasJatuhTempo + brief.ternak.kandangSesak) > 0 && (
+            <Card
+              title="🐾 Ternak hari ini"
+              accent={brief.ternak.penting > 0 ? '#ff3b30' : undefined}
+              delay={0.3}
+            >
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {brief.ternak.tugasJatuhTempo > 0 && (
+                  <span style={{ color: 'var(--text)' }}>📋 {brief.ternak.tugasJatuhTempo} tugas jatuh tempo</span>
+                )}
+                {brief.ternak.penting > 0 && (
+                  <span style={{ color: '#ff3b30' }}>🚨 {brief.ternak.penting} penting</span>
+                )}
+                {brief.ternak.kandangSesak > 0 && (
+                  <span style={{ color: '#ff9f0a' }}>🏠 {brief.ternak.kandangSesak} kandang sesak</span>
+                )}
+              </div>
+              {brief.ternak.contoh.length > 0 && (
+                <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                  {brief.ternak.contoh.join(', ')}
                 </div>
               )}
             </Card>

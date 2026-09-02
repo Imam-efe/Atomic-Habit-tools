@@ -16,7 +16,10 @@ export type AlertKind =
   | 'garden_followup'
   | 'harvest_due'
   | 'garden_solution'
-  | 'garden_mangsa';
+  | 'garden_mangsa'
+  | 'ternak_care'
+  | 'ternak_penting'
+  | 'ternak_air';
 
 /**
  * Klaim hak kirim untuk (user, kind, tanggal).
