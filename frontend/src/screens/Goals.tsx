@@ -4,6 +4,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { readableOn } from '@/lib/color';
 import { useUIStore } from '@/stores/uiStore';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface Habit {
   id: string;
@@ -84,7 +85,9 @@ export function Goals() {
       setStatement('');
       setSelectedHabitIds([]);
       setShowAdd(false);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan goal', err);
+    }
     setSaving(false);
   };
 
@@ -102,7 +105,9 @@ export function Goals() {
       });
       load();
       setEditingGoal(null);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal memperbarui goal', err);
+    }
     setUpdating(false);
   };
 

@@ -4,6 +4,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { ACTIVITY_COLORS } from '@/constants/colors';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface ActivityLog {
   id: string;
@@ -154,7 +155,9 @@ export function Activity() {
       load();
       setHours('');
       setShowAdd(false);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan aktivitas', err);
+    }
     setSaving(false);
   };
 

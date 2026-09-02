@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 import { isVoiceSupported, startVoiceInput, type VoiceSession } from '@/lib/voice';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface Note {
   id: string;
@@ -107,7 +108,9 @@ export function Notes() {
       setLinkHabitId('');
       setLinkGoalId('');
       setShowAdd(false);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan catatan', err);
+    }
     setSaving(false);
   };
 
@@ -127,7 +130,9 @@ export function Notes() {
     try {
       const res = await apiFetch<{ summary: string }>(`/notes/${id}/summarize`, { method: 'POST' });
       setNotes(n => n.map(x => x.id === id ? { ...x, summary: res.summary } : x));
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal meringkas catatan', err);
+    }
     setSummarizing(null);
   };
 
