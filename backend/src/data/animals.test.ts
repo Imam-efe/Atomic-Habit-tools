@@ -141,6 +141,108 @@ describe('katalog hewan', () => {
     }
   });
 
+  // `penting` bertipe boolean wajib (bukan opsional) — jadi tes di atas tidak
+  // bisa pernah gagal terhadap apa pun yang lolos TypeScript. Itu bukan
+  // cakupan. Yang benar-benar bisa salah adalah kode tugas yang sama dipakai
+  // beberapa spesies tapi diberi keputusan `penting` yang berbeda tanpa
+  // alasan: salah satu dari keduanya pasti keliru, kecuali prosa `cara`-nya
+  // sungguh menunjukkan spesies itu berbeda tingkat bahayanya.
+  it('penting konsisten untuk kode tugas yang sama di lintas spesies, kecuali dikecualikan dengan alasan tertulis', () => {
+    // Setiap entri di sini sudah diverifikasi manual — prosa `cara` tiap
+    // kemunculan kodenya dibaca ulang satu per satu — dan perbedaan
+    // `penting`-nya memang didukung oleh perbedaan yang ditulis di prosa
+    // tersebut, bukan cuma kebetulan penulisan. Kode split yang TIDAK ada di
+    // sini berarti belum ada yang memverifikasi bedanya masuk akal, dan tes
+    // ini menolaknya sampai diverifikasi (masuk KECUALI) atau disamakan.
+    const KECUALI: Record<string, string> = {
+      uvb:
+        'Kura-kura & iguana: prosa eksplisit menyebut penyakit tulang metabolik ' +
+        'dan cangkang cacat permanen tanpa UVB cukup. Leopard gecko & ular: ' +
+        'prosa sendiri bilang UVB rendah cuma bonus metabolisme kalsium ' +
+        '"tanpa risiko berarti" — bukan kebutuhan, cuma tambahan.',
+      'extra-fooding':
+        'Kacer: kekurangan protein bikin stres sampai "nyilet" (mencabuti ' +
+        'bulu sendiri) — self-harm yang jelas lebih berat dari sekadar ' +
+        'kurang bagus. Murai-batu: konsekuensi yang ditulis cuma bulu kusam ' +
+        'dan kondisi fisik turun, tidak ada klaim seberat itu.',
+      jemur:
+        'Ketiga kura-kura (brazil/sulcata/ambon) semuanya true: berjemur ' +
+        'adalah kebutuhan termoregulasi dan pencernaan reptil, seserius uvb ' +
+        'pada spesies yang sama (yang juga true untuk ketiganya) — bukan ' +
+        'preferensi. Burung berbeda kelas keparahan menurut prosa masing- ' +
+        'masing: lovebird eksplisit "egg binding yang bisa fatal", perkutut ' +
+        'eksplisit cuma "lesu dan kicauannya melemah".',
+      'ganti-air':
+        'Ikan bervolume kecil (akuarium/wadah tanpa filter, amonia menumpuk ' +
+        'cepat), ikan terumbu (parameter air sensitif), kura-kura air, dan ' +
+        'axolotl (kulit tanpa sisik sensitif) tetap true — juga lele, yang ' +
+        'prosanya eksplisit menyebut "kematian massal" pada kepadatan ' +
+        'tinggi meski ikan kolam. Ikan kolam bervolume besar yang prosanya ' +
+        'sendiri menyatakan toleran dan konsekuensinya cuma pertumbuhan ' +
+        'melambat (koi, nila, patin, gurame, mujair) — false, dengan ' +
+        'alasan yang sama dipakai mendemosikan seluruh `cacing` gelombang ' +
+        'lalu: klaim produktivitas, bukan klaim kematian.',
+    };
+
+    const kemunculanPerKode = new Map<string, Array<{ id: string; penting: boolean }>>();
+    for (const a of ANIMALS) {
+      for (const t of a.tugas) {
+        const list = kemunculanPerKode.get(t.kode) ?? [];
+        list.push({ id: a.id, penting: t.penting });
+        kemunculanPerKode.set(t.kode, list);
+      }
+    }
+
+    for (const [kode, kemunculan] of kemunculanPerKode) {
+      if (kemunculan.length < 2) continue;
+      const nilai = new Set(kemunculan.map((k) => k.penting));
+      if (nilai.size <= 1) continue;
+
+      const ringkasan = kemunculan.map((k) => `${k.id}=${k.penting}`).join(', ');
+      expect(
+        kode in KECUALI,
+        `"${kode}" tidak konsisten (${ringkasan}) dan tidak ada di KECUALI — samakan nilainya atau tambahkan alasan tertulis`
+      ).toBe(true);
+    }
+
+    // Arah sebaliknya: kalau sebuah kode di KECUALI sudah konsisten (semua
+    // kemunculannya sama), pengecualiannya basi — sisa dari perbaikan lama
+    // yang seharusnya ikut dihapus, bukan alasan yang menjelaskan perbedaan
+    // yang sudah tidak ada lagi.
+    for (const kode of Object.keys(KECUALI)) {
+      const kemunculan = kemunculanPerKode.get(kode) ?? [];
+      const nilai = new Set(kemunculan.map((k) => k.penting));
+      expect(
+        nilai.size,
+        `"${kode}" ada di KECUALI tapi semua kemunculannya sudah konsisten — pengecualian ini basi, hapus dari peta`
+      ).toBeGreaterThan(1);
+    }
+  });
+
+  it('anomali penting yang sudah diperbaiki dalam kode yang tetap dikecualikan tidak terulang', () => {
+    // ganti-air dan jemur tetap ada di KECUALI (splitnya secara umum masuk
+    // akal), tapi masing-masing punya satu-dua kemunculan yang SEBELUM
+    // perbaikan ini bertentangan dengan prosanya sendiri. Tes konsistensi di
+    // atas tidak bisa mendeteksi anomali seperti ini terulang, karena kode
+    // itu tetap "split" (jadi lolos lewat KECUALI) berapa pun kombinasi
+    // true/false di dalamnya — jadi diperiksa eksplisit di sini.
+    const cari = (id: string, kode: string) =>
+      ANIMAL_BY_ID.get(id)?.tugas.find((t) => t.kode === kode)?.penting;
+
+    // gurame & mujair: prosanya sendiri cuma bilang toleran/pertumbuhan
+    // melambat (klaim produktivitas, persis alasan demosi cacing), sama
+    // seperti koi/nila/patin yang sudah false — bukan seperti lele yang
+    // eksplisit "kematian massal".
+    expect(cari('gurame', 'ganti-air'), 'gurame/ganti-air').toBe(false);
+    expect(cari('mujair', 'ganti-air'), 'mujair/ganti-air').toBe(false);
+
+    // kura-kura-ambon/jemur: prosanya sama persis strukturnya dengan
+    // brazil/sulcata (cuma beda angka suhu, tanpa konsekuensi tertulis di
+    // manapun), dan spesies yang sama menandai uvb-nya true — berjemur dan
+    // UVB sama-sama soal termoregulasi/pencernaan reptil ini.
+    expect(cari('kura-kura-ambon', 'jemur'), 'kura-kura-ambon/jemur').toBe(true);
+  });
+
   it('reptil berjemur punya tugas ganti UVB', () => {
     // Lampu UVB berhenti memancarkan UVB jauh sebelum lampunya mati, jadi
     // "masih menyala" bukan tanda ia masih bekerja. Ini penyebab paling umum
