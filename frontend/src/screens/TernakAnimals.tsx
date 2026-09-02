@@ -72,6 +72,12 @@ export function TernakAnimalsTab({
   const [formNamaCatalog, setFormNamaCatalog] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  // Peringatan opsional dari POST /ternak/hewan (mis. spesies ini punya
+  // tugas bersasaran kandang tapi hewan barusan tidak dimasukkan ke kandang
+  // mana pun) — ditampilkan tepat setelah tersimpan, saat kesalahannya
+  // terjadi, bukan dibiarkan pengguna baru sadar ketika jadwalnya kosong
+  // tanpa sebab yang jelas.
+  const [notice, setNotice] = useState('');
 
   // Datang dari tombol "Pelihara ini" di Katalog — buka formulir dengan
   // animalId sudah terisi, bukan mengharuskan pengguna mencarinya lagi.
@@ -127,7 +133,7 @@ export function TernakAnimalsTab({
     setSaving(true);
     setFormError('');
     try {
-      await apiFetch('/ternak/hewan', {
+      const res = await apiFetch<{ id: string; peringatan?: string }>('/ternak/hewan', {
         method: 'POST',
         body: JSON.stringify({
           kandangId: form.kandangId || undefined,
@@ -143,6 +149,7 @@ export function TernakAnimalsTab({
         }),
       });
       setForm(null);
+      setNotice(res.peringatan ?? '');
       onChanged();
     } catch (err) {
       setFormError(describeError(err, 'Gagal menyimpan hewan.'));
@@ -201,10 +208,17 @@ export function TernakAnimalsTab({
           style={buttonStyle}
           whileTap={{ scale: 0.97 }}
           transition={springs.snappy}
-          onClick={() => { setForm(formKosong()); setFormNamaCatalog(''); setFormError(''); }}
+          onClick={() => { setForm(formKosong()); setFormNamaCatalog(''); setFormError(''); setNotice(''); }}
         >
           + Tambah hewan
         </motion.button>
+      )}
+
+      {notice && (
+        <div className="rounded-xl p-3 text-xs border-l-[3px] flex items-start justify-between gap-2" style={{ background: 'rgba(255,159,10,0.1)', borderColor: '#ff9f0a', color: 'var(--text2)' }}>
+          <span>⚠️ {notice}</span>
+          <button className="flex-shrink-0 text-[11px] font-bold" style={{ color: 'var(--text3)' }} onClick={() => setNotice('')} aria-label="Tutup peringatan">✕</button>
+        </div>
       )}
 
       {form && (
