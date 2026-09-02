@@ -770,7 +770,10 @@ export function Dashboard() {
 
         {/* System Module Grid */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div onClick={() => setTab('goals')} className="rounded-[18px] p-4 cursor-pointer border flex flex-col justify-between"
+          {/* Goals kini sub-layar di bawah Lainnya, bukan tab sendiri —
+              pola bukanya sama dengan kartu modul lain di bawah. */}
+          <div onClick={() => { setTab('lainnya'); setTimeout(() => useUIStore.getState().setSubScreen('goals'), 20); }}
+            className="rounded-[18px] p-4 cursor-pointer border flex flex-col justify-between"
             style={{ background: 'var(--surface)', borderColor: 'transparent', boxShadow: 'var(--neu-raised)' }}>
             <div className="flex justify-between items-start">
               <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base" style={{ background: 'rgba(124,92,255,0.16)', color: '#7C5CFF' }}>🎯</div>

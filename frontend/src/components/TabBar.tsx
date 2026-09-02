@@ -51,13 +51,15 @@ const tabs: { id: TabName; label: string; icon: React.ReactNode }[] = [
     ),
   },
   {
-    id: 'goals',
-    label: 'Goals',
+    id: 'ternak',
+    label: 'Ternak',
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <circle cx="12" cy="12" r="6" />
-        <circle cx="12" cy="12" r="2" />
+        {/* Tapak kaki: empat jari di atas, satu bantalan telapak di bawah. */}
+        <ellipse cx="7" cy="8" rx="1.8" ry="2.4" />
+        <ellipse cx="12" cy="6.5" rx="1.8" ry="2.4" />
+        <ellipse cx="17" cy="8" rx="1.8" ry="2.4" />
+        <path d="M12 12c-2.8 0-5 2-5 4.4C7 18.4 8.5 20 10.4 20c.7 0 1.1-.3 1.6-.3s.9.3 1.6.3c1.9 0 3.4-1.6 3.4-3.6C17 14 14.8 12 12 12Z" />
       </svg>
     ),
   },

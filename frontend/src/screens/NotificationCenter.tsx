@@ -60,7 +60,9 @@ const SCHEDULE_TABS: { value: ScheduleType; label: string }[] = [
 const URL_OPTIONS = [
   { value: '', label: 'Beranda' },
   { value: '/kebiasaan', label: 'Kebiasaan' },
-  { value: '/goals', label: 'Goals' },
+  { value: '/kalender', label: 'Kalender' },
+  { value: '/kebun', label: 'Kebun' },
+  { value: '/ternak', label: 'Ternak' },
   { value: '/uang', label: 'Uang' },
   { value: '/lainnya', label: 'Lainnya' },
 ];
