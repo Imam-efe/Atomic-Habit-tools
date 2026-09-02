@@ -334,7 +334,13 @@ describe('literPerEkor konsisten dengan ruangMinimal', () => {
     'anemon', 'karang-lunak', // tidak ada angka liter sama sekali di kalimatnya
   ]);
 
-  const aquatik = ANIMALS.filter((a) => a.habitat !== 'darat' && a.literPerEkor !== null);
+  // Sengaja TIDAK menyaring literPerEkor !== null di sini. Menyaringnya di
+  // definisi array ini membuat spesies akuatik yang prosanya bisa diuraikan
+  // tapi literPerEkor-nya lupa diisi (null) hilang diam-diam dari
+  // pemeriksaan — bukan gagal, cuma tidak pernah diperiksa. Nol spesies
+  // begitu hari ini, tapi itu alasan untuk menjaganya tetap nol lewat tes
+  // yang gagal, bukan alasan untuk boleh diam-diam melewatkannya nanti.
+  const aquatik = ANIMALS.filter((a) => a.habitat !== 'darat');
 
   it('setiap spesies akuatik terhitung: terurai dan cocok, atau eksplisit di TIDAK_TERURAI', () => {
     const takTerdaftarTapiTakTerurai: string[] = [];
@@ -350,6 +356,12 @@ describe('literPerEkor konsisten dengan ruangMinimal', () => {
       }
       if (adaDiDaftar) { terdaftarPadahalTerurai.push(a.id); continue; }
 
+      // Prosanya terurai jadi angka — kalau literPerEkor tetap null di sini,
+      // itu bukan "tidak terurai", itu kolom yang lupa diisi. Gagalkan
+      // eksplisit alih-alih membiarkan `nilai!` lolos sebagai null diam-diam
+      // ke perbandingan angka di bawah (yang tidak akan pernah gagal
+      // terhadap null lewat matcher toBeGreaterThanOrEqual/dst).
+      expect(a.literPerEkor, `${a.id}: ruangMinimal terurai tapi literPerEkor null`).not.toBeNull();
       const nilai = a.literPerEkor!;
       if (hasil.tipe === 'pasti') {
         expect(nilai, `${a.id}: literPerEkor=${nilai} vs ruangMinimal=${hasil.nilai}`).toBe(hasil.nilai);
@@ -359,8 +371,30 @@ describe('literPerEkor konsisten dengan ruangMinimal', () => {
         expect(nilai, `${a.id}: literPerEkor=${nilai} di atas rentang ruangMinimal [${hasil.lo.toFixed(1)}, ${hasil.hi.toFixed(1)}]`)
           .toBeLessThanOrEqual(hasil.hi + 0.01);
       } else {
+        // `batas` sendiri sudah angka paling longgar yang wajar — asumsi
+        // keeper cuma punya persis jumlah minimal yang disebut prosa.
+        // Menuntutnya juga jadi batas BAWAH tanpa kelonggaran akan menolak
+        // keeper yang menaikkan populasi di atas minimal, situasi yang
+        // sangat umum (siapa yang berhenti tepat di angka minimal?). Tapi
+        // literPerEkor yang terlalu kecil justru berbahaya di arah
+        // sebaliknya: dipakai cekKepadatan untuk mengalikan jumlah ekor jadi
+        // kebutuhan volume, jadi angka yang kekecilan bikin kepadatan
+        // sungguhan lolos tak terdeteksi. neon-tetra (batas 6,7 dari
+        // "kawanan minimal 6 ekor" di akuarium 40L) dengan literPerEkor=0,5
+        // lolos tes sebelum perbaikan ini — itu tangki minimal yang
+        // dianggap cukup untuk 80 ekor.
+        //
+        // Batas bawahnya separuh dari `batas`: tangki yang dirancang untuk
+        // kawanan minimal menampung dua kali lipat populasi itu tanpa
+        // penyesuaian volume sudah bukan lagi variasi wajar jumlah
+        // pemeliharaan, itu kepadatan berlebih yang seharusnya memang
+        // ditangkap cekKepadatan, bukan disembunyikan oleh literPerEkor
+        // yang sengaja dikecilkan.
+        const batasBawah = hasil.batas / 2;
         expect(nilai, `${a.id}: literPerEkor=${nilai} melebihi maksimal ${hasil.batas.toFixed(1)} dari ruangMinimal`)
           .toBeLessThanOrEqual(hasil.batas + 0.01);
+        expect(nilai, `${a.id}: literPerEkor=${nilai} di bawah ${batasBawah.toFixed(2)} (separuh maksimal ${hasil.batas.toFixed(1)}) — terlalu kecil untuk mendeteksi kepadatan berlebih`)
+          .toBeGreaterThanOrEqual(batasBawah - 0.01);
       }
     }
 
