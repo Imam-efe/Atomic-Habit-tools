@@ -182,6 +182,29 @@ describe('katalog hewan', () => {
         'melambat (koi, nila, patin, gurame, mujair) — false, dengan ' +
         'alasan yang sama dipakai mendemosikan seluruh `cacing` gelombang ' +
         'lalu: klaim produktivitas, bukan klaim kematian.',
+      'bersih-kandang':
+        '"Bersihkan kandang" mendeskripsikan pekerjaan yang berbeda-beda ' +
+        'secara material per spesies, jadi splitnya bukan kebetulan — tiap ' +
+        'kemunculan dinilai dari prosa `cara` spesies itu sendiri, bukan ' +
+        'dari nama kodenya. True hanya kalau prosa menyebut penyakit ' +
+        'spesifik atau konsekuensi sistemik: kelinci eksplisit koksidiosis ' +
+        '"penyebab kematian nomor satu", marmut bumblefoot dan infeksi ' +
+        'saluran napas, ayam-kampung/ayam-petelur/ayam-hias amonia yang ' +
+        'merusak saluran napas (ayam-petelur juga menyebut turunnya ' +
+        'produksi telur), merpati jamur ke saluran napas, bebek "sumber ' +
+        'utama penyakit kaki dan parasit", sapi-perah mastitis lewat ' +
+        'puting yang kotor. False ketika prosa cuma menyebut kebersihan, ' +
+        'hama, kenyamanan, atau risiko cedera tanpa nama penyakit atau ' +
+        'akibat sistemik: landak-mini cuma "roda lari dari kotoran yang ' +
+        'menempel" tanpa konsekuensi apa pun, sapi-potong cuma lantai ' +
+        'licin dan risiko terpeleset (risiko cedera, bukan penyakit), ' +
+        'sugar-glider cuma jamur/semut/lalat pada sisa buah (hama pada ' +
+        'lingkungan, bukan penyakit pada hewan), entok cuma area kering ' +
+        'untuk bertengger, iguana cuma kelembapan terkontrol, ' +
+        'kambing-kacang cuma kaki tetap kering, dan kambing-etawa cuma ' +
+        'reinfeksi cacing dan lalat berkembang biak — alasan yang sama ' +
+        'dipakai mendemosikan kode `cacing` dan `obat-cacing` gelombang ' +
+        'lalu, jadi harus konsisten dengan keduanya di spesies yang sama.',
     };
 
     const kemunculanPerKode = new Map<string, Array<{ id: string; penting: boolean }>>();
