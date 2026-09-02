@@ -14,6 +14,7 @@ import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import { ANIMAL_BY_ID } from '../data/animals';
+import { tugasKandang, peringatanDorman } from '../lib/ternak_dorman';
 
 const ternak = new Hono<AuthContext>();
 ternak.use('/*', requireAuth);
@@ -123,7 +124,7 @@ ternak.get('/', async (c) => {
     // catatan hewan (TernakAnimals.tsx) boleh memakai populasi luas ini;
     // strip peringatan di Hari Ini (Ternak.tsx) yang khusus untuk ancaman
     // nyawa hanya boleh memakai versi `Penting`.
-    const dormanTugas = animal?.tugas.filter((t) => t.sasaran === 'kandang') ?? [];
+    const dormanTugas = tugasKandang(h.animal_id);
     const tugasKandangDorman = h.status === 'hidup' && !h.kandang_id && dormanTugas.length > 0;
     const tugasKandangDormanPenting =
       tugasKandangDorman && dormanTugas.some((t) => t.penting);
@@ -321,16 +322,8 @@ ternak.post('/hewan', async (c) => {
     body.asal?.trim() || null, body.catatan?.trim() || null
   ).run();
 
-  if (!body.kandangId && body.animalId) {
-    const jumlahTugasKandang = ANIMAL_BY_ID.get(body.animalId)?.tugas
-      .filter((t) => t.sasaran === 'kandang').length ?? 0;
-    if (jumlahTugasKandang > 0) {
-      return c.json({
-        id,
-        peringatan: `${jumlahTugasKandang} tugas perawatan spesies ini menempel ke kandang, jadi belum dijadwalkan karena hewan ini belum punya kandang. Pilih kandang untuk mengaktifkannya.`,
-      }, 201);
-    }
-  }
+  const peringatan = peringatanDorman(body.animalId, body.kandangId);
+  if (peringatan) return c.json({ id, peringatan }, 201);
 
   return c.json({ id }, 201);
 });

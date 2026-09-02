@@ -442,6 +442,25 @@ export default function TernakScreen() {
         ))}
       </div>
 
+      {/* Refresh yang gagal SESUDAH muat pertama berhasil: layarnya tetap
+          terisi, tapi isinya data lama. Tanpa penanda, jadwal yang sudah
+          dikerjakan orang lain di perangkat lain akan terlihat masih telat,
+          dan tugas yang baru jatuh tempo tidak akan muncul sama sekali —
+          keduanya diam-diam, persis kelas bug yang sama dengan tiga loader
+          peringatan di atas. */}
+      {!loading && loadFailed && data && (
+        <div
+          className="rounded-[14px] px-3 py-2 mb-3 text-xs flex items-center gap-2"
+          style={{ background: 'var(--surface)', color: 'var(--text2)' }}
+        >
+          <span>📡</span>
+          <span className="flex-1">Gagal menyegarkan — yang tampil data terakhir yang berhasil dimuat.</span>
+          <button className="font-semibold px-2 py-1 rounded-lg" style={{ color: 'var(--accent)' }} onClick={load}>
+            Muat ulang
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"

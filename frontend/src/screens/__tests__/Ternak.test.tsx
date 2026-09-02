@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import TernakScreen from '../Ternak';
 
@@ -148,5 +148,26 @@ describe('Ternak — banner penting telat menyebut sisa (T9-minor)', () => {
     render(<TernakScreen />);
 
     expect(await screen.findByText('+2 lainnya')).toBeInTheDocument();
+  });
+});
+
+describe('Ternak — refresh gagal sesudah muat pertama berhasil', () => {
+  it('menandai data yang tampil sebagai data lama, bukan diam-diam menyajikannya sebagai terbaru', async () => {
+    const fetchMock = routeFetch(rutePenuh);
+    vi.stubGlobal('fetch', fetchMock);
+    render(<TernakScreen />);
+    expect(await screen.findByText('Tidak ada jadwal rawat dalam 14 hari ke depan.')).toBeInTheDocument();
+    expect(screen.queryByText(/Gagal menyegarkan/)).not.toBeInTheDocument();
+
+    // Refresh berikutnya gagal total. Layar tetap terisi data lama — itu
+    // benar, tapi harus mengaku bahwa isinya lama.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('fayolla:tab-shown', { detail: 'ternak' }));
+    });
+
+    expect(await screen.findByText(/Gagal menyegarkan/)).toBeInTheDocument();
+    // Data lama tetap dirender, bukan diganti layar kosong.
+    expect(screen.getByText('Tidak ada jadwal rawat dalam 14 hari ke depan.')).toBeInTheDocument();
   });
 });

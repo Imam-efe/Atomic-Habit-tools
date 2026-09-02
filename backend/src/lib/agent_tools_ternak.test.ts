@@ -186,3 +186,41 @@ describe('ternak.catat', () => {
     void kandangId;
   });
 });
+
+const tambah = TOOLS.find((t) => t.name === 'ternak.tambah')!;
+
+describe('ternak.tambah memperingatkan tugas kandang yang jadi dorman', () => {
+  it('menyebut hewan yang tugas kandangnya belum dijadwalkan saat kandang tidak disebut', async () => {
+    // kucing-domestik punya tugas bersasaran kandang (litter). Tanpa kandang,
+    // tugas itu tidak dimiliki siapa pun dan tidak akan pernah dijadwalkan.
+    const hasil = await tambah.run(ctx(), { hewan: ['kucing-domestik'] });
+    expect(hasil.ringkasan).toContain('belum punya kandang');
+    expect(hasil.ringkasan).toContain('kucing-domestik');
+  });
+
+  it('tidak memperingatkan kalau kandangnya disebut', async () => {
+    await buatKandang();
+    const hasil = await tambah.run(ctx(), { hewan: ['kucing-domestik'], kandang: 'Akuarium' });
+    expect(hasil.ringkasan).not.toContain('belum punya kandang');
+  });
+
+  it('tidak memperingatkan spesies yang memang tidak punya tugas kandang', async () => {
+    // anjing-kampung salah satu dari 3 spesies tanpa tugas bersasaran kandang.
+    const hasil = await tambah.run(ctx(), { hewan: ['anjing-kampung'] });
+    expect(hasil.ringkasan).not.toContain('belum punya kandang');
+  });
+
+  it('tidak memperingatkan hewan tanpa spesies katalog', async () => {
+    // Tanpa entri katalog tidak ada daftar tugas yang bisa jadi dorman.
+    const hasil = await tambah.run(ctx(), { hewan: ['Si Belang entah apa'] });
+    expect(hasil.ringkasan).not.toContain('belum punya kandang');
+  });
+
+  it('hanya menyebut hewan yang benar-benar terdampak saat dicatat sekaligus', async () => {
+    const hasil = await tambah.run(ctx(), { hewan: ['kucing-domestik', 'anjing-kampung'] });
+    expect(hasil.ringkasan).toContain('kucing-domestik');
+    expect(hasil.ringkasan).not.toContain('belum punya kandang karena anjing-kampung');
+    const catatan = hasil.ringkasan.slice(hasil.ringkasan.indexOf('Tugas perawatan'));
+    expect(catatan).not.toContain('anjing-kampung');
+  });
+});
