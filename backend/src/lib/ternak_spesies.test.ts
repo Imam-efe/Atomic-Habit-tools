@@ -103,24 +103,28 @@ describe('spesiesKandang sepakat dengan subquery jadwalPengguna', () => {
     expect(punyaTugasCupang).toBe(true);
   });
 
-  it('kandang milik pengguna lain dengan animal_id sama tidak membocorkan spesies lewat subquery', async () => {
+  it('baris hewan berpemilik keliru (kandang_id menunjuk kandang user lain) tidak membocorkan spesies lewat subquery', async () => {
+    // Skenario di atas (dua kandang terpisah, masing-masing penghuninya
+    // sendiri) tidak pernah benar-benar menguji `h.user_id = k.user_id`:
+    // join `h.kandang_id = k.id` saja sudah menyingkirkan penghuni kandang
+    // lain, apa pun isi user_id-nya. Menghapus korelasi user_id dari
+    // subquery tetap membuat tes itu hijau.
+    //
+    // Untuk menguji korelasinya sungguhan, baris hewan ini dibuat dengan
+    // kepemilikan yang keliru secara sengaja: kandang_id menunjuk kandang
+    // user-1, tapi user_id barisnya user-2 — kombinasi yang seharusnya
+    // tidak pernah lolos lewat rute (POST dan PATCH /hewan memverifikasi
+    // kepemilikan kandang sebelum mengizinkan kandangId), tapi tetap harus
+    // ditolak oleh kueri itu sendiri sebagai lapis pertahanan kedua kalau
+    // ada bug di tempat lain yang menuliskannya langsung ke tabel.
     const kandangUser1 = await buatKandang('user-1');
-    const kandangUser2 = await buatKandang('user-2');
-    // Sengaja kandang user-2 dibuat lebih dulu (created_at lebih kecil) dan
-    // penghuninya juga — kalau subquery jadwalPengguna lupa user_id, baris
-    // milik user-2 ini bisa "menang" untuk kandang user-1.
-    await buatHewan({ userId: 'user-2', kandangId: kandangUser2, animalId: 'cupang', createdAt: 1 });
-    await buatHewan({ userId: 'user-1', kandangId: kandangUser1, animalId: 'lele', createdAt: 2 });
+    await buatHewan({ userId: 'user-2', kandangId: kandangUser1, animalId: 'cupang', createdAt: 1 });
 
     const helper = await spesiesKandang(db as never, kandangUser1, 'user-1');
-    expect(helper).toBe('lele');
+    expect(helper).toBeNull();
 
     const hasil = await jadwalPengguna(db as never, 'user-1', '2026-06-01');
-    const semuaKandangUser1 = hasil.filter((t) => t.subjekTipe === 'kandang');
-    // Tugas lele bersasaran kandang: 'monitor-air'/'ganti-air' — cukup
-    // pastikan tidak ada tugas cupang ('ganti-air' dengan cara cupang tidak
-    // bisa dibedakan by kode, jadi diperiksa lewat jumlah baris kandang
-    // user-1 tetap konsisten dan tidak nol).
-    expect(semuaKandangUser1.length).toBeGreaterThan(0);
+    const punyaTugasKandang = hasil.some((t) => t.subjekTipe === 'kandang' && t.subjekId === kandangUser1);
+    expect(punyaTugasKandang).toBe(false);
   });
 });
