@@ -52,11 +52,48 @@ export function newClientId(): string {
   return uuid.replace(/-/g, '').slice(0, 32);
 }
 
-/** Benar bila permintaan gagal karena jaringan, bukan karena server menolak. */
+/**
+ * Benar bila `import()` malas gagal mengambil chunk-nya.
+ *
+ * Nama berkas chunk mengandung hash isi, jadi tiap deploy melahirkan nama
+ * baru dan membuang yang lama. Tab yang sudah lama terbuka — atau PWA yang
+ * shell-nya tersaji dari cache — masih memegang nama lama, dan chunk yang
+ * belum pernah diambil akan 404. Ini BUKAN masalah jaringan: menyuruh
+ * pengguna "coba lagi setelah tersambung" tidak akan pernah menolongnya,
+ * karena yang dibutuhkan justru memuat ulang aplikasi.
+ */
+export function isStaleChunkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const pesan = err.message.toLowerCase();
+  return pesan.includes('dynamically imported module')
+    || pesan.includes('importing a module script failed')
+    || pesan.includes('error loading dynamically imported module');
+}
+
+/**
+ * Benar bila permintaan gagal karena jaringan, bukan karena server menolak.
+ *
+ * Pesannya diperiksa, bukan cuma tipenya. `fetch` memang melempar TypeError
+ * saat jaringan tidak tercapai, tapi TypeError juga jenis galat pemrograman
+ * yang paling umum — "cannot read properties of undefined" dan kawan-kawan.
+ * Menyamakan keduanya membuat bug biasa dilaporkan ke pengguna sebagai "tidak
+ * ada jaringan" di perangkat yang jelas online, dan membuat antrean offline
+ * menyimpan lalu mengulang selamanya permintaan yang sebenarnya tidak akan
+ * pernah berhasil.
+ */
 export function isNetworkError(err: unknown): boolean {
-  // fetch melempar TypeError saat jaringan tidak tercapai; kesalahan HTTP
-  // datang sebagai ApiError.
-  return err instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false);
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  if (!(err instanceof TypeError)) return false;
+  // Gagal memuat chunk juga datang sebagai TypeError, tapi punya penanganan
+  // sendiri — jangan diklaim sebagai masalah jaringan.
+  if (isStaleChunkError(err)) return false;
+
+  const pesan = err.message.toLowerCase();
+  return pesan.includes('failed to fetch')      // Chrome
+    || pesan.includes('networkerror')            // Firefox
+    || pesan.includes('load failed')             // Safari
+    || pesan.includes('network request failed')  // WebKit lama
+    || pesan.includes('connection');
 }
 
 /**

@@ -1,12 +1,39 @@
-const CACHE_NAME = 'fayolla-v1';
-const RUNTIME_CACHE = 'fayolla-runtime-v1';
-const API_CACHE = 'fayolla-api-v1';
+/**
+ * Naikkan VERSION setiap kali aturan cache di berkas ini berubah.
+ *
+ * Nama cache diturunkan dari sini, dan `activate` menghapus semua cache yang
+ * namanya di luar himpunan versi sekarang. Sebelumnya ketiga nama itu berupa
+ * string tetap, jadi cache lama TIDAK PERNAH terbuang: shell aplikasi yang
+ * pertama kali tersimpan akan disajikan selamanya, betapa pun seringnya
+ * di-deploy.
+ */
+const VERSION = 'v2';
+const CACHE_NAME = `fayolla-${VERSION}`;
+const RUNTIME_CACHE = `fayolla-runtime-${VERSION}`;
+const API_CACHE = `fayolla-api-${VERSION}`;
+const CACHES_SEKARANG = [CACHE_NAME, RUNTIME_CACHE, API_CACHE];
 
 // Essential URLs to cache on install
 const ESSENTIAL_URLS = [
   '/',
   '/index.html',
 ];
+
+/**
+ * Benar untuk permintaan dokumen (buka aplikasi, reload, tap notifikasi).
+ *
+ * Dokumen HTML tidak boleh cache-first. Nama berkas JS/CSS-nya mengandung
+ * hash yang berubah tiap build, jadi index.html basi menunjuk chunk yang
+ * sudah tidak ada di server. Chunk yang sudah pernah dikunjungi tetap
+ * tersaji dari cache sehingga aplikasi tampak sehat — tapi begitu ada
+ * `import()` malas ke chunk yang belum pernah diambil (ekspor PDF, sub-layar
+ * lazy), permintaannya 404 dan importnya melempar. Gejalanya menyesatkan:
+ * "tidak ada jaringan" di perangkat yang jelas online.
+ */
+function permintaanDokumen(request) {
+  return request.mode === 'navigate'
+    || (request.headers.get('accept') || '').includes('text/html');
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -24,7 +51,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME && name !== RUNTIME_CACHE && name !== API_CACHE)
+          .filter((name) => !CACHES_SEKARANG.includes(name))
           .map((name) => caches.delete(name)),
       );
     }),
@@ -60,6 +87,32 @@ self.addEventListener('fetch', (event) => {
             .match(request)
             .then((cached) => cached || new Response(null, { status: 503 }));
         }),
+    );
+    return;
+  }
+
+  // Dokumen HTML: network-first, cache cuma jaring pengaman saat offline.
+  //
+  // Inilah yang menjaga shell tetap segar. Aset lain aman cache-first karena
+  // nama berkasnya sudah mengandung hash isi — berkas dengan nama sama tidak
+  // pernah berubah isinya — tapi index.html memakai nama tetap, jadi versi
+  // cache-nya akan membekukan seluruh aplikasi di build lama.
+  if (permintaanDokumen(request)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const salinan = response.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(request, salinan));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) => cached || caches.match('/index.html'))
+            .then((cached) => cached || new Response(null, { status: 503 })),
+        ),
     );
     return;
   }
