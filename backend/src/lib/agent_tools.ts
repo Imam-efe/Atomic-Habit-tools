@@ -29,6 +29,7 @@ import { nanoid } from './nanoid';
 import { PLANTS, PLANT_BY_ID, dipanen } from '../data/plants';
 import { ANIMALS, ANIMAL_BY_ID, type TugasKatalog } from '../data/animals';
 import { spesiesKandang } from './ternak_spesies';
+import { peringatanDorman } from './ternak_dorman';
 import { addHarvestToInventory } from '../routes/garden';
 import { pilahBahan, type StockItem } from './cooking';
 import type { ModuleKey } from './ai_context';
@@ -393,10 +394,13 @@ const tools: AgentTool[] = [
       }
 
       const ids: string[] = [];
+      /** Hewan yang tugas kandangnya jadi dorman karena tidak disebutkan kandangnya. */
+      const dorman: string[] = [];
       const statements = nama.map((n) => {
         const id = nanoid();
         ids.push(id);
         const animalId = cocokkanHewan(n);
+        if (peringatanDorman(animalId, kandangId)) dorman.push(n);
 
         return ctx.db.prepare(
           `INSERT INTO ternak_hewan
@@ -406,7 +410,14 @@ const tools: AgentTool[] = [
       });
 
       await ctx.db.batch(statements);
-      return { ringkasan: `${nama.length} hewan dicatat: ${nama.join(', ')}.`, ids };
+
+      // Menambah lewat suara tidak boleh diam soal hal yang formulirnya
+      // peringatkan: tanpa kandang, tugas bersasaran kandang tidak dimiliki
+      // siapa pun dan jadwalnya akan terlihat kosong tanpa sebab.
+      const catatan = dorman.length > 0
+        ? ` Tugas perawatan yang menempel ke kandang belum dijadwalkan untuk ${dorman.join(', ')} karena belum punya kandang — pilih kandangnya untuk mengaktifkan.`
+        : '';
+      return { ringkasan: `${nama.length} hewan dicatat: ${nama.join(', ')}.${catatan}`, ids };
     },
   },
 
