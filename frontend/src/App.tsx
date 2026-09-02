@@ -12,12 +12,16 @@ import { GlobalSearch } from '@/components/GlobalSearch';
 import { LoginScreen } from '@/screens/LoginScreen';
 import { Dashboard } from '@/screens/Dashboard';
 import { Habits } from '@/screens/Habits';
-import { Goals } from '@/screens/Goals';
 import { Budget } from '@/screens/Budget';
 import { Calendar } from '@/screens/Calendar';
 import { Garden } from '@/screens/Garden';
+// Tab utama diimpor eager: pane tab TIDAK dibungkus Suspense (hanya sub-layar
+// yang dibungkus), jadi komponen lazy di sana akan menggantung tanpa batas
+// penampung dan melempar begitu tabnya dibuka pertama kali.
+import Ternak from '@/screens/Ternak';
 import { More } from '@/screens/More';
 import { useOnline } from '@/hooks/useOnline';
+import { resolveDeepLink } from '@/lib/deepLinks';
 import { applyTheme } from '@/tokens/theme';
 import type { AccentName, ThemeName, TabName } from '@/types';
 
@@ -42,7 +46,7 @@ const RiwayatAi = lazy(() => import('@/screens/RiwayatAi').then(m => ({ default:
 const Shortcuts = lazy(() => import('@/screens/Shortcuts'));
 const Harian = lazy(() => import('@/screens/Harian'));
 const TutupHari = lazy(() => import('@/screens/TutupHari'));
-const Ternak = lazy(() => import('@/screens/Ternak'));
+const Goals = lazy(() => import('@/screens/Goals').then(m => ({ default: m.Goals })));
 const Pola = lazy(() => import('@/screens/Pola'));
 const Pengaturan = lazy(() => import('@/screens/Pengaturan'));
 
@@ -90,7 +94,8 @@ function TabPane({
   );
 }
 
-const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'kebun', 'goals', 'uang', 'lainnya']);
+const VALID_TABS = new Set(['beranda', 'kebiasaan', 'kalender', 'kebun', 'ternak', 'uang', 'lainnya']);
+
 
 function AppShell() {
   const { activeTab, subScreen, goBack, setTab, setSubScreen } = useUIStore();
@@ -105,6 +110,18 @@ function AppShell() {
     if (tab && VALID_TABS.has(tab)) {
       setTab(tab as TabName);
       window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+
+    // Tap notifikasi. Dijalankan sekali saat mount karena service worker
+    // membuka jendela baru; pathname-nya dibersihkan sesudahnya supaya reload
+    // atau tombol back tidak mengulang lompatan yang sama.
+    const tujuan = resolveDeepLink(window.location.pathname);
+    if (tujuan) {
+      setTab(tujuan.tab);
+      // setTab mengosongkan subScreen, jadi sub-layarnya diset sesudahnya.
+      if (tujuan.sub) setSubScreen(tujuan.sub);
+      window.history.replaceState(null, '', '/');
     }
   }, []);
 
@@ -158,7 +175,7 @@ function AppShell() {
       kebiasaan: <Habits />,
       kalender: <Calendar />,
       kebun: <Garden />,
-      goals: <Goals />,
+      ternak: <Ternak />,
       uang: <Budget />,
       lainnya: <More />,
     }),
@@ -187,7 +204,7 @@ function AppShell() {
       'shortcuts': <Shortcuts />,
       'harian': <Harian />,
       'tutup-hari': <TutupHari />,
-      'ternak': <Ternak />,
+      'goals': <Goals />,
       'pola': <Pola />,
       'pengaturan': <Pengaturan />,
     }),
