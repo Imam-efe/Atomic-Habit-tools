@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { springs } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface HabitStat {
   id: string;
@@ -83,7 +84,9 @@ export function WeeklyReview() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       load();
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan review mingguan', err);
+    }
     setSaving(false);
   };
 

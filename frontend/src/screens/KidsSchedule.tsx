@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface KidSchedule {
   id: string;
@@ -85,7 +86,9 @@ export function KidsSchedule() {
       }
       load();
       resetForm();
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan jadwal anak', err);
+    }
     setSaving(false);
   };
 

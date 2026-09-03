@@ -10,6 +10,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { buildHabitReminderIcs, downloadIcs } from '@/lib/ics';
 import { bestForegroundFor } from '@/lib/color';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface Goal {
   id: string;
@@ -365,7 +366,9 @@ export function Habits() {
       });
       load();
       setEditingHabit(null);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan kebiasaan', err);
+    }
     setUpdating(false);
   };
 

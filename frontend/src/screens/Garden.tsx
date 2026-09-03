@@ -4,7 +4,8 @@ import { springs, collapse } from '@/tokens/motion';
 import { GardenPlanner, GardenRecords, type PlantingOption } from './GardenExtras';
 import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
-import { isNetworkError, newClientId, queueFor } from '@/lib/offlineQueue';
+import { isNetworkError, isStaleChunkError, newClientId, queueFor } from '@/lib/offlineQueue';
+import { pesanGagal } from '@/lib/pesanGagal';
 import { useAuthStore } from '@/stores/authStore';
 import { todayISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
@@ -634,9 +635,7 @@ export function Garden() {
     } catch (err) {
       setWorksheetMsg({
         ok: false,
-        text: isNetworkError(err)
-          ? 'Gagal membuat lembar kerja: tidak ada jaringan. Coba lagi setelah tersambung.'
-          : 'Gagal membuat lembar kerja. Coba lagi sebentar lagi.',
+        text: pesanGagal('Gagal membuat lembar kerja', err),
       });
     } finally {
       setWorksheetBusy(false);
@@ -725,8 +724,8 @@ export function Garden() {
       // fotonya masuk, lalu kehilangan satu titik di timeline pertumbuhan yang
       // tidak bisa diulang — momen itu sudah lewat.
       setPhotoError(
-        isNetworkError(err)
-          ? 'Foto gagal diunggah: tidak ada jaringan.'
+        isStaleChunkError(err) || isNetworkError(err)
+          ? pesanGagal('Foto gagal diunggah', err)
           : 'Foto gagal diunggah. Coba lagi, atau pakai foto yang lebih kecil.'
       );
     }
@@ -803,7 +802,7 @@ export function Garden() {
       setPlantError(
         isNetworkError(err)
           ? 'Tidak ada jaringan. Catatan belum tersimpan — coba lagi setelah tersambung.'
-          : 'Gagal menyimpan tanaman. Coba lagi sebentar lagi.'
+          : pesanGagal('Gagal menyimpan tanaman', err)
       );
     }
     setSaving(false);

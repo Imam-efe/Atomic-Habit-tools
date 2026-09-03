@@ -9,6 +9,7 @@ import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
 import { todayISO, daysAgoISO, thisMonthISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface BudgetEntry {
   id: string;
@@ -651,7 +652,9 @@ export function Budget() {
       });
       setLimitVal('');
       load();
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan batas anggaran', err);
+    }
     setSavingLimit(false);
   };
 

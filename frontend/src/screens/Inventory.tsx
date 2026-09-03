@@ -5,6 +5,7 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { useUIStore } from '@/stores/uiStore';
 import { todayISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface RescueRecipe {
   name: string;
@@ -131,7 +132,9 @@ export function Inventory() {
       }
       load();
       resetForm();
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan stok', err);
+    }
     setSaving(false);
   };
 

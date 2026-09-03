@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { compressImage } from '@/lib/image';
 import { NUTRITION_MACROS } from '@/constants/colors';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface FoodLog {
   id: string;
@@ -304,7 +305,9 @@ export function Nutrition() {
       });
       load();
       setShowEditTarget(false);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan target nutrisi', err);
+    }
     setSavingTarget(false);
   };
 

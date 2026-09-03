@@ -10,6 +10,7 @@ import { nextHoliday, resolveYear } from '@/data/holidays';
 import type { RemoteHoliday, ResolvedHoliday } from '@/data/holidays';
 import { observancesOn } from '@/data/observances';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface CalendarEvent {
   id: string;
@@ -130,7 +131,9 @@ export function Calendar() {
     try {
       await apiFetch('/holidays/sync', { method: 'POST' });
       await loadRemote(cursor.year);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyinkronkan hari libur', err);
+    }
     setSyncing(false);
   };
 

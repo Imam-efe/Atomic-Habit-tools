@@ -5,6 +5,7 @@ import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { todayISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 interface Task {
   id: string;
@@ -91,7 +92,9 @@ export function Projects() {
       setProjectName('');
       setProjectGoalId('');
       setShowAddProject(false);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan project', err);
+    }
     setSavingProject(false);
   };
 
@@ -164,7 +167,9 @@ export function Projects() {
         });
         setProjects(prev => prev.map(p => p.id === projectId ? { ...p, tasks: [...p.tasks, newTask] } : p));
       }
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan tugas', err);
+    }
     setBreakdownSaving(false);
     setBreakdownProjId(null);
     setBreakdownTasks([]);

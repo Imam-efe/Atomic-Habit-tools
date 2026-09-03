@@ -7,6 +7,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { TabBar } from '@/components/TabBar';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { UndoToast } from '@/components/UndoToast';
+import { GagalToast } from '@/components/GagalToast';
 import { QuickAdd } from '@/components/QuickAdd';
 import { GlobalSearch } from '@/components/GlobalSearch';
 import { LoginScreen } from '@/screens/LoginScreen';
@@ -276,6 +277,7 @@ function AppShell() {
       <TabBar />
       <InstallPrompt />
       <UndoToast />
+      <GagalToast />
       {/* Mounted at the root: both overlays work from any tab and drive the
           shell's navigation when the user picks a result. */}
       <GlobalSearch />

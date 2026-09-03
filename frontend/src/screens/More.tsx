@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { springs, collapse } from '@/tokens/motion';
 import { apiFetch } from '@/lib/api';
 import { isAppLockEnabled, isBiometricAvailable, enableAppLock, disableAppLock } from '@/lib/appLock';
+import { tampilkanGagal } from '@/stores/gagalToastStore';
 
 const VAPID_PUBLIC_KEY = 'BPOZXYPVRv_DxSObMXImgYoCWH582IyoDQAqqVAbKaJgqEMa7go2RUgDRSwIYLhOKZuKSJgBsU7SFVWg72MMqnI';
 
@@ -101,7 +102,9 @@ export function More() {
       setNewBankName('');
       setNewBankBalance('');
       setShowAddBank(false);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menambah rekening', err);
+    }
     setSavingBank(false);
   };
 
@@ -110,7 +113,9 @@ export function More() {
     try {
       await apiFetch(`/bank-accounts/${id}`, { method: 'DELETE' });
       fetchBankAccounts();
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menghapus rekening', err);
+    }
   };
 
   const fetchShortcutToken = async () => {
@@ -118,7 +123,9 @@ export function More() {
     try {
       const res = await apiFetch<{ token: string | null }>('/shortcut/token');
       setShortcutToken(res.token);
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal memuat API Key', err);
+    }
     setLoadingToken(false);
   };
 
@@ -250,14 +257,18 @@ export function More() {
     setTheme(t);
     try {
       await apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify({ theme: t }) });
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan profil', err);
+    }
   };
 
   const handleAccentChange = async (a: 'violet' | 'green' | 'blue' | 'orange') => {
     setAccent(a);
     try {
       await apiFetch('/auth/profile', { method: 'PUT', body: JSON.stringify({ accent: a }) });
-    } catch {}
+    } catch (err) {
+      tampilkanGagal('Gagal menyimpan profil', err);
+    }
   };
 
   const handleExportData = async () => {
