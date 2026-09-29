@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { saldoSemuaRekening } from '../lib/finance_saldo';
+import { pastikanKategori, type JenisKategori } from '../lib/finance_kategori';
 import type { DebtRow, DebtPaymentRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
@@ -251,6 +252,11 @@ debts.post('/:id/payments', async (c) => {
     budgetEntryId = nanoid();
     const budgetNote = `${arah.labelNota}: ${debt.person_name}${note ? ` — ${note}` : ''}`;
 
+    // Pembayaran hutang menulis baris budget_entries sendiri, jadi kategorinya
+    // harus ikut dipetakan — kalau tidak, satu-satunya pengeluaran yang tidak
+    // punya id kategori justru yang paling rutin.
+    await pastikanKategori(c.env.DB, user.sub, arah.entryType as JenisKategori, arah.category);
+
     await c.env.DB.batch([
       c.env.DB.prepare(
         `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)
@@ -333,6 +339,7 @@ debts.put('/:id/payments/:paymentId', async (c) => {
   if (newStatus === 'paid' && bankAccountId) {
     budgetEntryId = nanoid();
     const budgetNote = `${arah.labelNota}: ${debt.person_name}${note ? ` — ${note}` : ''}`;
+    await pastikanKategori(c.env.DB, user.sub, arah.entryType as JenisKategori, arah.category);
     stmts.push(
       c.env.DB.prepare(
         `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)

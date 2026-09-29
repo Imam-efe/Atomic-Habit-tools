@@ -3,6 +3,13 @@ import type { BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { validate, advanceDate, jakartaToday, jakartaMonth } from '../lib/validate';
+import {
+  semaiKategori,
+  daftarKategori,
+  pastikanKategori,
+  type JenisKategori,
+  type KategoriBaris,
+} from '../lib/finance_kategori';
 
 const budget = new Hono<AuthContext>();
 
@@ -26,6 +33,47 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 export const INCOME_CATEGORIES = ['Gaji', 'Freelance', 'Investasi', 'Bisnis', 'Lainnya'];
+
+// GET /api/budget/categories — kategori berid beserta subkategorinya
+//
+// Di sinilah kategori bawaan disemai: per pengguna, saat pertama dipakai.
+// Jadi GET ini memang menulis pada panggilan pertama — dan hanya yang
+// pertama; sesudahnya `semaiKategori` tidak mengirim satu pun pernyataan tulis.
+budget.get('/categories', async (c) => {
+  const user = c.get('user');
+  await semaiKategori(c.env.DB, user.sub);
+  const semua = await daftarKategori(c.env.DB, user.sub);
+
+  const susun = (jenis: JenisKategori) => {
+    const milik = semua.filter((k) => k.jenis === jenis);
+    const anakDari = new Map<string, KategoriBaris[]>();
+    for (const k of milik) {
+      if (!k.indukId) continue;
+      const daftar = anakDari.get(k.indukId) ?? [];
+      daftar.push(k);
+      anakDari.set(k.indukId, daftar);
+    }
+    // Subkategori yang induknya sudah dihapus (induk_id jadi NULL lewat
+    // ON DELETE SET NULL) ikut tampil sebagai kategori tingkat atas, bukan
+    // hilang dari daftar — transaksinya masih menunjuk ke situ.
+    return milik
+      .filter((k) => !k.indukId)
+      .map((k) => ({
+        id: k.id,
+        nama: k.nama,
+        emoji: k.emoji,
+        bawaan: k.bawaan,
+        anak: (anakDari.get(k.id) ?? []).map((a) => ({
+          id: a.id,
+          nama: a.nama,
+          emoji: a.emoji,
+          bawaan: a.bawaan,
+        })),
+      }));
+  };
+
+  return c.json({ expense: susun('expense'), income: susun('income') });
+});
 
 // GET /api/budget?from=YYYY-MM-DD&to=YYYY-MM-DD  (or legacy ?month=YYYY-MM)
 budget.get('/', async (c) => {
@@ -84,7 +132,23 @@ budget.get('/limits', async (c) => {
   const limitMap = new Map(limits.map(l => [l.category, l.monthly_limit_idr]));
   const spentMap = new Map(spent.map(s => [s.category, s.total_spent]));
 
-  const result = EXPENSE_CATEGORIES.map(category => {
+  // Sumbu kategorinya diambil dari tabel, bukan dari daftar tetap di atas.
+  // Bedanya: kategori buatan pengguna sendiri — termasuk yang lahir dari teks
+  // lama yang salah ketik — ikut muncul, jadi pengeluaran yang jatuh ke situ
+  // tidak lagi hilang dari layar limit tanpa jejak.
+  //
+  // Hanya tingkat atas. Limit per subkategori adalah butir tersendiri, dan
+  // menampilkan seluruh subkategori di sini akan membanjiri layarnya.
+  //
+  // Tidak menyemai: layar ini bisa terbuka bersamaan dengan /categories, dan
+  // dua penyemaian serentak cuma pekerjaan ganda. Pengguna yang belum pernah
+  // disemai memakai daftar tetap, yang isinya sama dengan induk bawaan.
+  const kategoriTabel = (await daftarKategori(c.env.DB, user.sub, 'expense'))
+    .filter(k => !k.indukId)
+    .map(k => k.nama);
+  const sumbu = kategoriTabel.length > 0 ? kategoriTabel : EXPENSE_CATEGORIES;
+
+  const result = sumbu.map(category => {
     const limit = limitMap.get(category) ?? 0;
     const spentAmount = spentMap.get(category) ?? 0;
     return {
@@ -157,6 +221,12 @@ budget.post('/', async (c) => {
   const nextRecurrenceDate = recurrence
     ? advanceDate(entryDate, recurrence as 'daily' | 'weekly' | 'monthly')
     : null;
+
+  // Teksnya dipetakan ke id sebelum transaksinya disimpan, bukan sesudah.
+  // Urutan itu yang membuat keadaannya selalu utuh: kategori dulu, lalu
+  // transaksi yang menunjuknya. Kebalikannya bisa meninggalkan transaksi
+  // dengan teks yang tidak dikenal kalau pemetaannya gagal.
+  await pastikanKategori(c.env.DB, user.sub, body.type as JenisKategori, body.category!);
 
   // Insert transaction
   await c.env.DB.prepare(
@@ -271,6 +341,10 @@ budget.put('/:id', async (c) => {
   const bankAccountId = 'bank_account_id' in body
     ? (body.bank_account_id || null)
     : existing.bank_account_id;
+
+  // Kategori barunya bisa berbeda dari yang lama — termasuk berpindah jenis,
+  // karena jenisnya ikut bisa diubah di sini.
+  await pastikanKategori(c.env.DB, user.sub, newType as JenisKategori, body.category!);
 
   // Reverse old bank adjustment
   if (existing.bank_account_id) {
