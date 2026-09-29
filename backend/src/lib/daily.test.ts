@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createTestDb, seedUser, type FakeD1 } from '../test/d1';
 import { dayName, shiftDate, getBillRadar, getKidsFor, getMissedYesterday, getExpiringItems } from './daily';
 
 /** Stub D1 yang mengembalikan baris berdasarkan tabel yang disebut di SQL. */
@@ -37,35 +38,79 @@ describe('shiftDate', () => {
 });
 
 describe('getBillRadar', () => {
-  const bills = [
-    { id: 'b1', person_name: 'Listrik', amount_idr: 400_000, due_date: '2026-08-25' },
-    { id: 'b2', person_name: 'Budi', amount_idr: 600_000, due_date: '2026-08-23' },
-  ];
+  // Blok ini memakai FakeD1 sungguhan, bukan stub: sejak saldo jadi turunan,
+  // angkanya lahir dari join tiga tabel. Stub yang mengembalikan baris apa
+  // adanya akan lulus betapa pun salahnya join itu.
+  let db: FakeD1;
+
+  beforeEach(async () => {
+    db = createTestDb();
+    seedUser(db, 'u');
+    for (const b of [
+      { id: 'b1', nama: 'Listrik', jumlah: 400_000, jatuh: '2026-08-25' },
+      { id: 'b2', nama: 'Budi', jumlah: 600_000, jatuh: '2026-08-23' },
+    ]) {
+      await db.prepare(
+        `INSERT INTO debts (id, user_id, type, person_name, amount_idr, due_date, status)
+         VALUES (?1, 'u', 'debt', ?2, ?3, ?4, 'unpaid')`
+      ).bind(b.id, b.nama, b.jumlah, b.jatuh).run();
+    }
+  });
+
+  afterEach(() => db.__close());
+
+  async function buatRekening(id: string, nama: string, saldo: number) {
+    await db.prepare(
+      `INSERT INTO bank_accounts (id, user_id, name, account_type, balance)
+       VALUES (?1, 'u', ?2, 'Bank', ?3)`
+    ).bind(id, nama, saldo).run();
+  }
 
   it('menghitung sisa hari, termasuk negatif untuk yang telat', async () => {
-    const radar = await getBillRadar(stubDb({ debts: bills, bank_accounts: [] }), 'u', '2026-08-24');
+    const radar = await getBillRadar(db as never, 'u', '2026-08-24');
 
-    expect(radar.bills.map((b) => b.daysUntil)).toEqual([1, -1]);
+    // Terurut jatuh tempo menaik, jadi yang sudah telat muncul lebih dulu.
+    // Stub lama mengabaikan ORDER BY dan mengembalikan urutan fixture, jadi
+    // tes ini dulu menegaskan urutan yang tidak pernah dihasilkan database.
+    expect(radar.bills.map((b) => b.daysUntil)).toEqual([-1, 1]);
     expect(radar.total).toBe(1_000_000);
   });
 
   it('memilih rekening bersaldo cukup untuk seluruh total', async () => {
-    const accounts = [
-      { id: 'a1', name: 'BCA', balance: 2_000_000 },
-      { id: 'a2', name: 'Dompet', balance: 300_000 },
-    ];
-    const radar = await getBillRadar(stubDb({ debts: bills, bank_accounts: accounts }), 'u', '2026-08-24');
+    await buatRekening('a1', 'BCA', 2_000_000);
+    await buatRekening('a2', 'Dompet', 300_000);
+
+    const radar = await getBillRadar(db as never, 'u', '2026-08-24');
 
     expect(radar.coveringAccount?.name).toBe('BCA');
     expect(radar.totalBalance).toBe(2_300_000);
   });
 
+  it('memakai saldo turunan, bukan kolom balance yang sudah basi', async () => {
+    // Kolom lama bilang rekening ini cukup; transaksi bilang tidak. Yang
+    // menentukan harus transaksinya, kalau tidak pengguna disuruh membayar
+    // dari rekening yang sebenarnya sudah kosong.
+    await buatRekening('a1', 'BCA', 2_000_000);
+    await db.prepare(
+      `INSERT INTO finance_saldo_awal (bank_account_id, user_id, saldo_awal_idr)
+       VALUES ('a1', 'u', 2000000)`
+    ).run();
+    await db.prepare(
+      `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, entry_date, bank_account_id)
+       VALUES ('e1', 'u', 'expense', 1900000, 'Lainnya', '2026-08-20', 'a1')`
+    ).run();
+
+    const radar = await getBillRadar(db as never, 'u', '2026-08-24');
+
+    expect(radar.totalBalance).toBe(100_000);
+    expect(radar.coveringAccount).toBeNull();
+  });
+
   it('tidak menyarankan rekening bila tak satu pun cukup', async () => {
-    const accounts = [
-      { id: 'a1', name: 'BCA', balance: 400_000 },
-      { id: 'a2', name: 'Dompet', balance: 300_000 },
-    ];
-    const radar = await getBillRadar(stubDb({ debts: bills, bank_accounts: accounts }), 'u', '2026-08-24');
+    await buatRekening('a1', 'BCA', 400_000);
+    await buatRekening('a2', 'Dompet', 300_000);
+
+    const radar = await getBillRadar(db as never, 'u', '2026-08-24');
 
     // Gabungannya cukup, tapi tidak ada satu rekening yang menutup — jangan
     // menyarankan rekening yang sebetulnya akan gagal saat dibayar.
@@ -74,7 +119,8 @@ describe('getBillRadar', () => {
   });
 
   it('kosong bila tidak ada tagihan', async () => {
-    const radar = await getBillRadar(stubDb({ debts: [], bank_accounts: [] }), 'u', '2026-08-24');
+    await db.prepare("DELETE FROM debts WHERE user_id = 'u'").run();
+    const radar = await getBillRadar(db as never, 'u', '2026-08-24');
 
     expect(radar.bills).toEqual([]);
     expect(radar.total).toBe(0);

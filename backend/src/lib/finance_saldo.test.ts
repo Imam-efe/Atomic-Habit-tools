@@ -159,15 +159,30 @@ describe('perhitungan saldo', () => {
     expect(urut).toEqual(['Besar', 'Sedang', 'Kecil']);
   });
 
-  it('rekening yang belum disemai tetap terbaca, tidak hilang', async () => {
-    // Saldo awalnya nol, jadi angkanya belum tentu benar — tapi menghilangkan
-    // rekeningnya dari daftar jauh lebih buruk daripada menampilkan nol.
+  it('rekening yang belum disemai berperilaku seperti sistem lama, bukan nol', async () => {
+    // Titik awalnya dihitung sebagai cadangan, jadi saldonya sama dengan kolom
+    // `balance`. Menampilkan nol di sini akan membuat pengguna mengira uangnya
+    // hilang — jauh lebih buruk daripada angka lama yang masih benar.
     const rek = await buatRekening('user-1', 1_000_000);
     await catat({ userId: 'user-1', rekeningId: rek, tipe: 'income', jumlah: 50_000 });
     const s = await saldoSatu('user-1', rek);
-    expect(s.saldoAwal).toBe(0);
-    expect(s.saldo).toBe(50_000);
-    expect(s.selisih).toBe(950_000);
+    expect(s.saldo).toBe(1_000_000);
+    expect(s.selisih).toBe(0);
+  });
+
+  it('cadangan memakai rumus yang sama dengan penyemaian', async () => {
+    // Kalau kedua rumus menyimpang, saldo akan melompat tepat pada saat
+    // penyemaian berjalan — persis yang paling ingin dihindari.
+    const rek = await buatRekening('user-1', 3_000_000);
+    await catat({ userId: 'user-1', rekeningId: rek, tipe: 'expense', jumlah: 750_000 });
+    await catat({ userId: 'user-1', rekeningId: rek, tipe: 'income', jumlah: 100_000 });
+
+    const sebelum = await saldoSatu('user-1', rek);
+    await semaiSaldoAwal(db as never, 'user-1');
+    const sesudah = await saldoSatu('user-1', rek);
+
+    expect(sesudah.saldoAwal).toBe(sebelum.saldoAwal);
+    expect(sesudah.saldo).toBe(sebelum.saldo);
   });
 });
 

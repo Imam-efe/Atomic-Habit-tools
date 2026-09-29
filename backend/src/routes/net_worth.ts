@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
+import { totalSaldoPengguna } from '../lib/finance_saldo';
 
 const netWorth = new Hono<AuthContext>();
 
@@ -21,9 +22,8 @@ netWorth.get('/', async (c) => {
   // membuat meminjamkan uang menurunkan kekayaan bersih — dan membuat layar
   // ini berselisih dengan Laporan Keuangan, yang menghitungnya dengan benar.
   const [assetsRes, debtRows] = await Promise.all([
-    c.env.DB.prepare(
-      'SELECT COALESCE(SUM(balance), 0) as total FROM bank_accounts WHERE user_id = ?1'
-    ).bind(user.sub).first<{ total: number }>(),
+    // Saldo turunan, bukan kolom lama — lihat lib/finance_saldo.ts.
+    totalSaldoPengguna(c.env.DB, user.sub).then((total) => ({ total })),
     c.env.DB.prepare(
       `SELECT type, COALESCE(SUM(amount_idr), 0) as total FROM debts
        WHERE user_id = ?1 AND status != 'paid'

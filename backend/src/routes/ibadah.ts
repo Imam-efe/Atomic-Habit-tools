@@ -18,6 +18,7 @@ import {
 } from '../lib/zakat';
 import { hitungJadwalSalat, salatBerikutnya, type AsrMethod, type PrayerMethod, type PrayerName } from '../lib/prayer';
 import { puasaMendatang, ringkasPuasa, puasaPada, jenisPuasaDikenal, LABEL_PUASA } from '../lib/fasting';
+import { totalSaldoPengguna } from '../lib/finance_saldo';
 
 const ibadah = new Hono<AuthContext>();
 ibadah.use('/*', requireAuth);
@@ -81,9 +82,10 @@ ibadah.get('/zakat', async (c) => {
                            THEN amount_idr ELSE 0 END), 0) AS utang_dekat
        FROM debts WHERE user_id = ?1 AND status != 'paid'`
     ).bind(user.sub, batasHaul).first<{ piutang: number; utang_dekat: number }>(),
-    c.env.DB.prepare(
-      'SELECT COALESCE(SUM(balance), 0) AS total FROM bank_accounts WHERE user_id = ?1'
-    ).bind(user.sub).first<{ total: number }>(),
+    // Saldo turunan, bukan kolom bank_accounts.balance: nisab zakat dihitung
+    // dari harta yang benar-benar ada, dan kolom lama bisa melenceng tanpa
+    // jejak (lihat lib/finance_saldo.ts).
+    totalSaldoPengguna(c.env.DB, user.sub).then((total) => ({ total })),
     // Rata-rata pemasukan tiga bulan terakhir, sebagai usulan untuk zakat
     // penghasilan. Satu bulan terlalu goyah kalau ada bonus atau THR.
     c.env.DB.prepare(

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { BankAccountRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
+import { semaiSaldoAwal } from '../lib/finance_saldo';
 import { validate } from '../lib/validate';
 
 const bankAccounts = new Hono<AuthContext>();
@@ -35,6 +36,13 @@ bankAccounts.post('/', async (c) => {
     `INSERT INTO bank_accounts (id, user_id, name, account_type, balance)
      VALUES (?1, ?2, ?3, ?4, ?5)`
   ).bind(id, user.sub, body.name, accountType, balance).run();
+
+  // Saldo yang baru diketik ini adalah titik awalnya. Dikunci sekarang juga,
+  // supaya transaksi pertama menggesernya alih-alih terserap ke dalamnya:
+  // penyemaian menurunkan titik awal dari (saldo - mutasi), jadi kalau
+  // ditunda sampai sesudah ada transaksi, transaksi itu ikut terkurangi dan
+  // efeknya hilang tanpa jejak. Lihat lib/finance_saldo.ts.
+  await semaiSaldoAwal(c.env.DB, user.sub);
 
   return c.json({ id, name: body.name, account_type: accountType, balance }, 201);
 });

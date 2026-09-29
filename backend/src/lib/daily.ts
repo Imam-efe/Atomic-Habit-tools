@@ -7,6 +7,8 @@
  * bisa memilih tanggalnya.
  */
 
+import { saldoSemuaRekening, totalSaldo } from './finance_saldo';
+
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
 /** Nama hari Indonesia untuk YYYY-MM-DD, cocok dengan kids_schedules.day_of_week. */
@@ -71,10 +73,10 @@ export async function getBillRadar(
       )
       .bind(userId, horizon)
       .all<{ id: string; person_name: string; amount_idr: number; due_date: string }>(),
-    db
-      .prepare('SELECT id, name, balance FROM bank_accounts WHERE user_id = ?1 ORDER BY balance DESC')
-      .bind(userId)
-      .all<{ id: string; name: string; balance: number }>(),
+    // Saldo turunan, bukan kolom bank_accounts.balance — lihat
+    // lib/finance_saldo.ts. Sudah terurut saldo menurun, jadi "yang pertama
+    // cukup" di bawah tetap berarti rekening terbesar yang menutupi tagihan.
+    saldoSemuaRekening(db, userId),
   ]);
 
   const bills: DueBill[] = (billRows.results ?? []).map((row) => ({
@@ -86,15 +88,19 @@ export async function getBillRadar(
   }));
 
   const total = bills.reduce((sum, bill) => sum + bill.amount, 0);
-  const accounts = accountRows.results ?? [];
+  const accounts = accountRows;
+
+  const penutup = accounts.find((a) => a.saldo >= total);
 
   return {
     bills,
     total,
     // Diurutkan saldo menurun, jadi yang pertama cukup adalah yang terbesar —
     // sengaja: menyarankan rekening paling aman, bukan yang paling pas-pasan.
-    coveringAccount: accounts.find((a) => a.balance >= total) ?? null,
-    totalBalance: accounts.reduce((sum, a) => sum + a.balance, 0),
+    coveringAccount: penutup
+      ? { id: penutup.bankAccountId, name: penutup.nama, balance: penutup.saldo }
+      : null,
+    totalBalance: totalSaldo(accounts),
   };
 }
 

@@ -27,3 +27,28 @@ CREATE TABLE IF NOT EXISTS finance_saldo_awal (
 );
 
 CREATE INDEX IF NOT EXISTS idx_finance_saldo_awal_user ON finance_saldo_awal(user_id);
+
+-- Semai titik awal untuk rekening yang sudah ada, saat deploy.
+--
+-- Nilainya diturunkan MUNDUR dari keadaan sekarang: saldo tersimpan dikurangi
+-- seluruh mutasi yang sudah tercatat. Jadi saldo hasil hitungan sama persis
+-- dengan angka yang selama ini dilihat pengguna — tidak ada angka yang berubah
+-- di layar saat modul ini menyala.
+--
+-- Penyemaian sengaja dilakukan DI SINI, bukan hanya saat aplikasi pertama kali
+-- membaca saldo. Kalau menunggu pembacaan pertama, transaksi yang masuk antara
+-- deploy dan pembacaan itu akan ikut terkurangi dari titik awal dan efeknya
+-- terserap diam-diam — satu transaksi hilang tanpa jejak. Migrasi berjalan
+-- sebelum Worker terpasang, jadi tidak ada celah itu.
+--
+-- INSERT OR IGNORE: kunci utamanya bank_account_id, jadi deploy berikutnya
+-- tidak menimpa titik awal yang sudah dipakai. Bentuk ini terdaftar aman di
+-- migrations/README.md.
+INSERT OR IGNORE INTO finance_saldo_awal (bank_account_id, user_id, saldo_awal_idr)
+SELECT b.id, b.user_id,
+       b.balance - COALESCE((
+         SELECT SUM(CASE WHEN e.type = 'expense' THEN -e.amount_idr ELSE e.amount_idr END)
+           FROM budget_entries e
+          WHERE e.bank_account_id = b.id AND e.user_id = b.user_id
+       ), 0)
+  FROM bank_accounts b;

@@ -90,6 +90,16 @@ interface BarisSaldo {
 /**
  * Saldo seluruh rekening satu pengguna, terurut saldo terbesar dulu.
  *
+ * Murni baca, tanpa efek samping — beberapa pemanggilnya (lib/daily.ts)
+ * menyatakan kontrak itu di kepalanya sendiri, dan pembacaan yang diam-diam
+ * menulis akan mengingkarinya.
+ *
+ * Rekening yang belum punya baris saldo pembuka tetap terbaca benar: titik
+ * awalnya dihitung sebagai cadangan di SQL, dengan rumus yang sama persis
+ * dengan yang dipakai penyemaian. Akibatnya rekening yang belum tersemai
+ * berperilaku seperti sistem lama — saldonya sama dengan kolom `balance` —
+ * alih-alih tampil nol dan membuat pengguna mengira uangnya hilang.
+ *
  * Mutasi dijumlahkan sekali lewat satu agregat yang di-join, bukan satu
  * subkueri per rekening: rekening bertambah seiring waktu, dan kueri yang
  * biayanya tumbuh mengikuti jumlah rekening akan pelan justru pada pengguna
@@ -101,7 +111,7 @@ export async function saldoSemuaRekening(
 ): Promise<SaldoRekening[]> {
   const rows = await db.prepare(
     `SELECT b.id, b.name, b.account_type, b.balance,
-            COALESCE(s.saldo_awal_idr, 0) AS saldo_awal,
+            COALESCE(s.saldo_awal_idr, b.balance - COALESCE(m.mutasi, 0)) AS saldo_awal,
             COALESCE(m.mutasi, 0) AS mutasi
        FROM bank_accounts b
        LEFT JOIN finance_saldo_awal s
@@ -135,4 +145,9 @@ export async function saldoSemuaRekening(
 /** Total seluruh rekening — dipakai kekayaan bersih, zakat, dan sisa aman harian. */
 export function totalSaldo(daftar: ReadonlyArray<SaldoRekening>): number {
   return daftar.reduce((n, r) => n + r.saldo, 0);
+}
+
+/** Jumlah saldo seluruh rekening satu pengguna. */
+export async function totalSaldoPengguna(db: D1Database, userId: string): Promise<number> {
+  return totalSaldo(await saldoSemuaRekening(db, userId));
 }
