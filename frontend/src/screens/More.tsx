@@ -67,7 +67,7 @@ export function More() {
   };
 
   // Bank accounts state
-  const [bankAccounts, setBankAccounts] = useState<{ id: string; name: string; account_type: string; balance: number }[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; name: string; account_type: string; balance: number; saldo_selisih?: number }[]>([]);
   const [loadingBanks, setLoadingBanks] = useState(false);
   const [newBankName, setNewBankName] = useState('');
   const [newBankType, setNewBankType] = useState('Bank');
@@ -853,9 +853,22 @@ export function More() {
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-bold" style={{ color: 'var(--text)' }}>
-                      {formatRp(bank.balance)}
-                    </span>
+                    <div className="text-right">
+                      <span className="font-bold block" style={{ color: 'var(--text)' }}>
+                        {formatRp(bank.balance)}
+                      </span>
+                      {/* Checksum saldo. Kolom lama dan hitungan dari transaksi
+                          seharusnya selalu cocok; kalau tidak, ada jalur tulis
+                          yang menggeser salah satunya saja — bug di kode, bukan
+                          kesalahan pencatatan. Ditampilkan supaya ketahuan,
+                          karena selisih yang tidak pernah dilihat sama saja
+                          dengan tidak dihitung. */}
+                      {!!bank.saldo_selisih && (
+                        <span className="text-[10px] block" style={{ color: 'var(--neg)' }}>
+                          selisih {formatRp(bank.saldo_selisih)} — laporkan
+                        </span>
+                      )}
+                    </div>
                     <button
                       onClick={() => handleDeleteBank(bank.id)}
                       className="w-6 h-6 flex items-center justify-center bg-red-950/10 rounded-lg"

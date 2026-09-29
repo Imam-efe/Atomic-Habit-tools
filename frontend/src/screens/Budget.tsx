@@ -7,9 +7,11 @@ import { createWorker } from 'tesseract.js';
 import { formatRp } from '@/lib/currency';
 import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
+import { BudgetTransfer } from './BudgetTransfer';
 import { todayISO, daysAgoISO, thisMonthISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
 import { tampilkanGagal } from '@/stores/gagalToastStore';
+import { useKategoriKeuangan, labelOpsi, KATEGORI_CADANGAN } from '@/lib/kategoriKeuangan';
 
 interface BudgetEntry {
   id: string;
@@ -41,22 +43,6 @@ interface CategoryLimit {
   spent: number;
   remaining: number;
 }
-
-const EXPENSE_CATEGORIES = [
-  'Makanan & Minuman',
-  'Transportasi & Bensin',
-  'Kebutuhan Rumah Tangga',
-  'Belanja Bulanan',
-  'Tagihan & Utilitas',
-  'Pendidikan & Anak',
-  'Kesehatan & Obat',
-  'Hiburan & Rekreasi',
-  'Cicilan & Utang',
-  'Investasi & Tabungan',
-  'Lainnya'
-];
-
-const INCOME_CATEGORIES = ['Gaji', 'Freelance', 'Investasi', 'Bisnis', 'Lainnya'];
 
 const MOCK_MERCHANTS = [
   { name: 'Kopi Kenangan', amount: 35000, category: 'Makanan & Minuman' },
@@ -176,7 +162,10 @@ function parseOcrText(text: string): { merchant: string; amount: number; categor
 
 export function Budget() {
   const showUndoToast = useUndoToastStore(s => s.show);
-  const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting'>('transaksi');
+  // Kategori dari server, dengan cadangan yang selalu ada: mencatat transaksi
+  // harus tetap bisa walau daftarnya gagal diambil.
+  const kategori = useKategoriKeuangan();
+  const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting' | 'transfer'>('transaksi');
   const [data, setData] = useState<BudgetData | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimit[]>([]);
@@ -186,7 +175,7 @@ export function Budget() {
   const [showAdd, setShowAdd] = useState(false);
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
+  const [category, setCategory] = useState(KATEGORI_CADANGAN.expense[0].nama);
   const [note, setNote] = useState('');
   const [date, setDate] = useState(todayISO());
   const [bankAccountId, setBankAccountId] = useState('');
@@ -219,7 +208,7 @@ export function Budget() {
   const [savingItems, setSavingItems] = useState<'idle' | 'saving' | 'done'>('idle');
 
   // Budget Limit Form state
-  const [selectedLimitCat, setSelectedLimitCat] = useState(EXPENSE_CATEGORIES[0]);
+  const [selectedLimitCat, setSelectedLimitCat] = useState(KATEGORI_CADANGAN.expense[0].nama);
   const [limitVal, setLimitVal] = useState('');
   const [savingLimit, setSavingLimit] = useState(false);
 
@@ -694,7 +683,17 @@ export function Budget() {
     }
   };
 
-  const cats = type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const cats = type === 'expense' ? kategori.expense : kategori.income;
+
+  // Limit bulanan hanya untuk kategori tingkat atas, sama dengan sumbu yang
+  // dikembalikan /budget/limits. Subkategori di sini cuma membanjiri layarnya.
+  const kategoriLimit = kategori.expense.filter(o => !o.anak);
+
+  // Pilihan pertama yang sah untuk jenis tertentu. Dipakai saat pengguna
+  // menukar pengeluaran/pemasukan: kategori yang sedang terpilih belum tentu
+  // ada di daftar jenis yang baru.
+  const pilihanPertama = (jenis: 'income' | 'expense') =>
+    (jenis === 'expense' ? kategori.expense : kategori.income)[0]?.nama ?? '';
 
   return (
     <div className="min-h-screen px-5 pt-16 pb-tab-safe" style={{ background: 'var(--bg)' }}>
@@ -723,7 +722,7 @@ export function Budget() {
       />
 
       {/* Main Tabs switcher */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+      <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         <button
           onClick={() => setActiveSubTab('transaksi')}
           className="py-2 rounded-lg text-xs font-bold text-center"
@@ -744,7 +743,23 @@ export function Budget() {
         >
           📊 Budgeting
         </button>
+        <button
+          onClick={() => setActiveSubTab('transfer')}
+          className="py-2 rounded-lg text-xs font-bold text-center"
+          style={{
+            background: activeSubTab === 'transfer' ? 'var(--bg)' : 'transparent',
+            color: activeSubTab === 'transfer' ? 'var(--text)' : 'var(--text3)',
+          }}
+        >
+          🔄 Transfer
+        </button>
       </div>
+
+      {/* Transfer berdiri sebagai tab sendiri, bukan jenis transaksi ketiga:
+          uang yang berpindah rekening bukan pemasukan dan bukan pengeluaran,
+          dan menaruhnya di daftar transaksi akan mengulang persis kerancuan
+          yang fitur ini dibuat untuk menghapus. */}
+      {activeSubTab === 'transfer' && <BudgetTransfer onChanged={load} />}
 
       {/* OCR Scanner Modal */}
       <AnimatePresence>
@@ -874,8 +889,8 @@ export function Budget() {
                         className="w-full bg-black/45 text-white rounded-xl p-2 border border-white/10 outline-none focus:border-violet-400 text-xs"
                         style={{ colorScheme: 'dark' }}
                       >
-                        {EXPENSE_CATEGORIES.map(cat => (
-                          <option key={cat} value={cat} className="bg-neutral-900 text-white">{cat}</option>
+                        {kategori.expense.map(o => (
+                          <option key={o.nama} value={o.nama} className="bg-neutral-900 text-white">{labelOpsi(o)}</option>
                         ))}
                       </select>
                     </div>
@@ -988,7 +1003,7 @@ export function Budget() {
                   }}
                   whileTap={{ scale: 0.97 }}
                   transition={springs.snappy}
-                  onClick={() => { setType(t); setCategory(t === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]); }}
+                  onClick={() => { setType(t); setCategory(pilihanPertama(t)); }}
                 >
                   {t === 'expense' ? 'Pengeluaran' : 'Pemasukan'}
                 </motion.button>
@@ -1012,7 +1027,7 @@ export function Budget() {
                   value={category}
                   onChange={e => setCategory(e.target.value)}
                 >
-                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                  {cats.map(o => <option key={o.nama} value={o.nama}>{labelOpsi(o)}</option>)}
                 </select>
 
                 <input
@@ -1335,7 +1350,7 @@ export function Budget() {
                 value={selectedLimitCat}
                 onChange={e => setSelectedLimitCat(e.target.value)}
               >
-                {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                {kategoriLimit.map(o => <option key={o.nama} value={o.nama}>{labelOpsi(o)}</option>)}
               </select>
 
               <div className="flex gap-2">
@@ -1623,7 +1638,7 @@ export function Budget() {
                       <motion.button key={t} className="flex-1 py-2 rounded-xl text-sm font-semibold"
                         style={{ background: editType === t ? (t === 'expense' ? 'var(--negFill)' : 'var(--posFill)') : 'var(--track)', color: editType === t ? 'white' : 'var(--text2)' }}
                         whileTap={{ scale: 0.97 }} transition={springs.snappy}
-                        onClick={() => { setEditType(t); setEditCategory(t === 'expense' ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0]); }}>
+                        onClick={() => { setEditType(t); setEditCategory(pilihanPertama(t)); }}>
                         {t === 'expense' ? 'Pengeluaran' : 'Pemasukan'}
                       </motion.button>
                     ))}
@@ -1636,7 +1651,7 @@ export function Budget() {
                     <select className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                       style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}
                       value={editCategory} onChange={e => setEditCategory(e.target.value)}>
-                      {(editType === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+                      {(editType === 'expense' ? kategori.expense : kategori.income).map(o => <option key={o.nama} value={o.nama}>{labelOpsi(o)}</option>)}
                     </select>
                     <input type="date" className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                       style={{ background: 'var(--bg)', color: 'var(--text)', boxShadow: 'var(--neu-inset)' }}

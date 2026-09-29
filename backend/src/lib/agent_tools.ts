@@ -26,6 +26,7 @@
 
 import type { D1Database } from '@cloudflare/workers-types';
 import { nanoid } from './nanoid';
+import { pastikanKategori } from './finance_kategori';
 import { PLANTS, PLANT_BY_ID, dipanen } from '../data/plants';
 import { ANIMALS, ANIMAL_BY_ID, type TugasKatalog } from '../data/animals';
 import { spesiesKandang } from './ternak_spesies';
@@ -949,12 +950,20 @@ const tools: AgentTool[] = [
       if (jumlah <= 0) throw new ToolError('jumlah harus lebih dari nol');
 
       const id = nanoid();
+      const kategori = teksOpsional(args, 'kategori', 60) ?? 'Lainnya';
+
+      // Model bisa mengarang nama kategori. Yang dikarang tetap mendapat
+      // barisnya sendiri, apa adanya — menebaknya ke kategori bawaan yang
+      // mirip akan memindahkan uang ke kolom yang belum tentu benar, dan
+      // pengguna tidak akan pernah tahu itu terjadi.
+      await pastikanKategori(ctx.db, ctx.userId, jenis, kategori);
+
       await ctx.db.prepare(
         `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
       ).bind(
         id, ctx.userId, jenis, jumlah,
-        teksOpsional(args, 'kategori', 60) ?? 'Lainnya',
+        kategori,
         teksOpsional(args, 'catatan', 200),
         tanggal(args, 'tanggal', ctx.today),
         Math.floor(Date.now() / 1000)

@@ -456,3 +456,77 @@ describe('catatan puasa', () => {
     expect(row?.kind).toBe('senin-kamis');
   });
 });
+
+describe('checksum saldo', () => {
+  /**
+   * Kolom `bank_accounts.balance` masih dipelihara dua belas jalur tulis,
+   * padahal tidak ada lagi yang membacanya untuk kebenaran. Ia sengaja
+   * dibiarkan hidup sebagai hitungan kedua yang independen: selama tiap
+   * jalur tulis menggeser keduanya, angkanya cocok. Begitu ada jalur yang
+   * menggeser salah satu saja, selisihnya bukan nol — dan itu bug di kode
+   * ini, bukan kesalahan pencatatan pengguna.
+   */
+  async function ambilRekening() {
+    const bank = new Hono() as Hono<never>;
+    bank.route('/api/bank-accounts', (await import('./bank_accounts')).default as never);
+    const res = await bank.fetch(
+      new Request('http://x/api/bank-accounts', { headers: { Authorization: `Bearer ${token}` } }),
+      makeEnv()
+    );
+    return await res.json() as Array<{ id: string; balance: number; saldo_selisih: number }>;
+  }
+
+  it('nol selama kolom lama dan transaksi bergerak bersama', async () => {
+    const rek = seedBank('bank-cs1', 1_000_000);
+    await db.prepare(
+      `INSERT INTO finance_saldo_awal (bank_account_id, user_id, saldo_awal_idr)
+       VALUES (?1, 'user-1', 1000000)`
+    ).bind(rek).run();
+
+    // Jalur tulis yang benar: catat transaksi DAN sesuaikan kolom lama.
+    await db.prepare(
+      `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, entry_date, bank_account_id)
+       VALUES ('cs-e1', 'user-1', 'expense', 250000, 'Lainnya', '2026-01-01', ?1)`
+    ).bind(rek).run();
+    await db.prepare('UPDATE bank_accounts SET balance = balance - 250000 WHERE id = ?1')
+      .bind(rek).run();
+
+    const [r] = (await ambilRekening()).filter((x) => x.id === rek);
+    expect(r.balance).toBe(750_000);
+    expect(r.saldo_selisih).toBe(0);
+  });
+
+  it('menyala saat jalur tulis menggeser kolom lama tanpa mencatat transaksi', async () => {
+    const rek = seedBank('bank-cs2', 1_000_000);
+    await db.prepare(
+      `INSERT INTO finance_saldo_awal (bank_account_id, user_id, saldo_awal_idr)
+       VALUES (?1, 'user-1', 1000000)`
+    ).bind(rek).run();
+
+    await db.prepare('UPDATE bank_accounts SET balance = balance - 250000 WHERE id = ?1')
+      .bind(rek).run();
+
+    const [r] = (await ambilRekening()).filter((x) => x.id === rek);
+    // Saldo yang dilaporkan tetap yang benar menurut transaksi...
+    expect(r.balance).toBe(1_000_000);
+    // ...dan selisihnya menunjukkan kolom lama sudah menyimpang.
+    expect(r.saldo_selisih).toBe(-250_000);
+  });
+
+  it('menyala saat transaksi dicatat tanpa menggeser kolom lama', async () => {
+    const rek = seedBank('bank-cs3', 1_000_000);
+    await db.prepare(
+      `INSERT INTO finance_saldo_awal (bank_account_id, user_id, saldo_awal_idr)
+       VALUES (?1, 'user-1', 1000000)`
+    ).bind(rek).run();
+
+    await db.prepare(
+      `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, entry_date, bank_account_id)
+       VALUES ('cs-e3', 'user-1', 'expense', 400000, 'Lainnya', '2026-01-01', ?1)`
+    ).bind(rek).run();
+
+    const [r] = (await ambilRekening()).filter((x) => x.id === rek);
+    expect(r.balance).toBe(600_000);
+    expect(r.saldo_selisih).toBe(400_000);
+  });
+});

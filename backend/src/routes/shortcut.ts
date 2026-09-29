@@ -3,6 +3,7 @@ import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { validate, parseTersimpan } from '../lib/validate';
 import { updateHabitStreak } from './habits';
+import { pastikanKategori } from '../lib/finance_kategori';
 
 type ShortcutContext = {
   Variables: {
@@ -185,6 +186,11 @@ shortcut.post('/budget', requireShortcutToken, async (c) => {
 
   const id = nanoid();
   const now = Math.floor(Date.now() / 1000);
+
+  // Shortcut iOS boleh mengirim kategori apa pun, termasuk yang tidak ada di
+  // daftar bawaan. Teksnya tetap dipetakan ke id — kalau belum dikenal, ia
+  // mendapat kategorinya sendiri, bukan dilempar ke 'Lainnya' diam-diam.
+  await pastikanKategori(c.env.DB, user.id, type, category);
 
   await c.env.DB.prepare(`
     INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, created_at)

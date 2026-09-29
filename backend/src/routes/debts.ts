@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { saldoSemuaRekening } from '../lib/finance_saldo';
+import { pastikanKategori, type JenisKategori } from '../lib/finance_kategori';
 import type { DebtRow, DebtPaymentRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
@@ -232,19 +234,28 @@ debts.post('/:id/payments', async (c) => {
   if (status === 'paid' && bankAccountId) {
     const arah = arahUang(debt.type);
 
-    const bankRow = await c.env.DB.prepare(
-      `SELECT balance FROM bank_accounts WHERE id = ?1 AND user_id = ?2`
-    ).bind(bankAccountId, user.sub).first<{ balance: number }>();
+    // Saldo turunan, bukan kolom bank_accounts.balance — lihat
+    // lib/finance_saldo.ts. Penjaga ini menolak pembayaran, jadi ia harus
+    // memakai angka yang benar: menolak dengan angka basi berarti melarang
+    // pembayaran yang sebenarnya mampu dibayar, dan meloloskan dengan angka
+    // basi berarti membuat saldo minus tanpa peringatan.
+    const rekening = (await saldoSemuaRekening(c.env.DB, user.sub))
+      .find((r) => r.bankAccountId === bankAccountId);
 
-    if (!bankRow) return c.json({ error: 'bank account not found' }, 404);
+    if (!rekening) return c.json({ error: 'bank account not found' }, 404);
     // Saldo hanya perlu cukup kalau uangnya keluar. Menerima pelunasan piutang
     // ke rekening kosong bukan masalah — justru itu yang mengisinya.
-    if (!arah.masuk && bankRow.balance < amount) {
+    if (!arah.masuk && rekening.saldo < amount) {
       return c.json({ error: 'insufficient balance' }, 400);
     }
 
     budgetEntryId = nanoid();
     const budgetNote = `${arah.labelNota}: ${debt.person_name}${note ? ` — ${note}` : ''}`;
+
+    // Pembayaran hutang menulis baris budget_entries sendiri, jadi kategorinya
+    // harus ikut dipetakan — kalau tidak, satu-satunya pengeluaran yang tidak
+    // punya id kategori justru yang paling rutin.
+    await pastikanKategori(c.env.DB, user.sub, arah.entryType as JenisKategori, arah.category);
 
     await c.env.DB.batch([
       c.env.DB.prepare(
@@ -328,6 +339,7 @@ debts.put('/:id/payments/:paymentId', async (c) => {
   if (newStatus === 'paid' && bankAccountId) {
     budgetEntryId = nanoid();
     const budgetNote = `${arah.labelNota}: ${debt.person_name}${note ? ` — ${note}` : ''}`;
+    await pastikanKategori(c.env.DB, user.sub, arah.entryType as JenisKategori, arah.category);
     stmts.push(
       c.env.DB.prepare(
         `INSERT INTO budget_entries (id, user_id, type, amount_idr, category, note, entry_date, bank_account_id, created_at)

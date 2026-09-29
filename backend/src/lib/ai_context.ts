@@ -16,6 +16,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { jadwalPengguna } from '../routes/ternak_care';
 import { HARI_TES_AIR } from './ternak_air';
+import { saldoSemuaRekening } from './finance_saldo';
 
 /** Modul yang punya potret sendiri. Sama dengan tab dan sub-layar di aplikasi. */
 export const MODULES = [
@@ -86,14 +87,14 @@ const buildUang: Builder = async (db, userId, today) => {
         WHERE user_id = ?1 AND entry_date BETWEEN ?2 AND ?3 AND type = 'expense'
         GROUP BY category ORDER BY total DESC LIMIT 5`
     ).bind(userId, awalBulan, today).all<{ category: string; total: number }>(),
-    db.prepare(
-      'SELECT name, balance FROM bank_accounts WHERE user_id = ?1 ORDER BY balance DESC LIMIT 5'
-    ).bind(userId).all<{ name: string; balance: number }>(),
+    // Saldo turunan, bukan kolom lama — lihat lib/finance_saldo.ts. AI yang
+    // menyebut saldo salah lebih buruk daripada AI yang tidak menyebutnya.
+    saldoSemuaRekening(db, userId).then((r) => r.slice(0, 5)),
   ]);
 
   const masuk = (totals.results ?? []).find((r) => r.type === 'income')?.total ?? 0;
   const keluar = (totals.results ?? []).find((r) => r.type === 'expense')?.total ?? 0;
-  if (masuk === 0 && keluar === 0 && (saldo.results ?? []).length === 0) {
+  if (masuk === 0 && keluar === 0 && saldo.length === 0) {
     return ['Belum ada catatan keuangan bulan ini.'];
   }
 
@@ -102,7 +103,7 @@ const buildUang: Builder = async (db, userId, today) => {
   if (top.length > 0) {
     lines.push(`Pengeluaran terbesar: ${top.map((k) => `${k.category} ${ringkasRupiah(k.total)}`).join(', ')}.`);
   }
-  for (const s of saldo.results ?? []) lines.push(`- Rekening ${s.name}: ${ringkasRupiah(s.balance)}`);
+  for (const s of saldo) lines.push(`- Rekening ${s.nama}: ${ringkasRupiah(s.saldo)}`);
   return lines;
 };
 
