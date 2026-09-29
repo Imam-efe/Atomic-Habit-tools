@@ -105,6 +105,28 @@ export function kemunculan(
 }
 
 /**
+ * Jatuh tempo berikutnya setelah satu periode dibayar.
+ *
+ * Harus memakai aturan yang sama dengan `kemunculan`, kalau tidak tanggal yang
+ * diproyeksikan dan tanggal yang tersimpan akan berbeda — tagihan terlihat
+ * jatuh tempo 31 Maret di proyeksi lalu tercatat 28 Maret setelah dibayar. Ada
+ * ujinya yang membandingkan keduanya.
+ *
+ * `null` berarti tidak ada kemunculan berikutnya (tagihan sekali).
+ */
+export function majuJatuhTempo(
+  jatuhTempo: string,
+  ulang: Ulang | null,
+  hariAnchor?: number | null
+): string | null {
+  if (!ulang) return null;
+  if (ulang === 'monthly') {
+    return bulanKe(jatuhTempo, 1, hariAnchor ?? Number(jatuhTempo.split('-')[2]));
+  }
+  return advanceDate(jatuhTempo, ulang);
+}
+
+/**
  * Kemunculan transaksi berulang yang memposting sendiri.
  *
  * SENGAJA memakai `advanceDate` berulang, termasuk hanyutnya di akhir bulan —
