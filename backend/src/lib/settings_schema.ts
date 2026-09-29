@@ -151,6 +151,58 @@ export const SETTINGS: SettingDef[] = [
 
   // ─────────────────────────── UANG ───────────────────────────
   {
+    key: 'money.period_start_day',
+    group: 'uang',
+    label: 'Awal periode laporan',
+    hint:
+      'Tanggal mulainya siklus keuangan. Isi 25 kalau gajian tanggal 25: '
+      + 'laporan jadi 25 sampai 24, bukan 1 sampai akhir bulan. '
+      + 'Periode disebut menurut bulan tempat ia berakhir, jadi 25 Sep–24 Okt '
+      + 'adalah "Oktober". Maksimal 28 supaya panjang periodenya tidak '
+      + 'berubah-ubah di Februari.',
+    type: 'number',
+    default: 1,
+    min: 1,
+    max: 28,
+    unit: 'tanggal',
+  },
+  {
+    key: 'money.projection_days',
+    group: 'uang',
+    label: 'Horizon proyeksi saldo',
+    hint: 'Sejauh mana saldo diproyeksikan di tab Tagihan.',
+    type: 'number',
+    default: 30,
+    min: 7,
+    max: 365,
+    unit: 'hari',
+  },
+  {
+    key: 'money.budget_warn_percent',
+    group: 'uang',
+    label: 'Peringatan anggaran',
+    hint: 'Kategori ditandai saat belanjanya mencapai persentase ini dari limitnya.',
+    type: 'number',
+    default: 80,
+    min: 50,
+    max: 100,
+    unit: '%',
+  },
+  {
+    key: 'money.default_range',
+    group: 'uang',
+    label: 'Rentang bawaan layar Uang',
+    hint: 'Rentang yang terbuka lebih dulu saat membuka menu Uang.',
+    type: 'enum',
+    default: 'periode',
+    options: [
+      { value: 'periode', label: 'Periode laporan berjalan' },
+      { value: '7d', label: '7 hari terakhir' },
+      { value: '30d', label: '30 hari terakhir' },
+      { value: '90d', label: '90 hari terakhir' },
+    ],
+  },
+  {
     key: 'money.bill_horizon_days',
     group: 'uang',
     label: 'Radar tagihan',

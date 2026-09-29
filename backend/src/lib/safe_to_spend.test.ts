@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSafeToSpend, daysInMonth } from './safe_to_spend';
+import { computeSafeToSpend } from './safe_to_spend';
 
 /**
  * Stub D1 yang menjawab tiap query berdasarkan potongan SQL yang khas.
@@ -28,18 +28,6 @@ function stubDb(totals: {
     },
   } as unknown as D1Database;
 }
-
-describe('daysInMonth', () => {
-  it('menghitung panjang bulan biasa', () => {
-    expect(daysInMonth('2026-01')).toBe(31);
-    expect(daysInMonth('2026-04')).toBe(30);
-  });
-
-  it('menangani Februari tahun kabisat', () => {
-    expect(daysInMonth('2024-02')).toBe(29);
-    expect(daysInMonth('2026-02')).toBe(28);
-  });
-});
 
 describe('computeSafeToSpend', () => {
   it('membagi sisa dengan hari tersisa termasuk hari ini', async () => {

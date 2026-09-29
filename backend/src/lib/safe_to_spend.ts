@@ -6,6 +6,8 @@
  * basi tiap kali ada entri baru.
  */
 
+import { periodeUntuk, sisaHariPeriode } from './finance_periode';
+
 export interface SafeToSpend {
   /** Total limit bulan ini dari semua kategori. */
   monthlyLimit: number;
@@ -25,12 +27,6 @@ export interface SafeToSpend {
   spentToday: number;
 }
 
-/** Jumlah hari dalam bulan YYYY-MM. */
-export function daysInMonth(month: string): number {
-  const [year, mon] = month.split('-').map(Number);
-  return new Date(Date.UTC(year, mon, 0)).getUTCDate();
-}
-
 /**
  * @param today Tanggal Jakarta YYYY-MM-DD — sumber kebenaran untuk bulan
  *              berjalan dan sisa hari, supaya tidak ikut zona waktu server.
@@ -44,11 +40,17 @@ export async function computeSafeToSpend(
    * pengaturan: sebagian orang lebih suka melihat sisa apa adanya dan
    * mengingat tagihan sendiri.
    */
-  subtractBills = true
+  subtractBills = true,
+  /**
+   * Tanggal mulai periode laporan. Bawaannya 1 supaya pemanggil yang belum
+   * meneruskannya tetap mendapat bulan kalender apa adanya.
+   */
+  hariMulai = 1
 ): Promise<SafeToSpend> {
-  const month = today.slice(0, 7);
-  const monthStart = `${month}-01`;
-  const monthEnd = `${month}-${String(daysInMonth(month)).padStart(2, '0')}`;
+  const periode = periodeUntuk(today, hariMulai);
+  const month = periode.label;
+  const monthStart = periode.mulai;
+  const monthEnd = periode.selesai;
 
   const [limitRow, spentRow, todayRow, billRow] = await Promise.all([
     db
@@ -87,7 +89,10 @@ export async function computeSafeToSpend(
   const upcomingBills = subtractBills ? (billRow?.total ?? 0) : 0;
 
   const remaining = monthlyLimit - spent - upcomingBills;
-  const daysLeft = daysInMonth(month) - Number(today.slice(8, 10)) + 1;
+  // Dihitung dari akhir PERIODE, bukan akhir bulan kalender. Pada periode
+  // yang dimulai tanggal 25, rumus lama salah sepanjang periode — dan sisa
+  // aman per hari ikut salah bersamanya.
+  const daysLeft = sisaHariPeriode(today, periode);
 
   return {
     monthlyLimit,

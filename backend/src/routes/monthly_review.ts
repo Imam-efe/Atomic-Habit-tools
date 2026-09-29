@@ -3,7 +3,9 @@ import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
 import { jakartaToday } from '../lib/validate';
 import { runText } from '../lib/ai';
-import { daysInMonth } from '../lib/safe_to_spend';
+import { loadSettings, num } from '../lib/settings';
+import { periodeDariLabel, labelPeriodeBerjalan } from '../lib/finance_periode';
+import { daysBetween } from '../lib/daily';
 
 const monthlyReview = new Hono<AuthContext>();
 monthlyReview.use('/*', requireAuth);
@@ -45,13 +47,24 @@ interface MonthStats {
   identityStatement: string | null;
 }
 
-async function computeMonthStats(db: D1Database, userId: string, month: string): Promise<MonthStats> {
+async function computeMonthStats(
+  db: D1Database,
+  userId: string,
+  month: string,
+  hariMulai: number
+): Promise<MonthStats> {
   const today = jakartaToday();
-  const currentMonth = today.slice(0, 7);
-  const isCurrentMonth = month === currentMonth;
-  const daysElapsed = isCurrentMonth ? Number(today.slice(8, 10)) : daysInMonth(month);
-  const start = `${month}-01`;
-  const cappedEnd = isCurrentMonth ? today : `${month}-31`;
+  const periode = periodeDariLabel(month, hariMulai);
+  const isCurrentMonth = month === labelPeriodeBerjalan(today, hariMulai);
+
+  const start = periode.mulai;
+  const cappedEnd = isCurrentMonth ? today : periode.selesai;
+  // Dihitung dari awal PERIODE. Rumus lama memakai tanggal dalam bulan, jadi
+  // pada periode yang dimulai tanggal 25 ia melaporkan 25 hari terlampaui di
+  // hari pertama — dan rata-rata per pekan di rekap ikut salah sebesar itu.
+  const daysElapsed = isCurrentMonth
+    ? daysBetween(periode.mulai, today) + 1
+    : daysBetween(periode.mulai, periode.selesai) + 1;
   const weeksElapsed = Math.max(1, Math.ceil(daysElapsed / 7));
 
   const [habitStats, entries, currentSnapshot, previousSnapshot, goalRow] = await Promise.all([
@@ -70,7 +83,7 @@ async function computeMonthStats(db: D1Database, userId: string, month: string):
     }>(),
     db.prepare(
       `SELECT type, amount_idr FROM budget_entries WHERE user_id = ?1 AND entry_date >= ?2 AND entry_date <= ?3`
-    ).bind(userId, start, `${month}-31`).all<{ type: string; amount_idr: number }>(),
+    ).bind(userId, start, periode.selesai).all<{ type: string; amount_idr: number }>(),
     db.prepare('SELECT net_worth FROM net_worth_snapshots WHERE user_id = ?1 AND month = ?2')
       .bind(userId, month).first<{ net_worth: number }>(),
     db.prepare('SELECT net_worth FROM net_worth_snapshots WHERE user_id = ?1 AND month = ?2')
@@ -115,10 +128,12 @@ monthlyReview.get('/', async (c) => {
   if (requested !== undefined && !isMonth(requested)) {
     return c.json({ error: 'month harus format YYYY-MM' }, 400);
   }
-  const month = requested || jakartaToday().slice(0, 7);
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const hariMulai = num(settings, 'money.period_start_day');
+  const month = requested || labelPeriodeBerjalan(jakartaToday(), hariMulai);
 
   const [stats, saved] = await Promise.all([
-    computeMonthStats(c.env.DB, user.sub, month),
+    computeMonthStats(c.env.DB, user.sub, month, hariMulai),
     c.env.DB.prepare('SELECT narrative FROM monthly_reviews WHERE user_id = ?1 AND month = ?2')
       .bind(user.sub, month).first<{ narrative: string }>(),
   ]);
@@ -142,9 +157,11 @@ monthlyReview.post('/generate', async (c) => {
   if (body?.month !== undefined && !isMonth(body.month)) {
     return c.json({ error: 'month harus format YYYY-MM' }, 400);
   }
-  const month = body?.month || jakartaToday().slice(0, 7);
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const hariMulai = num(settings, 'money.period_start_day');
+  const month = body?.month || labelPeriodeBerjalan(jakartaToday(), hariMulai);
 
-  const stats = await computeMonthStats(c.env.DB, user.sub, month);
+  const stats = await computeMonthStats(c.env.DB, user.sub, month, hariMulai);
 
   if (stats.habits.length === 0 && stats.totalIncome === 0 && stats.totalExpense === 0) {
     return c.json({ error: 'Belum ada data bulan ini untuk direkap' }, 422);

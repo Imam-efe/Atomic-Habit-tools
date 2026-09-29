@@ -280,7 +280,19 @@ export async function triggerMorningBrief(env: Env): Promise<void> {
       )
         .bind(userId, today)
         .first<{ n: number }>(),
-      computeSafeToSpend(env.DB, userId, today),
+      // Pengaturan pengguna ini sudah dimuat di atas; brief pagi harus
+      // memakai periode yang sama dengan layarnya, kalau tidak angka di
+      // notifikasi berbeda dari angka di aplikasi.
+      //
+      // `money.subtract_bills` ikut dihormati di sini, dan sebelumnya tidak:
+      // rutenya membacanya, cron ini memakai bawaannya. Akibatnya pengguna
+      // yang mematikannya melihat satu angka di notifikasi pagi dan angka
+      // lain di layar, tanpa ada yang salah kelihatannya.
+      computeSafeToSpend(
+        env.DB, userId, today,
+        bool(settings, 'money.subtract_bills'),
+        num(settings, 'money.period_start_day')
+      ),
       getExpiringItems(env.DB, userId, today, num(settings, 'inventory.expiry_days')),
       getKidsFor(env.DB, userId, today),
     ]);

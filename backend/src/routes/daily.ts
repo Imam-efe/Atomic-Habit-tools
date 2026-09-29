@@ -183,7 +183,11 @@ daily.get('/safe-to-spend', async (c) => {
   const user = c.get('user');
   const settings = await loadSettings(c.env.DB, user.sub);
   return c.json(
-    await computeSafeToSpend(c.env.DB, user.sub, jakartaToday(), bool(settings, 'money.subtract_bills'))
+    await computeSafeToSpend(
+      c.env.DB, user.sub, jakartaToday(),
+      bool(settings, 'money.subtract_bills'),
+      num(settings, 'money.period_start_day')
+    )
   );
 });
 
@@ -224,7 +228,11 @@ daily.get('/brief', async (c) => {
   const settings = await loadSettings(c.env.DB, user.sub);
 
   const [safeToSpend, billRadar, missed, expiring, kidsToday, kebun, ternak, habitRows, events] = await Promise.all([
-    computeSafeToSpend(c.env.DB, user.sub, today, bool(settings, 'money.subtract_bills')),
+    computeSafeToSpend(
+      c.env.DB, user.sub, today,
+      bool(settings, 'money.subtract_bills'),
+      num(settings, 'money.period_start_day')
+    ),
     getBillRadar(c.env.DB, user.sub, today, num(settings, 'money.bill_horizon_days')),
     getMissedYesterday(c.env.DB, user.sub, today),
     getExpiringItems(c.env.DB, user.sub, today, num(settings, 'inventory.expiry_days')),

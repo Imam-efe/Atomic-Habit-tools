@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import type { BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { validate, advanceDate, jakartaToday, jakartaMonth } from '../lib/validate';
+import { validate, advanceDate, jakartaToday } from '../lib/validate';
+import { loadSettings, num } from '../lib/settings';
+import { periodeUntuk, periodeDariLabel } from '../lib/finance_periode';
 import {
   semaiKategori,
   daftarKategori,
@@ -80,9 +82,19 @@ budget.get('/', async (c) => {
   const user = c.get('user');
   const from = c.req.query('from');
   const to = c.req.query('to');
-  const month = c.req.query('month') ?? jakartaMonth();
-  const dateFrom = from ?? `${month}-01`;
-  const dateTo = to ?? `${month}-31`;
+
+  // Rentang eksplisit dari layar tetap menang. Yang berubah adalah artinya
+  // "bulan ini" saat layar tidak menyebutkan rentang: ia kini mengikuti
+  // periode laporan pengguna, bukan bulan kalender.
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const hariMulai = num(settings, 'money.period_start_day');
+  const bulanDiminta = c.req.query('month');
+  const periode = bulanDiminta
+    ? periodeDariLabel(bulanDiminta, hariMulai)
+    : periodeUntuk(jakartaToday(), hariMulai);
+
+  const dateFrom = from ?? periode.mulai;
+  const dateTo = to ?? periode.selesai;
 
   const rows = await c.env.DB.prepare(
     `SELECT * FROM budget_entries
@@ -112,7 +124,13 @@ budget.get('/', async (c) => {
 // GET /api/budget/limits?month=YYYY-MM
 budget.get('/limits', async (c) => {
   const user = c.get('user');
-  const month = c.req.query('month') ?? jakartaMonth();
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const hariMulai = num(settings, 'money.period_start_day');
+  const bulanDiminta = c.req.query('month');
+  const periode = bulanDiminta
+    ? periodeDariLabel(bulanDiminta, hariMulai)
+    : periodeUntuk(jakartaToday(), hariMulai);
+  const month = periode.label;
 
   // Get limits
   const limitsRows = await c.env.DB.prepare(
@@ -126,7 +144,7 @@ budget.get('/limits', async (c) => {
      FROM budget_entries
      WHERE user_id = ?1 AND type = 'expense' AND entry_date >= ?2 AND entry_date <= ?3
      GROUP BY category`
-  ).bind(user.sub, `${month}-01`, `${month}-31`).all<{ category: string; total_spent: number }>();
+  ).bind(user.sub, periode.mulai, periode.selesai).all<{ category: string; total_spent: number }>();
   const spent = spentRows.results ?? [];
 
   const limitMap = new Map(limits.map(l => [l.category, l.monthly_limit_idr]));
@@ -174,7 +192,12 @@ budget.post('/limits', async (c) => {
   });
   if (err) return c.json({ error: err }, 400);
 
-  const month = body.month ?? jakartaMonth();
+  // Tanpa ini, limit yang disimpan hari ini bisa masuk ke label periode yang
+  // berbeda dari periode yang sedang ditampilkan layar — limitnya tersimpan,
+  // tapi tidak pernah terlihat.
+  const settingsLimit = await loadSettings(c.env.DB, user.sub);
+  const month = body.month
+    ?? periodeUntuk(jakartaToday(), num(settingsLimit, 'money.period_start_day')).label;
   const id = nanoid();
 
   await c.env.DB.prepare(

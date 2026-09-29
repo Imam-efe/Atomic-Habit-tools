@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { jakartaToday } from '../lib/validate';
+import { loadSettings, num } from '../lib/settings';
+import { periodeUntuk } from '../lib/finance_periode';
 
 const dashboard = new Hono<AuthContext>();
 
@@ -12,7 +14,11 @@ dashboard.get('/', async (c) => {
   // jadi dashboard menampilkan data hari sebelumnya sepanjang pagi buta.
   const today = jakartaToday();
   const yesterday = new Date(new Date(today).getTime() - 86400000).toISOString().slice(0, 10);
-  const month = today.slice(0, 7);
+  const settings = await loadSettings(c.env.DB, user.sub);
+  // Ringkasan uang di dashboard harus sama dengan yang di menu Uang.
+  // Dua angka berbeda untuk hal yang sama lebih membingungkan daripada
+  // tidak ada angka sama sekali.
+  const periode = periodeUntuk(today, num(settings, 'money.period_start_day'));
 
   const [habitsTotal, habitsDone, goalsTotal, budgetSummary, firstGoal, habitsList, yesterdayCompletions, todayCompletions] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) as n FROM habits WHERE user_id = ?1').bind(user.sub).first<{ n: number }>(),
@@ -22,7 +28,7 @@ dashboard.get('/', async (c) => {
       `SELECT SUM(CASE WHEN type='income' THEN amount_idr ELSE 0 END) as income,
               SUM(CASE WHEN type='expense' THEN amount_idr ELSE 0 END) as expense
        FROM budget_entries WHERE user_id = ?1 AND entry_date >= ?2`
-    ).bind(user.sub, `${month}-01`).first<{ income: number | null; expense: number | null }>(),
+    ).bind(user.sub, periode.mulai).first<{ income: number | null; expense: number | null }>(),
     c.env.DB.prepare('SELECT identity_statement FROM goals WHERE user_id = ?1 ORDER BY sort_order ASC, created_at ASC LIMIT 1').bind(user.sub).first<{ identity_statement: string }>(),
     // Weekly-frequency habits are left out here: they're joined and filtered
     // below, since "missed yesterday" only means something for a daily habit.
