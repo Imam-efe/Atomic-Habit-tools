@@ -8,6 +8,7 @@ import { formatRp } from '@/lib/currency';
 import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
 import { BudgetTransfer } from './BudgetTransfer';
+import { BudgetTagihan } from './BudgetTagihan';
 import { todayISO, daysAgoISO, thisMonthISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
 import { tampilkanGagal } from '@/stores/gagalToastStore';
@@ -165,7 +166,7 @@ export function Budget() {
   // Kategori dari server, dengan cadangan yang selalu ada: mencatat transaksi
   // harus tetap bisa walau daftarnya gagal diambil.
   const kategori = useKategoriKeuangan();
-  const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting' | 'transfer'>('transaksi');
+  const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting' | 'transfer' | 'tagihan'>('transaksi');
   const [data, setData] = useState<BudgetData | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimit[]>([]);
@@ -722,7 +723,7 @@ export function Budget() {
       />
 
       {/* Main Tabs switcher */}
-      <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+      <div className="grid grid-cols-4 gap-1 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         <button
           onClick={() => setActiveSubTab('transaksi')}
           className="py-2 rounded-lg text-xs font-bold text-center"
@@ -753,6 +754,16 @@ export function Budget() {
         >
           🔄 Transfer
         </button>
+        <button
+          onClick={() => setActiveSubTab('tagihan')}
+          className="py-2 rounded-lg text-xs font-bold text-center"
+          style={{
+            background: activeSubTab === 'tagihan' ? 'var(--bg)' : 'transparent',
+            color: activeSubTab === 'tagihan' ? 'var(--text)' : 'var(--text3)',
+          }}
+        >
+          🧾 Tagihan
+        </button>
       </div>
 
       {/* Transfer berdiri sebagai tab sendiri, bukan jenis transaksi ketiga:
@@ -760,6 +771,11 @@ export function Budget() {
           dan menaruhnya di daftar transaksi akan mengulang persis kerancuan
           yang fitur ini dibuat untuk menghapus. */}
       {activeSubTab === 'transfer' && <BudgetTransfer onChanged={load} />}
+
+      {/* Tagihan juga berdiri sendiri, dan bukan karena rapi: tagihan yang
+          belum dibayar BUKAN transaksi. Menaruhnya di daftar transaksi berarti
+          menampilkan uang yang masih ada di rekening sebagai sudah pergi. */}
+      {activeSubTab === 'tagihan' && <BudgetTagihan onChanged={load} />}
 
       {/* OCR Scanner Modal */}
       <AnimatePresence>
