@@ -213,3 +213,83 @@ describe('selisih terhadap kolom lama', () => {
     expect(s.selisih).toBe(-250_000);
   });
 });
+
+describe('transfer antar rekening', () => {
+  async function transfer(dari: string, ke: string, jumlah: number, userId = 'user-1') {
+    await db.prepare(
+      `INSERT INTO finance_transfer (id, user_id, dari_rekening_id, ke_rekening_id, jumlah_idr, tanggal)
+       VALUES (?1, ?2, ?3, ?4, ?5, '2026-01-05')`
+    ).bind(nanoid(), userId, dari, ke, jumlah).run();
+  }
+
+  it('memindahkan saldo tanpa mengubah totalnya', async () => {
+    // Inti transfer: uang berpindah tempat, jumlah keseluruhan tetap. Kalau
+    // total ikut berubah, transfer diam-diam jadi pemasukan atau pengeluaran.
+    const bank = await buatRekening('user-1', 1_000_000, 'BCA');
+    const tunai = await buatRekening('user-1', 200_000, 'Dompet');
+    await semaiSaldoAwal(db as never, 'user-1');
+
+    await transfer(bank, tunai, 300_000);
+
+    expect((await saldoSatu('user-1', bank)).saldo).toBe(700_000);
+    expect((await saldoSatu('user-1', tunai)).saldo).toBe(500_000);
+    expect(totalSaldo(await saldoSemuaRekening(db as never, 'user-1'))).toBe(1_200_000);
+  });
+
+  it('tidak muncul sebagai pengeluaran di mutasi', async () => {
+    // Kalau transfer ikut terhitung sebagai mutasi budget_entries, laporan
+    // pengeluaran akan membengkak oleh uang yang cuma pindah tempat.
+    const bank = await buatRekening('user-1', 1_000_000, 'BCA');
+    const tunai = await buatRekening('user-1', 0, 'Dompet');
+    await semaiSaldoAwal(db as never, 'user-1');
+
+    await transfer(bank, tunai, 400_000);
+
+    const s = await saldoSatu('user-1', bank);
+    expect(s.mutasi).toBe(0);
+    expect(s.transfer).toBe(-400_000);
+  });
+
+  it('menjumlahkan beberapa transfer dua arah', async () => {
+    const a = await buatRekening('user-1', 1_000_000, 'A');
+    const b = await buatRekening('user-1', 1_000_000, 'B');
+    await semaiSaldoAwal(db as never, 'user-1');
+
+    await transfer(a, b, 300_000);
+    await transfer(b, a, 100_000);
+    await transfer(a, b, 50_000);
+
+    expect((await saldoSatu('user-1', a)).saldo).toBe(750_000);
+    expect((await saldoSatu('user-1', b)).saldo).toBe(1_250_000);
+  });
+
+  it('transfer pengguna lain tidak menggeser saldo siapa pun', async () => {
+    const milikSatu = await buatRekening('user-1', 1_000_000, 'A');
+    const milikDua = await buatRekening('user-2', 1_000_000, 'B');
+    await semaiSaldoAwal(db as never, 'user-1');
+    await semaiSaldoAwal(db as never, 'user-2');
+
+    // Baris milik user-2 yang menunjuk rekening user-1: tanpa penyaringan
+    // user_id, satu baris asing bisa memindahkan uang orang lain.
+    await transfer(milikDua, milikSatu, 900_000, 'user-2');
+
+    expect((await saldoSatu('user-1', milikSatu)).saldo).toBe(1_000_000);
+  });
+
+  it('rumus cadangan ikut memperhitungkan transfer', async () => {
+    // Rekening yang belum disemai harus tetap sama sebelum dan sesudah
+    // penyemaian, meski sudah ada transfer.
+    const a = await buatRekening('user-1', 1_000_000, 'A');
+    const b = await buatRekening('user-1', 500_000, 'B');
+    await transfer(a, b, 200_000);
+    await catat({ userId: 'user-1', rekeningId: a, tipe: 'expense', jumlah: 100_000 });
+
+    const sebelum = await saldoSatu('user-1', a);
+    await semaiSaldoAwal(db as never, 'user-1');
+    const sesudah = await saldoSatu('user-1', a);
+
+    expect(sesudah.saldoAwal).toBe(sebelum.saldoAwal);
+    expect(sesudah.saldo).toBe(sebelum.saldo);
+    expect(sesudah.saldo).toBe(1_000_000);
+  });
+});

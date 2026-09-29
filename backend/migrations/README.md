@@ -51,6 +51,24 @@ automatic.
 The files stay in this directory as the schema's written history; only the
 script's list is trimmed.
 
+Since `0041`, that limit has teeth. The finance migrations reference
+`bank_accounts` and `budget_entries.bank_account_id` — both created by the
+unlisted `0006` — so a database built from the script alone now *fails* on
+`no such table: bank_accounts` instead of quietly ending up incomplete. The
+production database has `0006` applied, so deploys are unaffected. But
+rebuilding a local database needs every file in this directory applied once,
+in numeric order, before `db:migrate` will run clean:
+
+```
+rm -rf .wrangler/state
+for f in $(ls migrations/*.sql | sort); do
+  npx wrangler d1 execute fayolla-db --local --file="$f"
+done
+```
+
+A loud failure is the better half of this trade: an incomplete schema used to
+surface much later, as a route that returned nothing.
+
 ## How this was found
 
 `0017` and `0018` were added to the script when they were written. Their first

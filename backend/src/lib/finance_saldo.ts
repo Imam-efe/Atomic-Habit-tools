@@ -9,14 +9,19 @@
  *
  * Berkas ini memberi sumber itu:
  *
- *   saldo = saldo_awal + jumlah mutasi di budget_entries
+ *   saldo = saldo_awal + mutasi budget_entries + transfer masuk - transfer keluar
  *
  * Invarian itu diverifikasi terhadap kedua belas situs mutasi sebelum ditulis,
  * satu per satu. Hasilnya: SETIAP mutasi saldo berpasangan dengan baris
- * budget_entries bertanda sama — termasuk pembayaran hutang, yang menulis
- * baris budget_entries sendiri lewat `arahUang` di routes/debts.ts. Jadi
- * menjumlahkan budget_entries sudah mencakup seluruh pergerakan uang; tidak
- * ada sumber mutasi kedua yang perlu ikut dijumlahkan.
+ * budget_entries bertanda sama. Pembayaran hutang pun termasuk — ia menulis
+ * baris budget_entries sendiri lewat `arahUang` di routes/debts.ts.
+ *
+ * Transfer antar rekening adalah satu-satunya sumber mutasi di luar
+ * budget_entries, dan itu disengaja: menaruhnya di budget_entries berarti
+ * setiap kueri laporan harus ingat mengecualikannya, dan yang lupa tetap
+ * mengembalikan angka — hanya angkanya salah (lihat migrasi 0042). Yang
+ * dijaga berkas ini adalah tidak adanya angka yang DIPELIHARA TANGAN, bukan
+ * jumlah tabel yang dijumlahkan.
  *
  * Baris template transaksi berulang ikut dihitung, dan itu benar: POST
  * /api/budget menyesuaikan saldo saat template dibuat, jadi baris template
@@ -29,6 +34,21 @@ import type { D1Database } from '@cloudflare/workers-types';
 /** Tanda mutasi: pengeluaran mengurangi, selain itu menambah. */
 const EKSPRESI_MUTASI = `SUM(CASE WHEN type = 'expense' THEN -amount_idr ELSE amount_idr END)`;
 
+/**
+ * Transfer bersih satu rekening: yang masuk dikurangi yang keluar.
+ *
+ * Ditulis sebagai satu subkueri berkorelasi terhadap `?1` (user) dan kolom
+ * rekening yang sedang dihitung, supaya bisa dipakai apa adanya baik di kueri
+ * baca maupun di rumus cadangan — kalau keduanya menyimpang, saldo akan
+ * melompat tepat saat penyemaian berjalan.
+ */
+const EKSPRESI_TRANSFER = (kolomRekening: string) => `(
+  COALESCE((SELECT SUM(jumlah_idr) FROM finance_transfer
+             WHERE user_id = ?1 AND ke_rekening_id = ${kolomRekening}), 0)
+  - COALESCE((SELECT SUM(jumlah_idr) FROM finance_transfer
+               WHERE user_id = ?1 AND dari_rekening_id = ${kolomRekening}), 0)
+)`;
+
 export interface SaldoRekening {
   bankAccountId: string;
   nama: string;
@@ -37,7 +57,9 @@ export interface SaldoRekening {
   saldoAwal: number;
   /** Jumlah seluruh mutasi budget_entries pada rekening ini. */
   mutasi: number;
-  /** saldoAwal + mutasi — angka yang seharusnya benar. */
+  /** Transfer masuk dikurangi transfer keluar. */
+  transfer: number;
+  /** saldoAwal + mutasi + transfer — angka yang seharusnya benar. */
   saldo: number;
   /** Isi kolom bank_accounts.balance apa adanya. */
   saldoTersimpan: number;
@@ -72,7 +94,7 @@ export async function semaiSaldoAwal(db: D1Database, userId: string): Promise<vo
             b.balance - COALESCE((
               SELECT ${EKSPRESI_MUTASI} FROM budget_entries e
                WHERE e.bank_account_id = b.id AND e.user_id = b.user_id
-            ), 0)
+            ), 0) - ${EKSPRESI_TRANSFER('b.id')}
        FROM bank_accounts b
       WHERE b.user_id = ?1`
   ).bind(userId).run();
@@ -85,6 +107,7 @@ interface BarisSaldo {
   balance: number;
   saldo_awal: number;
   mutasi: number;
+  transfer: number;
 }
 
 /**
@@ -111,8 +134,12 @@ export async function saldoSemuaRekening(
 ): Promise<SaldoRekening[]> {
   const rows = await db.prepare(
     `SELECT b.id, b.name, b.account_type, b.balance,
-            COALESCE(s.saldo_awal_idr, b.balance - COALESCE(m.mutasi, 0)) AS saldo_awal,
-            COALESCE(m.mutasi, 0) AS mutasi
+            COALESCE(
+              s.saldo_awal_idr,
+              b.balance - COALESCE(m.mutasi, 0) - ${EKSPRESI_TRANSFER('b.id')}
+            ) AS saldo_awal,
+            COALESCE(m.mutasi, 0) AS mutasi,
+            ${EKSPRESI_TRANSFER('b.id')} AS transfer
        FROM bank_accounts b
        LEFT JOIN finance_saldo_awal s
               ON s.bank_account_id = b.id AND s.user_id = b.user_id
@@ -127,13 +154,14 @@ export async function saldoSemuaRekening(
 
   return (rows.results ?? [])
     .map((r) => {
-      const saldo = r.saldo_awal + r.mutasi;
+      const saldo = r.saldo_awal + r.mutasi + r.transfer;
       return {
         bankAccountId: r.id,
         nama: r.name,
         jenis: r.account_type,
         saldoAwal: r.saldo_awal,
         mutasi: r.mutasi,
+        transfer: r.transfer,
         saldo,
         saldoTersimpan: r.balance,
         selisih: r.balance - saldo,
