@@ -7,6 +7,7 @@ import { createWorker } from 'tesseract.js';
 import { formatRp } from '@/lib/currency';
 import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
+import { BudgetTransfer } from './BudgetTransfer';
 import { todayISO, daysAgoISO, thisMonthISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
 import { tampilkanGagal } from '@/stores/gagalToastStore';
@@ -176,7 +177,7 @@ function parseOcrText(text: string): { merchant: string; amount: number; categor
 
 export function Budget() {
   const showUndoToast = useUndoToastStore(s => s.show);
-  const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting'>('transaksi');
+  const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting' | 'transfer'>('transaksi');
   const [data, setData] = useState<BudgetData | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [categoryLimits, setCategoryLimits] = useState<CategoryLimit[]>([]);
@@ -723,7 +724,7 @@ export function Budget() {
       />
 
       {/* Main Tabs switcher */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
+      <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-4" style={{ background: 'var(--surface)', boxShadow: 'var(--neu-raised)' }}>
         <button
           onClick={() => setActiveSubTab('transaksi')}
           className="py-2 rounded-lg text-xs font-bold text-center"
@@ -744,7 +745,23 @@ export function Budget() {
         >
           📊 Budgeting
         </button>
+        <button
+          onClick={() => setActiveSubTab('transfer')}
+          className="py-2 rounded-lg text-xs font-bold text-center"
+          style={{
+            background: activeSubTab === 'transfer' ? 'var(--bg)' : 'transparent',
+            color: activeSubTab === 'transfer' ? 'var(--text)' : 'var(--text3)',
+          }}
+        >
+          🔄 Transfer
+        </button>
       </div>
+
+      {/* Transfer berdiri sebagai tab sendiri, bukan jenis transaksi ketiga:
+          uang yang berpindah rekening bukan pemasukan dan bukan pengeluaran,
+          dan menaruhnya di daftar transaksi akan mengulang persis kerancuan
+          yang fitur ini dibuat untuk menghapus. */}
+      {activeSubTab === 'transfer' && <BudgetTransfer onChanged={load} />}
 
       {/* OCR Scanner Modal */}
       <AnimatePresence>
