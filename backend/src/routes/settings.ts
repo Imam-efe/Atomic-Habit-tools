@@ -25,6 +25,8 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'finance_transfer', label: 'Transfer antar rekening', group: 'Uang', userScoped: true },
   { table: 'finance_category', label: 'Kategori keuangan', group: 'Uang', userScoped: true },
   { table: 'finance_category_alias', label: 'Pemetaan nama kategori', group: 'Uang', userScoped: true },
+  { table: 'finance_tagihan', label: 'Tagihan terjadwal', group: 'Uang', userScoped: true },
+  { table: 'finance_tagihan_bayar', label: 'Riwayat bayar tagihan', group: 'Uang', userScoped: true },
   { table: 'debts', label: 'Utang & piutang', group: 'Uang', userScoped: true },
   { table: 'inventory_items', label: 'Stok inventaris', group: 'Inventaris', userScoped: true },
   { table: 'food_logs', label: 'Log makanan', group: 'Nutrisi', userScoped: true },
