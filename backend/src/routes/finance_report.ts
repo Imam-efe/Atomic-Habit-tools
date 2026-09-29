@@ -2,8 +2,10 @@ import { Hono } from 'hono';
 import { saldoSemuaRekening, totalSaldo } from '../lib/finance_saldo';
 import type { BankAccountRow, BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
-import { jakartaToday, jakartaMonth } from '../lib/validate';
-import { daysInMonth } from '../lib/safe_to_spend';
+import { jakartaToday } from '../lib/validate';
+import { loadSettings, num } from '../lib/settings';
+import { periodeUntuk, periodeDariLabel } from '../lib/finance_periode';
+import { daysBetween } from '../lib/daily';
 
 const financeReport = new Hono<AuthContext>();
 
@@ -14,9 +16,15 @@ financeReport.get('/', async (c) => {
   const user = c.get('user');
   const from = c.req.query('from');
   const to = c.req.query('to');
-  const month = c.req.query('month') ?? jakartaMonth();
-  const dateFrom = from ?? `${month}-01`;
-  const dateTo = to ?? `${month}-31`;
+  const settings = await loadSettings(c.env.DB, user.sub);
+  const hariMulai = num(settings, 'money.period_start_day');
+  const bulanDiminta = c.req.query('month');
+  const periode = bulanDiminta
+    ? periodeDariLabel(bulanDiminta, hariMulai)
+    : periodeUntuk(jakartaToday(), hariMulai);
+
+  const dateFrom = from ?? periode.mulai;
+  const dateTo = to ?? periode.selesai;
 
   // 1. P&L Calculation for selected range
   const pnlRows = await c.env.DB.prepare(
@@ -91,7 +99,7 @@ financeReport.get('/', async (c) => {
 
   return c.json({
     pnl: {
-      month: from ? `${dateFrom} s/d ${dateTo}` : month,
+      month: from ? `${dateFrom} s/d ${dateTo}` : periode.label,
       income: totalIncome,
       expense: totalExpense,
       net_profit: totalIncome - totalExpense,
@@ -144,15 +152,26 @@ financeReport.get('/', async (c) => {
 financeReport.get('/forecast', async (c) => {
   const user = c.get('user');
   const today = jakartaToday();
-  const month = c.req.query('month') ?? today.slice(0, 7);
-  const monthStart = `${month}-01`;
-  const monthDayCount = daysInMonth(month);
-  const monthEnd = `${month}-${String(monthDayCount).padStart(2, '0')}`;
+  const settingsForecast = await loadSettings(c.env.DB, user.sub);
+  const hariMulaiForecast = num(settingsForecast, 'money.period_start_day');
+  const bulanForecast = c.req.query('month');
+  const periodeForecast = bulanForecast
+    ? periodeDariLabel(bulanForecast, hariMulaiForecast)
+    : periodeUntuk(today, hariMulaiForecast);
+
+  const month = periodeForecast.label;
+  const monthStart = periodeForecast.mulai;
+  const monthEnd = periodeForecast.selesai;
+  const monthDayCount = daysBetween(monthStart, monthEnd) + 1;
 
   // Forecasting a month that already closed is meaningless — clamp "today" to
   // the window so a past month reports itself as fully elapsed.
   const asOf = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
-  const daysElapsed = Number(asOf.slice(8, 10));
+  // Dihitung dari awal PERIODE, bukan dari tanggal dalam bulan. Pada periode
+  // yang dimulai tanggal 25, `Number(asOf.slice(8, 10))` akan melaporkan 25
+  // hari terlampaui pada hari PERTAMA periode — dan laju belanjanya jadi
+  // seperempat dari yang sebenarnya.
+  const daysElapsed = daysBetween(monthStart, asOf) + 1;
   const daysRemaining = monthDayCount - daysElapsed;
 
   const [entriesRes, recurringRes, paymentsRes, accountsRes, limitsRes] = await Promise.all([

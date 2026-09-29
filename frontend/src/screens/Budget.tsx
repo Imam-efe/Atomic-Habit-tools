@@ -9,10 +9,11 @@ import { useUndoToastStore } from '@/stores/toastStore';
 import { BudgetEntryItem } from './BudgetEntryItem';
 import { BudgetTransfer } from './BudgetTransfer';
 import { BudgetTagihan } from './BudgetTagihan';
-import { todayISO, daysAgoISO, thisMonthISO } from '@/lib/date';
+import { todayISO, daysAgoISO } from '@/lib/date';
 import { AiPanel } from '@/components/AiPanel';
 import { tampilkanGagal } from '@/stores/gagalToastStore';
 import { useKategoriKeuangan, labelOpsi, KATEGORI_CADANGAN } from '@/lib/kategoriKeuangan';
+import { usePengaturanUang } from '@/lib/pengaturanUang';
 
 interface BudgetEntry {
   id: string;
@@ -29,6 +30,15 @@ interface BudgetEntry {
 interface BudgetData {
   entries: BudgetEntry[];
   summary: { income: number; expense: number; balance: number };
+  /** Periode yang dipakai server. Batasnya TIDAK dihitung ulang di layar. */
+  periode?: {
+    mulai: string;
+    selesai: string;
+    label: string;
+    hariMulai: number;
+    /** False bila layar mengirim rentang eksplisit. */
+    dipakai: boolean;
+  };
 }
 
 interface BankAccount {
@@ -54,10 +64,19 @@ const MOCK_MERCHANTS = [
   { name: 'Solaria', amount: 185000, category: 'Makanan & Minuman' }
 ];
 
-type RangePreset = '7d' | '30d' | '3m' | 'custom';
+type RangePreset = 'periode' | '7d' | '30d' | '3m' | 'custom';
 
-function computeRange(preset: RangePreset, customFrom: string, customTo: string): { from: string; to: string } {
+/**
+ * Rentang untuk kueri. `null` berarti "jangan kirim from/to" — server memakai
+ * periode laporan pengguna, dan batasnya tidak dihitung ulang di sini.
+ */
+function computeRange(
+  preset: RangePreset,
+  customFrom: string,
+  customTo: string
+): { from: string; to: string } | null {
   const today = todayISO();
+  if (preset === 'periode') return null;
   if (preset === '7d') return { from: daysAgoISO(6), to: today };
   if (preset === '30d') return { from: daysAgoISO(29), to: today };
   if (preset === '3m') return { from: daysAgoISO(89), to: today };
@@ -166,6 +185,7 @@ export function Budget() {
   // Kategori dari server, dengan cadangan yang selalu ada: mencatat transaksi
   // harus tetap bisa walau daftarnya gagal diambil.
   const kategori = useKategoriKeuangan();
+  const { pengaturan, siap: pengaturanSiap } = usePengaturanUang();
   const [activeSubTab, setActiveSubTab] = useState<'transaksi' | 'budgeting' | 'transfer' | 'tagihan'>('transaksi');
   const [data, setData] = useState<BudgetData | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -219,18 +239,27 @@ export function Budget() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ocrFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [rangePreset, setRangePreset] = useState<RangePreset>('30d');
+  const [rangePreset, setRangePreset] = useState<RangePreset>('periode');
+  const [rentangDisetel, setRentangDisetel] = useState(false);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
   const load = async () => {
     setLoading(true);
     try {
-      const { from, to } = computeRange(rangePreset, customFrom, customTo);
+      const rentang = computeRange(rangePreset, customFrom, customTo);
+      const kueriBudget = rentang
+        ? `/budget?from=${rentang.from}&to=${rentang.to}`
+        : '/budget';
+
       const [budgetRes, banksRes, limitsRes] = await Promise.all([
-        apiFetch<BudgetData>(`/budget?from=${from}&to=${to}`),
+        apiFetch<BudgetData>(kueriBudget),
         apiFetch<BankAccount[]>('/bank-accounts'),
-        apiFetch<CategoryLimit[]>(`/budget/limits?month=${thisMonthISO()}`)
+        // Tanpa `?month=`: labelnya ditentukan server dari periode laporan
+        // pengguna. Mengirim bulan kalender dari sini akan meminta label yang
+        // salah begitu cut-off bukan tanggal 1 — limitnya ada, tapi layar
+        // menanyakan periode yang bukan periode berjalan.
+        apiFetch<CategoryLimit[]>('/budget/limits')
       ]);
 
       setData(budgetRes);
@@ -244,7 +273,27 @@ export function Budget() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [activeSubTab, rangePreset, customFrom, customTo]);
+  // Rentang bawaan disetel sekali saja, dan hanya kalau pengguna belum
+  // menyentuh pemilih rentangnya — kalau tidak, pilihannya akan dipaksa balik
+  // ke bawaan setiap kali pengaturannya dimuat ulang.
+  useEffect(() => {
+    if (!pengaturanSiap || rentangDisetel) return;
+    setRentangDisetel(true);
+    const bawaan = pengaturan.rentangBawaan;
+    if (bawaan === 'periode' || bawaan === '7d' || bawaan === '30d') {
+      setRangePreset(bawaan);
+    } else if (bawaan === '90d') {
+      // Registry menyebutnya 90 hari; layar ini menamainya 3 bulan.
+      setRangePreset('3m');
+    }
+  }, [pengaturanSiap, pengaturan.rentangBawaan, rentangDisetel]);
+
+  // Menunggu pengaturannya siap sebelum pemuatan pertama: memuat dengan
+  // rentang cadangan lalu memuat ulang membuat angkanya berkedip berubah.
+  useEffect(() => {
+    if (!pengaturanSiap) return;
+    load();
+  }, [pengaturanSiap, activeSubTab, rangePreset, customFrom, customTo]);
 
   // The tab stays mounted between visits, and quick-add can post a transaction
   // from any screen, so a re-show refetches to pick that up.
@@ -634,11 +683,11 @@ export function Budget() {
     try {
       await apiFetch('/budget/limits', {
         method: 'POST',
-        body: JSON.stringify({
-          category: selectedLimitCat,
-          limit,
-          month: thisMonthISO()
-        })
+        // `month` sengaja tidak dikirim: server menaruhnya di periode
+        // berjalan menurut pengaturan pengguna. Mengirim bulan kalender dari
+        // sini menyimpan limit di label yang layar tidak pernah baca —
+        // tersimpan, tapi tidak pernah terlihat.
+        body: JSON.stringify({ category: selectedLimitCat, limit })
       });
       setLimitVal('');
       load();
@@ -1162,7 +1211,7 @@ export function Budget() {
           {/* Date Range Filter */}
           <div className="flex flex-col gap-2">
             <div className="flex gap-1.5">
-              {(['7d', '30d', '3m', 'custom'] as RangePreset[]).map(p => (
+              {(['periode', '7d', '30d', '3m', 'custom'] as RangePreset[]).map(p => (
                 <motion.button
                   key={p}
                   className="flex-1 py-1.5 rounded-xl text-[11px] font-bold"
@@ -1174,10 +1223,22 @@ export function Budget() {
                   transition={springs.snappy}
                   onClick={() => setRangePreset(p)}
                 >
-                  {p === '7d' ? '7 Hari' : p === '30d' ? '30 Hari' : p === '3m' ? '3 Bulan' : 'Kustom'}
+                  {p === 'periode' ? 'Periode' : p === '7d' ? '7 Hari' : p === '30d' ? '30 Hari' : p === '3m' ? '3 Bulan' : 'Kustom'}
                 </motion.button>
               ))}
             </div>
+            {/* Batas periodenya disebut apa adanya. Pengguna yang mengubah
+                cut-off harus bisa melihat angka di layar ini mencakup apa —
+                tanpa itu, "Periode" cuma tombol yang mengubah angka tanpa
+                penjelasan. Tanggalnya datang dari server, bukan dihitung di
+                sini. */}
+            {rangePreset === 'periode' && data?.periode?.dipakai && (
+              <p className="text-[10px] text-center" style={{ color: 'var(--text3)' }}>
+                {data.periode.mulai} s/d {data.periode.selesai}
+                {data.periode.hariMulai !== 1 && ' · siklus gajian'}
+              </p>
+            )}
+
             {rangePreset === 'custom' && (
               <motion.div
                 className="flex gap-2 items-center"
@@ -1394,7 +1455,13 @@ export function Budget() {
           <div className="flex flex-col gap-3">
             {categoryLimits.map(cat => {
               const spentPct = cat.limit > 0 ? (cat.spent / cat.limit) * 100 : 0;
-              const progressColor = spentPct >= 100 ? 'var(--neg)' : spentPct >= 80 ? 'var(--warn)' : 'var(--accent)';
+              // Ambangnya dari pengaturan, bukan 80 yang ditulis tetap di dua
+              // tempat. Orang yang anggarannya ketat ingin diperingatkan di
+              // 60%; yang longgar tidak mau melihat peringatan sampai 95%.
+              const ambang = pengaturan.persenPeringatan;
+              const progressColor = spentPct >= 100
+                ? 'var(--neg)'
+                : spentPct >= ambang ? 'var(--warn)' : 'var(--accent)';
               
               return (
                 <div
@@ -1420,7 +1487,7 @@ export function Budget() {
                       </span>
                       {cat.limit > 0 && (
                         <span className="text-[9px] font-bold block mt-0.5" style={{ color: progressColor }}>
-                          {Math.round(spentPct)}% {spentPct >= 100 ? 'LIMIT TERCAPAI 🚨' : spentPct >= 80 ? 'WARNING ⚠️' : ''}
+                          {Math.round(spentPct)}% {spentPct >= 100 ? 'LIMIT TERCAPAI 🚨' : spentPct >= ambang ? 'WARNING ⚠️' : ''}
                         </span>
                       )}
                     </div>

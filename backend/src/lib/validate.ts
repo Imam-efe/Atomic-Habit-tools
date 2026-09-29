@@ -115,18 +115,6 @@ export function parseTersimpan<T>(raw: string | null | undefined, fallback: T): 
   }
 }
 
-/**
- * Bulan berjalan menurut WIB, YYYY-MM.
- *
- * Sama alasannya dengan `jakartaToday()`, tapi salahnya lebih jarang dan lebih
- * membingungkan: hanya pada tanggal 1 antara tengah malam dan pukul tujuh pagi
- * WIB, dan yang terjadi bukan selisih satu hari melainkan seluruh layar
- * menampilkan bulan yang sudah lewat.
- */
-export function jakartaMonth(): string {
-  return jakartaToday().slice(0, 7);
-}
-
 /** Advance a YYYY-MM-DD date by the given recurrence interval */
 export function advanceDate(dateStr: string, recurrence: 'daily' | 'weekly' | 'monthly'): string {
   const [y, m, d] = dateStr.split('-').map(Number);

@@ -219,6 +219,27 @@ describe('BudgetTagihan', () => {
     expect(screen.getByText('Simpan perubahan')).toBeInTheDocument();
   });
 
+  it('memakai horizon proyeksi dari pengaturan, bukan 30 hari tetap', async () => {
+    // Horizonnya dulu ditulis tetap `?days=30`. Kalau pengaturannya tidak
+    // benar-benar dipakai, kartu proyeksinya tetap menampilkan "Proyeksi 30
+    // hari" apa pun yang disetel pengguna — pengaturan yang terlihat ada tapi
+    // tidak berpengaruh.
+    const f = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes('/settings')) return json({ values: { 'money.projection_days': 90 } });
+      if (u.includes('/tagihan')) return json({ tagihan: [] });
+      if (u.includes('/proyeksi')) return json(PROYEKSI_AMAN);
+      if (u.includes('/bank-accounts')) return json([{ id: 'rek-1', name: 'BCA', account_type: 'Bank' }]);
+      return json(rute()['/budget/categories']);
+    });
+    vi.stubGlobal('fetch', f);
+    render(<BudgetTagihan />);
+
+    await waitFor(() => {
+      expect(f.mock.calls.some((c) => String(c[0]).includes('/proyeksi?days=90'))).toBe(true);
+    });
+  });
+
   it('menampilkan pemasukan terjadwal dengan penanda arah masuk', async () => {
     vi.stubGlobal('fetch', routeFetch(rute([
       tagihan({ id: 't2', nama: 'Gaji', jenis: 'income', kategori: 'Gaji' }),

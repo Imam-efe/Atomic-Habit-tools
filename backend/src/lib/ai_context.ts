@@ -17,6 +17,8 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { jadwalPengguna } from '../routes/ternak_care';
 import { HARI_TES_AIR } from './ternak_air';
 import { saldoSemuaRekening } from './finance_saldo';
+import { loadSettings, num } from './settings';
+import { periodeUntuk } from './finance_periode';
 
 /** Modul yang punya potret sendiri. Sama dengan tab dan sub-layar di aplikasi. */
 export const MODULES = [
@@ -74,7 +76,11 @@ const buildUang: Builder = async (db, userId, today) => {
   // Batas atasnya hari ini, bukan akhir bulan: entri berulang disimpan dengan
   // tanggal jatuh tempo berikutnya, dan tanpa batas ini tagihan yang belum
   // terjadi ikut terhitung sebagai pengeluaran yang sudah dikeluarkan.
-  const awalBulan = `${today.slice(0, 7)}-01`;
+  // Mengikuti periode laporan pengguna: AI yang menyebut "pengeluaran bulan
+  // ini" dengan rentang berbeda dari layarnya akan terdengar salah, dan
+  // pengguna tidak punya cara menebak kenapa.
+  const pengaturan = await loadSettings(db, userId);
+  const awalBulan = periodeUntuk(today, num(pengaturan, 'money.period_start_day')).mulai;
 
   const [totals, kategori, saldo] = await Promise.all([
     db.prepare(
