@@ -118,6 +118,19 @@ budget.get('/', async (c) => {
       receipt_img: e.receipt_img,
     })),
     summary: { income: totalIncome, expense: totalExpense, balance: totalIncome - totalExpense },
+    // Periode yang dipakai ikut dikirim supaya layar bisa menyebutkannya tanpa
+    // menghitung batasnya sendiri. Salinan kedua aritmetika periode di
+    // frontend adalah cara paling pasti melahirkan dua angka yang berbeda
+    // untuk hal yang sama — persis yang perubahan ini dibuat untuk menghapus.
+    periode: {
+      mulai: periode.mulai,
+      selesai: periode.selesai,
+      label: periode.label,
+      hariMulai: periode.hariMulai,
+      // Rentang yang diminta layar secara eksplisit tidak sama dengan periode
+      // laporan; ditandai supaya layar tidak menampilkan label yang salah.
+      dipakai: !from && !to,
+    },
   });
 });
 

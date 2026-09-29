@@ -22,6 +22,7 @@ import { formatRp } from '@/lib/currency';
 import { todayISO } from '@/lib/date';
 import { tampilkanGagal } from '@/stores/gagalToastStore';
 import { useKategoriKeuangan, labelOpsi } from '@/lib/kategoriKeuangan';
+import { usePengaturanUang } from '@/lib/pengaturanUang';
 
 interface Tagihan {
   id: string;
@@ -65,6 +66,7 @@ const ULANG_LABEL: Record<string, string> = {
 
 export function BudgetTagihan({ onChanged }: { onChanged?: () => void }) {
   const kategori = useKategoriKeuangan();
+  const { pengaturan, siap: pengaturanSiap } = usePengaturanUang();
 
   const [daftar, setDaftar] = useState<Tagihan[]>([]);
   const [proyeksi, setProyeksi] = useState<Proyeksi | null>(null);
@@ -92,7 +94,7 @@ export function BudgetTagihan({ onChanged }: { onChanged?: () => void }) {
     try {
       const [t, p, r] = await Promise.all([
         apiFetch<{ tagihan: Tagihan[] }>('/tagihan'),
-        apiFetch<Proyeksi>('/proyeksi?days=30'),
+        apiFetch<Proyeksi>(`/proyeksi?days=${pengaturan.hariProyeksi}`),
         apiFetch<Rekening[]>('/bank-accounts'),
       ]);
       setDaftar(t.tagihan);
@@ -105,7 +107,12 @@ export function BudgetTagihan({ onChanged }: { onChanged?: () => void }) {
     setMemuat(false);
   };
 
-  useEffect(() => { muat(); }, []);
+  // Menunggu horizon proyeksinya diketahui: memuat dengan 30 hari lalu
+  // memuat ulang dengan angka lain membuat kartu proyeksinya berkedip.
+  useEffect(() => {
+    if (!pengaturanSiap) return;
+    muat();
+  }, [pengaturanSiap, pengaturan.hariProyeksi]);
 
   const angka = Math.round(Number(jumlah.replace(/\D/g, '')) || 0);
   const opsiKategori = jenis === 'expense' ? kategori.expense : kategori.income;
