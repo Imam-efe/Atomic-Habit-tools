@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { saldoSemuaRekening, totalSaldo } from '../lib/finance_saldo';
 import type { BankAccountRow, BudgetEntryRow, BudgetLimitRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { jakartaToday, jakartaMonth } from '../lib/validate';
@@ -41,11 +42,16 @@ financeReport.get('/', async (c) => {
 
   // 2. Balance Sheet Calculation (Current status, independent of month)
   // Assets: Sum of all bank account balances
-  const bankAccountRows = await c.env.DB.prepare(
-    `SELECT * FROM bank_accounts WHERE user_id = ?1`
-  ).bind(user.sub).all<BankAccountRow>();
-  const accounts = bankAccountRows.results ?? [];
-  const totalAssets = accounts.reduce((sum, a) => sum + a.balance, 0);
+  // Saldo turunan, bukan kolom bank_accounts.balance — lihat
+  // lib/finance_saldo.ts. Neraca yang memakai angka basi adalah laporan yang
+  // salah tanpa memberi tanda bahwa ia salah.
+  const saldo = await saldoSemuaRekening(c.env.DB, user.sub);
+  const accounts = saldo.map((r) => ({
+    name: r.nama,
+    account_type: r.jenis,
+    balance: r.saldo,
+  }));
+  const totalAssets = totalSaldo(saldo);
 
   // Liabilities: Sum of outstanding (unpaid) debts
   const debtRows = await c.env.DB.prepare(

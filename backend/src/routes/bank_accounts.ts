@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { BankAccountRow } from '../types';
 import { requireAuth, type AuthContext } from '../middleware/auth';
 import { nanoid } from '../lib/nanoid';
-import { semaiSaldoAwal } from '../lib/finance_saldo';
+import { semaiSaldoAwal, saldoSemuaRekening } from '../lib/finance_saldo';
 import { validate } from '../lib/validate';
 
 const bankAccounts = new Hono<AuthContext>();
@@ -12,11 +12,34 @@ bankAccounts.use('/*', requireAuth);
 // GET /api/bank-accounts
 bankAccounts.get('/', async (c) => {
   const user = c.get('user');
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM bank_accounts WHERE user_id = ?1 ORDER BY name ASC`
-  ).bind(user.sub).all<BankAccountRow>();
+  const [rows, saldo] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT * FROM bank_accounts WHERE user_id = ?1 ORDER BY name ASC`
+    ).bind(user.sub).all<BankAccountRow>(),
+    saldoSemuaRekening(c.env.DB, user.sub),
+  ]);
 
-  return c.json(rows.results ?? []);
+  // Medan `balance` sengaja dipertahankan namanya, isinya saja yang jadi
+  // saldo turunan: empat layar membacanya (Uang, Pelunasan Utang, Stok, dan
+  // Lainnya), dan mengganti nama medan berarti mengubah keempatnya tanpa ada
+  // yang bertambah benar. Urutan nama A-Z juga dipertahankan — daftar rekening
+  // dibaca untuk dicari, bukan diperingkat.
+  const hitung = new Map(saldo.map((r) => [r.bankAccountId, r]));
+
+  return c.json((rows.results ?? []).map((r) => {
+    const h = hitung.get(r.id);
+    return {
+      ...r,
+      balance: h?.saldo ?? r.balance,
+      // Kolom lama masih dipelihara dua belas jalur tulis, dan tidak ada lagi
+      // yang membacanya untuk kebenaran — jadi ia sekarang berfungsi sebagai
+      // checksum: hitungan kedua yang independen dan seharusnya selalu cocok.
+      // Nilai bukan-nol berarti ada jalur tulis yang menggeser salah satunya
+      // tanpa menggeser yang lain, yaitu bug di kode ini. Dikirim supaya bisa
+      // terlihat; tanpa ada yang melihatnya, checksum tidak menjaga apa pun.
+      saldo_selisih: h?.selisih ?? 0,
+    };
+  }));
 });
 
 // POST /api/bank-accounts
