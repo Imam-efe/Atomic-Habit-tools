@@ -21,6 +21,7 @@ export const DATA_TABLES: Array<{ table: string; label: string; group: string; u
   { table: 'budget_entries', label: 'Catatan keuangan', group: 'Uang', userScoped: true },
   { table: 'budget_limits', label: 'Limit budget', group: 'Uang', userScoped: true },
   { table: 'bank_accounts', label: 'Rekening', group: 'Uang', userScoped: true },
+  { table: 'finance_saldo_awal', label: 'Saldo pembuka rekening', group: 'Uang', userScoped: true },
   { table: 'debts', label: 'Utang & piutang', group: 'Uang', userScoped: true },
   { table: 'inventory_items', label: 'Stok inventaris', group: 'Inventaris', userScoped: true },
   { table: 'food_logs', label: 'Log makanan', group: 'Nutrisi', userScoped: true },
