@@ -68,9 +68,15 @@ describe('rentang Periode', () => {
     const f = stub({ 'money.default_range': 'periode' });
     render(<Budget />);
 
-    await waitFor(() => { expect(panggilanBudget(f).length).toBeGreaterThan(0); });
+    // Diikat ke bukti pemuatannya SELESAI — label periode hanya muncul setelah
+    // jawaban budget dipakai. Sekadar menunggu "sudah ada panggilan" membuat
+    // assertion negatif di bawah bisa lolos hampa: ia diperiksa sebelum
+    // panggilan yang melanggar sempat tiba.
+    await screen.findByText(/2026-09-25 s\/d 2026-10-24/);
+
     // Satu pun permintaan budget tidak boleh membawa from/to: batas periode
     // hanya boleh dihitung di satu tempat, dan tempat itu server.
+    expect(panggilanBudget(f).length).toBeGreaterThan(0);
     expect(panggilanBudget(f).every((u) => !u.includes('from='))).toBe(true);
   });
 
@@ -129,9 +135,13 @@ describe('permintaan limit anggaran', () => {
     const f = stub({ 'money.default_range': 'periode' });
     render(<Budget />);
 
-    await waitFor(() => { expect(panggilanLimit(f).length).toBeGreaterThan(0); });
+    // Sama alasannya dengan uji di atas: diikat ke pemuatan yang selesai,
+    // bukan ke "sudah ada panggilan".
+    await screen.findByText(/2026-09-25 s\/d 2026-10-24/);
+
     // `?month=` dari sini akan menanyakan periode yang bukan periode berjalan
     // begitu cut-off bukan tanggal 1.
+    expect(panggilanLimit(f).length).toBeGreaterThan(0);
     expect(panggilanLimit(f).every((u) => !u.includes('month='))).toBe(true);
   });
 });
@@ -152,7 +162,15 @@ describe('rentang bawaan dari pengaturan', () => {
     const f = stub({ 'money.default_range': '90d' });
     render(<Budget />);
 
-    await waitFor(() => { expect(panggilanBudget(f).length).toBeGreaterThan(0); });
+    // Ditunggu panggilan yang MEMBAWA from=, bukan sekadar "sudah ada
+    // panggilan". Layar ini memuat dua kali: sekali dengan rentang awal
+    // 'periode' (tanpa from=), lalu sekali lagi setelah rentang bawaannya
+    // diterapkan. Menunggu `length > 0` dipenuhi oleh pemuatan PERTAMA, lalu
+    // membaca hasil pemuatan kedua yang belum tentu sudah datang — dan itu
+    // lolos di mesin cepat, gagal di runner CI.
+    await waitFor(() => {
+      expect(panggilanBudget(f).some((u) => u.includes('from='))).toBe(true);
+    });
     const dipakai = panggilanBudget(f).find((u) => u.includes('from='));
     expect(dipakai).toBeTruthy();
 
