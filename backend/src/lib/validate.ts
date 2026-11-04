@@ -115,6 +115,29 @@ export function parseTersimpan<T>(raw: string | null | undefined, fallback: T): 
   }
 }
 
+/**
+ * Apakah tick cron ini berada di menit-menit awal satu jam WIB.
+ *
+ * Cron menyala tiap menit karena pengingat kebiasaan dan kalender memakai
+ * jam:menit. Tapi alert berbasis JAM — brief pagi, radar tagihan, perawatan
+ * kebun dan ternak — hanya pernah benar-benar mengirim sekali per jam: tabel
+ * dedup (`daily_alert_sent`, `garden_care_alert_sent`) menolak sisanya. Jadi 59
+ * dari 60 tick-nya menanyakan database lalu membuang jawabannya.
+ *
+ * Jendelanya lima menit, bukan satu, dan itu disengaja: Cloudflare tidak
+ * menjamin setiap tick cron benar-benar jalan. Satu menit berarti satu
+ * kesempatan, dan tick yang terlewat menghapus notifikasi jam itu sepenuhnya.
+ * Lima kesempatan menjaga ketahanan itu sambil tetap memotong beban dari 1440
+ * jadi 120 kali sehari.
+ *
+ * Yang dikirim tetap pada menit yang sama seperti sebelumnya: dedup sudah
+ * membuat pengiriman terjadi pada tick pertama jam yang cocok.
+ */
+export function awalJamWib(menitJendela = 5): boolean {
+  const jakarta = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  return jakarta.getUTCMinutes() < menitJendela;
+}
+
 /** Advance a YYYY-MM-DD date by the given recurrence interval */
 export function advanceDate(dateStr: string, recurrence: 'daily' | 'weekly' | 'monthly'): string {
   const [y, m, d] = dateStr.split('-').map(Number);

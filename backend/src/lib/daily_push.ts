@@ -14,6 +14,7 @@ import { computeSafeToSpend } from './safe_to_spend';
 import { getBillRadar, getKidsFor, getMissedYesterday, getExpiringItems, shiftDate } from './daily';
 import { jakartaToday } from './validate';
 import { loadSettingsFor, bool, num, type ResolvedSettings } from './settings';
+import { awalJamWib } from './validate';
 import { runText } from './ai';
 import { buildContext } from './ai_context';
 import { readBudget, recordCall } from './ai_budget';
@@ -42,6 +43,52 @@ async function pushableUsers(env: Env): Promise<string[]> {
 }
 
 /**
+ * Daftar penerima beserta pengaturannya, dibaca SEKALI per menit.
+ *
+ * Empat trigger push memanggil `recipientsFor`, dan masing-masing dulu
+ * menjalankan dua kueri yang sama persis: daftar pelanggan push, lalu seluruh
+ * pengaturan mereka. Delapan kueri per menit untuk dua jawaban yang identik —
+ * 11.520 kueri sehari yang bisa jadi 2.880.
+ *
+ * Kuncinya menit berjalan, bukan selamanya: pengaturan yang baru diubah harus
+ * berlaku pada menit berikutnya, bukan menunggu isolate-nya didaur. Satu
+ * isolate bisa melayani beberapa tick cron, jadi memo ini memang bertahan
+ * antar tick — dan itu justru yang diinginkan.
+ */
+type Penerima = Array<{ userId: string; settings: ResolvedSettings }>;
+
+/**
+ * Yang disimpan adalah PROMISE-nya, bukan hasilnya.
+ *
+ * Keempat trigger dipanggil bersamaan lewat `Promise.all` di handler cron,
+ * jadi keempatnya mulai sebelum satu pun selesai. Memo yang menyimpan hasil
+ * akan dilihat kosong oleh keempatnya dan keempatnya tetap menjalankan
+ * kuerinya sendiri — percobaan pertama perbaikan ini memang begitu, dan
+ * pengukurannya tetap menunjukkan empat kueri yang sama. Menyimpan promise
+ * membuat tiga pemanggil berikutnya menunggu bacaan yang sama.
+ */
+let memoPenerima: { menit: number; janji: Promise<Penerima> } | null = null;
+
+function penerimaMenitIni(env: Env): Promise<Penerima> {
+  const menit = Math.floor(Date.now() / 60_000);
+  if (memoPenerima && memoPenerima.menit === menit) return memoPenerima.janji;
+
+  const janji = (async (): Promise<Penerima> => {
+    const ids = await pushableUsers(env);
+    if (ids.length === 0) return [];
+    const peta = await loadSettingsFor(env.DB, ids);
+    return ids.map((userId) => ({ userId, settings: peta.get(userId)! }));
+  })();
+
+  // Bacaan yang gagal tidak boleh ikut tersimpan: tick berikutnya harus
+  // mencoba lagi, bukan mewarisi kegagalan yang sama sampai menitnya berganti.
+  memoPenerima = { menit, janji };
+  janji.catch(() => { if (memoPenerima?.janji === janji) memoPenerima = null; });
+
+  return janji;
+}
+
+/**
  * Pengguna yang mengaktifkan alert ini, pada jam yang mereka pilih.
  *
  * Jam diperiksa per pengguna, bukan sekali di awal fungsi: dua orang bisa
@@ -53,18 +100,18 @@ async function recipientsFor(
   enabledKey: string,
   hourKey: string | null
 ): Promise<Array<{ userId: string; settings: ResolvedSettings }>> {
-  const ids = await pushableUsers(env);
-  if (ids.length === 0) return [];
+  // Alert berbasis jam tidak perlu bertanya di luar menit-menit awal jam:
+  // dedup harian menolak pengirimannya, jadi jawabannya pasti dibuang.
+  // Dikembalikan kosong SEBELUM kueri apa pun, bukan disaring sesudahnya.
+  if (hourKey !== null && !awalJamWib()) return [];
 
-  const settingsById = await loadSettingsFor(env.DB, ids);
+  const semua = await penerimaMenitIni(env);
   const now = jakartaHour();
 
-  return ids
-    .map((userId) => ({ userId, settings: settingsById.get(userId)! }))
-    .filter(({ settings }) => {
-      if (!bool(settings, enabledKey)) return false;
-      return hourKey === null || num(settings, hourKey) === now;
-    });
+  return semua.filter(({ settings }) => {
+    if (!bool(settings, enabledKey)) return false;
+    return hourKey === null || num(settings, hourKey) === now;
+  });
 }
 
 /**
@@ -227,13 +274,17 @@ async function kalimatPembuka(
   env: Env,
   userId: string,
   today: string,
-  limit: number
+  limit: number,
+  /** Diteruskan supaya konteks AI tidak membaca ulang pengaturan per pengguna. */
+  hariMulai: number
 ): Promise<string | null> {
   try {
     const budget = await readBudget(env.DB, userId, today, limit);
     if (budget.exhausted) return null;
 
-    const context = await buildContext(env.DB, userId, ['kebiasaan', 'kebun', 'uang', 'inventaris'], today);
+    const context = await buildContext(
+      env.DB, userId, ['kebiasaan', 'kebun', 'uang', 'inventaris'], today, hariMulai
+    );
     if (!context) return null;
 
     const teks = await runText(env, [
@@ -328,7 +379,11 @@ export async function triggerMorningBrief(env: Env): Promise<void> {
     // BERHENTI datang jauh lebih merugikan daripada pengingat tanpa kalimat
     // pembuka.
     const pembuka = bool(settings, 'ai.morning_sentence')
-      ? await kalimatPembuka(env, userId, today, num(settings, 'ai.daily_limit'))
+      ? await kalimatPembuka(
+          env, userId, today,
+          num(settings, 'ai.daily_limit'),
+          num(settings, 'money.period_start_day')
+        )
       : null;
 
     await sendDaily(env, userId, 'morning_brief', today, {

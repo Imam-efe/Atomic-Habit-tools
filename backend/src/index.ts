@@ -47,7 +47,7 @@ import { classifyWeather } from './lib/garden_weather_events';
 import { HARI_GANTI_LARUTAN } from './lib/garden_media';
 import { mangsaPada } from './lib/garden_mangsa';
 import { claimDailyAlert, releaseDailyAlert } from './lib/daily_alert';
-import { loadSettings, num, bool } from './lib/settings';
+import { loadSettingsFor, defaultSettings, num, bool } from './lib/settings';
 import { PLANT_BY_ID, dipanen } from './data/plants';
 import achievements from './routes/achievements';
 import insights from './routes/insights';
@@ -73,7 +73,7 @@ import calendar, { occursOn, type CalendarRow } from './routes/calendar';
 import holidays from './routes/holidays';
 import { syncHolidays } from './lib/holiday_source';
 import { computeNextRun } from './lib/schedule';
-import { advanceDate, jakartaToday } from './lib/validate';
+import { advanceDate, jakartaToday, awalJamWib } from './lib/validate';
 import { nanoid } from './lib/nanoid';
 import { daysBetween, shiftDate } from './lib/daily';
 import {
@@ -330,6 +330,8 @@ async function processScheduledNotifications(env: Env) {
 }
 
 async function processRecurringBudget(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const today = jakartaToday();
 
   const due = await env.DB.prepare(`
@@ -380,6 +382,8 @@ async function processRecurringBudget(env: Env) {
 }
 
 async function triggerExpiryAlerts(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   // Only run at 8 AM Jakarta time (UTC+7)
   const now = new Date();
   const jakartaHour = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCHours();
@@ -445,6 +449,8 @@ async function triggerExpiryAlerts(env: Env) {
 // same day-scoped dedup flag as expiry alerts (streak_alert_sent = today)
 // absorbs the once-a-minute cron tick so each habit fires once per day.
 async function triggerStreakAtRisk(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   // Only run at 20:00 Jakarta time — late enough to be a real "about to lose it"
   // nudge, early enough that there's still time to act before midnight.
   const now = new Date();
@@ -501,6 +507,8 @@ async function triggerStreakAtRisk(env: Env) {
 // week) — same idea as streak_alert_sent, but user-scoped since this is one
 // aggregate push per user rather than one per row.
 async function triggerWeeklyRecap(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const now = new Date();
   const jakartaHour = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCHours();
   const jakartaDay = new Date(now.getTime() + 7 * 60 * 60 * 1000).getUTCDay(); // 0 = Sunday
@@ -582,6 +590,8 @@ async function processStreakFreezes(env: Env) {
 // Dedup lewat garden_care_alert_sent (planting_id, alert_date): sekali
 // diingatkan per tanaman per hari, walau cron menyala tiap menit.
 async function triggerGardenCare(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -593,10 +603,18 @@ async function triggerGardenCare(env: Env) {
     WHERE g.status IN ('tumbuh', 'panen')
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
     // Jam dan sakelar diperiksa per pengguna: dua orang bisa memilih jam
     // berbeda, dan cron menyala tiap menit sehingga semua jam terlewati.
-    const settings = await loadSettings(env.DB, userId);
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     if (!bool(settings, 'notify.garden_care')) continue;
     if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
 
@@ -702,6 +720,8 @@ async function triggerGardenCare(env: Env) {
 // ponsel. Dedup lewat daily_alert_sent — semai bukan urusan per tanaman,
 // melainkan satu keputusan sekali sehari.
 async function triggerSuccession(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -712,8 +732,16 @@ async function triggerSuccession(env: Env) {
     WHERE g.status IN ('tumbuh', 'panen')
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     if (!bool(settings, 'notify.succession')) continue;
     // Ikut jam perawatan kebun — dua push kebun di jam berbeda hanya
     // menggandakan gangguan tanpa menambah informasi.
@@ -780,6 +808,8 @@ async function triggerSuccession(env: Env) {
  * karena tidak ada yang pernah menagihnya; ini yang menutup lingkarannya.
  */
 async function triggerGardenFollowUp(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -795,8 +825,16 @@ async function triggerGardenFollowUp(env: Env) {
           )
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     // Dua sakelar, bukan satu. Sakelar induk Perawatan Kebun tetap dihormati:
     // pengguna yang sudah mematikannya tidak boleh tiba-tiba menerima jenis
     // push baru hanya karena sakelar barunya berdefault menyala. Sakelar
@@ -870,6 +908,8 @@ async function triggerGardenFollowUp(env: Env) {
  * terlalu awal justru mengajari pengguna mengabaikan notifikasi.
  */
 async function triggerHarvestDue(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -880,8 +920,16 @@ async function triggerHarvestDue(env: Env) {
     WHERE g.status = 'tumbuh'
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     // Alasan sama dengan tindak lanjut: sakelar induk tetap berlaku.
     if (!bool(settings, 'notify.garden_care')) continue;
     if (!bool(settings, 'notify.harvest_due')) continue;
@@ -970,6 +1018,8 @@ async function triggerHarvestDue(env: Env) {
  * layu semuanya sekaligus.
  */
 async function triggerSolutionChange(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -981,8 +1031,16 @@ async function triggerSolutionChange(env: Env) {
     WHERE m.media = 'hidroponik' AND g.status IN ('tumbuh', 'panen')
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     if (!bool(settings, 'notify.garden_care')) continue;
     if (!bool(settings, 'notify.garden_solution')) continue;
     if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
@@ -1037,6 +1095,8 @@ async function triggerSolutionChange(env: Env) {
  * juga.
  */
 async function triggerMangsaChange(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -1048,8 +1108,16 @@ async function triggerMangsaChange(env: Env) {
     SELECT DISTINCT s.user_id FROM push_subscriptions s
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     if (!bool(settings, 'notify.garden_care')) continue;
     if (!bool(settings, 'notify.garden_mangsa')) continue;
     if (num(settings, 'notify.garden_care.hour') !== nowHour) continue;
@@ -1076,6 +1144,8 @@ async function triggerMangsaChange(env: Env) {
  * menyimpang.
  */
 async function triggerTernakCare(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -1088,8 +1158,16 @@ async function triggerTernakCare(env: Env) {
         OR EXISTS (SELECT 1 FROM ternak_hewan h WHERE h.user_id = s.user_id AND h.status = 'hidup')
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     if (!bool(settings, 'notify.ternak')) continue;
     if (num(settings, 'notify.ternak.hour') !== nowHour) continue;
 
@@ -1121,6 +1199,8 @@ async function triggerTernakCare(env: Env) {
  * kolom `penting` di katalog.
  */
 async function triggerTernakPenting(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -1131,8 +1211,16 @@ async function triggerTernakPenting(env: Env) {
         OR EXISTS (SELECT 1 FROM ternak_hewan h WHERE h.user_id = s.user_id AND h.status = 'hidup')
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     // Sakelar induk tetap dihormati: mematikan modul Ternak mematikan semua
     // pengingatnya sekaligus, termasuk yang mendesak ini.
     if (!bool(settings, 'notify.ternak')) continue;
@@ -1159,6 +1247,8 @@ async function triggerTernakPenting(env: Env) {
 
 /** Kandang berair yang lebih dari HARI_TES_AIR tidak dites, atau belum pernah. */
 async function triggerTernakAir(env: Env) {
+  // Berbasis jam, bukan menit: lihat awalJamWib() di lib/validate.ts.
+  if (!awalJamWib()) return;
   const nowHour = new Date(Date.now() + 7 * 60 * 60 * 1000).getUTCHours();
   const today = jakartaToday();
 
@@ -1169,8 +1259,16 @@ async function triggerTernakAir(env: Env) {
      WHERE k.status = 'aktif' AND k.habitat != 'darat'
   `).all<{ user_id: string }>();
 
-  for (const { user_id: userId } of users.results ?? []) {
-    const settings = await loadSettings(env.DB, userId);
+  // Pengaturan seluruh penerima dibaca SEKALI, bukan satu kueri per
+  // pengguna di dalam loop. Pola lamanya tumbuh linear terhadap jumlah
+  // pengguna, dan cron ini menyala tiap menit: sepuluh pengguna berarti
+  // sepuluh kueri per menit per trigger, 14.400 sehari untuk jawaban yang
+  // bisa didapat sekali.
+  const baris = users.results ?? [];
+  const petaSetelan = await loadSettingsFor(env.DB, baris.map((r) => r.user_id));
+  
+  for (const { user_id: userId } of baris) {
+    const settings = petaSetelan.get(userId) ?? defaultSettings();
     if (!bool(settings, 'notify.ternak')) continue;
     if (!bool(settings, 'notify.ternak_air')) continue;
     if (num(settings, 'notify.ternak.hour') !== nowHour) continue;
@@ -1209,6 +1307,40 @@ async function triggerTernakAir(env: Env) {
   }
 }
 
+/**
+ * Pembersihan berkala: baris kedaluwarsa dari tabel dedup dan riwayat.
+ *
+ * Dipisah dari handler cron dan dijaga agar jalan SEKALI SEHARI, bukan tiap
+ * menit. Empat DELETE ini tidak punya alasan apa pun untuk berjalan 1440 kali
+ * sehari — yang dihapusnya berumur tujuh sampai tiga puluh hari — dan tiap
+ * panggilan menyentuh indeks tabelnya. D1 menagih baris yang dibaca, jadi
+ * 1439 panggilan sisanya murni kuota yang terbakar tanpa menghapus apa pun.
+ *
+ * Jam 03:10 WIB dipilih karena jauh dari semua jam notifikasi bawaan, jadi
+ * pembersihan tidak pernah bersaing dengan pengiriman push.
+ */
+async function bersihkanBarisKedaluwarsa(env: Env) {
+  const jakarta = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  if (jakarta.getUTCHours() !== 3 || jakarta.getUTCMinutes() !== 10) return;
+
+  await Promise.all([
+    env.DB.prepare(
+      'DELETE FROM notification_events WHERE created_at < unixepoch() - 7 * 86400'
+    ).run().catch((err) => console.error('Notification event cleanup failed', err)),
+    env.DB.prepare(
+      'DELETE FROM notification_deliveries WHERE fired_at < unixepoch() - 30 * 86400'
+    ).run().catch((err) => console.error('Delivery history cleanup failed', err)),
+    // Dedup pengingat kebun hanya perlu berlaku untuk hari berjalan.
+    env.DB.prepare(
+      'DELETE FROM garden_care_alert_sent WHERE sent_at < unixepoch() - 7 * 86400'
+    ).run().catch((err) => console.error('Garden alert cleanup failed', err)),
+    // Dedup alert harian hanya perlu berlaku untuk hari berjalan.
+    env.DB.prepare(
+      'DELETE FROM daily_alert_sent WHERE sent_at < unixepoch() - 7 * 86400'
+    ).run().catch((err) => console.error('Daily alert cleanup failed', err)),
+  ]);
+}
+
 const handler = {
   fetch(request: Request, env: Env, ctx: ExecutionContext) {
     return app.fetch(request, env, ctx);
@@ -1241,22 +1373,7 @@ const handler = {
       (new Date().getUTCDay() === 0
         ? syncHolidays(env).catch((err) => console.error('Holiday sync failed', err))
         : Promise.resolve()),
-      // Purge notification events older than 7 days
-      env.DB.prepare(
-        "DELETE FROM notification_events WHERE created_at < unixepoch() - 7 * 86400"
-      ).run().catch((err) => console.error('Notification event cleanup failed', err)),
-      // Keep 30 days of delivery history
-      env.DB.prepare(
-        "DELETE FROM notification_deliveries WHERE fired_at < unixepoch() - 30 * 86400"
-      ).run().catch((err) => console.error('Delivery history cleanup failed', err)),
-      // Dedup pengingat kebun hanya perlu berlaku untuk hari berjalan
-      env.DB.prepare(
-        "DELETE FROM garden_care_alert_sent WHERE sent_at < unixepoch() - 7 * 86400"
-      ).run().catch((err) => console.error('Garden alert cleanup failed', err)),
-      // Dedup alert harian hanya perlu berlaku untuk hari berjalan
-      env.DB.prepare(
-        "DELETE FROM daily_alert_sent WHERE sent_at < unixepoch() - 7 * 86400"
-      ).run().catch((err) => console.error('Daily alert cleanup failed', err)),
+      bersihkanBarisKedaluwarsa(env).catch((err) => console.error('Cleanup failed', err)),
     ]));
   }
 };

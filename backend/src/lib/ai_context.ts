@@ -52,7 +52,13 @@ function shiftISO(iso: string, days: number): string {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
 }
 
-type Builder = (db: D1Database, userId: string, today: string) => Promise<string[]>;
+type Builder = (
+  db: D1Database,
+  userId: string,
+  today: string,
+  /** Awal periode laporan, kalau pemanggilnya sudah membacanya. */
+  hariMulai?: number
+) => Promise<string[]>;
 
 const buildKebiasaan: Builder = async (db, userId, today) => {
   const rows = await db.prepare(
@@ -72,15 +78,19 @@ const buildKebiasaan: Builder = async (db, userId, today) => {
   return lines;
 };
 
-const buildUang: Builder = async (db, userId, today) => {
+const buildUang: Builder = async (db, userId, today, hariMulai) => {
   // Batas atasnya hari ini, bukan akhir bulan: entri berulang disimpan dengan
   // tanggal jatuh tempo berikutnya, dan tanpa batas ini tagihan yang belum
   // terjadi ikut terhitung sebagai pengeluaran yang sudah dikeluarkan.
   // Mengikuti periode laporan pengguna: AI yang menyebut "pengeluaran bulan
   // ini" dengan rentang berbeda dari layarnya akan terdengar salah, dan
   // pengguna tidak punya cara menebak kenapa.
-  const pengaturan = await loadSettings(db, userId);
-  const awalBulan = periodeUntuk(today, num(pengaturan, 'money.period_start_day')).mulai;
+  // Nilainya dipakai apa adanya kalau pemanggilnya sudah membacanya. Itu bukan
+  // mikro-optimasi: konteks ini dibangun per pengguna oleh brief pagi, dan cron
+  // yang membacanya ulang di sini menghasilkan satu kueri per pengguna per
+  // pengiriman — pola yang tumbuh linear terhadap jumlah pengguna.
+  const awal = hariMulai ?? num(await loadSettings(db, userId), 'money.period_start_day');
+  const awalBulan = periodeUntuk(today, awal).mulai;
 
   const [totals, kategori, saldo] = await Promise.all([
     db.prepare(
@@ -323,14 +333,16 @@ export async function buildContext(
   db: D1Database,
   userId: string,
   modules: readonly ModuleKey[],
-  today: string
+  today: string,
+  /** Awal periode laporan, bila pemanggilnya sudah memuat pengaturannya. */
+  hariMulai?: number
 ): Promise<string> {
   const unik = [...new Set(modules)];
 
   const parts = await Promise.all(
     unik.map(async (m) => {
       try {
-        const lines = await BUILDERS[m](db, userId, today);
+        const lines = await BUILDERS[m](db, userId, today, hariMulai);
         return `## ${JUDUL[m]}\n${lines.join('\n')}`;
       } catch {
         return '';
