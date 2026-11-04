@@ -149,24 +149,47 @@ settings.post('/reset', async (c) => {
 settings.get('/database', async (c) => {
   const user = c.get('user');
 
-  const counts = await Promise.all(
-    DATA_TABLES.map(async (entry) => {
-      try {
-        const row = await c.env.DB.prepare(
-          entry.userScoped
-            ? `SELECT COUNT(*) AS n FROM ${entry.table} WHERE user_id = ?1`
-            : `SELECT COUNT(*) AS n FROM ${entry.table}`
-        )
-          .bind(...(entry.userScoped ? [user.sub] : []))
-          .first<{ n: number }>();
-        return { ...entry, rows: row?.n ?? 0 };
-      } catch {
-        // Tabel yang belum ada di database ini dilaporkan nol, bukan
-        // menggagalkan seluruh halaman.
-        return { ...entry, rows: 0 };
-      }
-    })
-  );
+  // Dulu: satu COUNT(*) per tabel, enam puluh perjalanan ke D1 dalam satu
+  // permintaan. Sekarang dua — daftar tabel yang ada, lalu satu UNION ALL yang
+  // menghitung semuanya sekaligus.
+  //
+  // Tabel yang belum ada tetap dilaporkan nol dan tidak menggagalkan seluruh
+  // halaman, sama seperti sebelumnya. Itu sebabnya daftar tabelnya dibaca
+  // lebih dulu alih-alih mengandalkan try/catch per tabel: satu nama tabel
+  // yang tidak ada akan menjatuhkan seluruh UNION ALL, bukan satu barisnya.
+  const adaRows = await c.env.DB.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'table'`
+  ).all<{ name: string }>();
+  const ada = new Set((adaRows.results ?? []).map((r) => r.name));
+
+  // Nama tabel disusun ke dalam SQL, jadi dibatasi dua kali: ia harus ada di
+  // konstanta DATA_TABLES (bukan masukan pengguna) DAN cocok dengan pola
+  // identifier. Lihat catatan serupa di routes/export.ts soal kenapa nama
+  // tabel dan kolom di repo ini tidak pernah dipercaya apa adanya.
+  const aman = (nama: string) => /^[a-z_][a-z0-9_]*$/.test(nama) && ada.has(nama);
+  const dihitung = DATA_TABLES.filter((e) => aman(e.table));
+
+  const perTabel = new Map<string, number>();
+  if (dihitung.length > 0) {
+    const bagian = dihitung.map((e) =>
+      e.userScoped
+        ? `SELECT '${e.table}' AS t, COUNT(*) AS n FROM ${e.table} WHERE user_id = ?1`
+        : `SELECT '${e.table}' AS t, COUNT(*) AS n FROM ${e.table}`
+    );
+    // Diikat hanya kalau ada cabang yang memakainya: kueri tanpa parameter
+    // yang diberi satu nilai ditolak sebagian driver.
+    const pernyataan = c.env.DB.prepare(bagian.join(' UNION ALL '));
+    const hitungRows = await (dihitung.some((e) => e.userScoped)
+      ? pernyataan.bind(user.sub)
+      : pernyataan
+    ).all<{ t: string; n: number }>();
+    for (const r of hitungRows.results ?? []) perTabel.set(r.t, r.n);
+  }
+
+  const counts = DATA_TABLES.map((entry) => ({
+    ...entry,
+    rows: perTabel.get(entry.table) ?? 0,
+  }));
 
   // Foto disebut terpisah: satu-satunya yang menyimpan gambar utuh di D1,
   // jadi ia yang paling mungkin membesar tanpa disadari.
